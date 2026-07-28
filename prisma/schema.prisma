@@ -1,0 +1,363 @@
+// PlacidCRM — multi-tenant CRM SaaS schema
+// Agency (PlacidCRM) -> Locations / sub-accounts (each business) -> everything else.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & identity
+// ---------------------------------------------------------------------------
+
+enum GlobalRole {
+  SUPER_ADMIN // platform owner (you)
+  AGENCY_USER
+}
+
+enum LocationRole {
+  ADMIN
+  MEMBER
+}
+
+// The top-level tenant. Everything belongs to exactly one agency.
+// PlacidCRM runs a single agency by default, but the model supports more.
+model Agency {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  users     User[]
+  locations Location[]
+}
+
+// A sub-account = one business (Placid Storage Solutions, Placid Homestead, ...).
+model Location {
+  id         String   @id @default(cuid())
+  agencyId   String
+  agency     Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String   @unique
+  industry   String?
+  timezone   String   @default("Australia/Brisbane")
+  phone      String?
+  email      String?
+  website    String?
+  addressLine String?
+  city       String?
+  state      String?
+  postalCode String?
+  country    String?  @default("Australia")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  memberships   Membership[]
+  contacts      Contact[]
+  tags          Tag[]
+  customFields  CustomField[]
+  pipelines     Pipeline[]
+  opportunities Opportunity[]
+  conversations Conversation[]
+  calendars     Calendar[]
+  appointments  Appointment[]
+  site          Site?
+
+  @@index([agencyId])
+}
+
+model User {
+  id           String       @id @default(cuid())
+  agencyId     String
+  agency       Agency       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  email        String       @unique
+  name         String
+  passwordHash String
+  globalRole   GlobalRole   @default(AGENCY_USER)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+
+  @@index([agencyId])
+}
+
+// Which users can access which sub-accounts, and with what role.
+model Membership {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  role       LocationRole @default(ADMIN)
+  createdAt  DateTime     @default(now())
+
+  @@unique([userId, locationId])
+  @@index([locationId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — contacts, tags, custom fields
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  firstName  String?
+  lastName   String?
+  email      String?
+  phone      String?
+  companyName String?
+  source     String?
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tags          ContactTag[]
+  fieldValues   CustomFieldValue[]
+  opportunities Opportunity[]
+  conversations Conversation[]
+  appointments  Appointment[]
+
+  @@index([locationId])
+  @@index([locationId, email])
+}
+
+model Tag {
+  id         String       @id @default(cuid())
+  locationId String
+  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  color      String       @default("#337dff")
+  contacts   ContactTag[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+}
+
+model CustomField {
+  id         String            @id @default(cuid())
+  locationId String
+  location   Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  key        String
+  type       CustomFieldType   @default(TEXT)
+  options    String?           // comma-separated for SELECT
+  values     CustomFieldValue[]
+
+  @@unique([locationId, key])
+  @@index([locationId])
+}
+
+model CustomFieldValue {
+  id       String      @id @default(cuid())
+  fieldId  String
+  field    CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  contactId String
+  contact  Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  value    String?
+
+  @@unique([fieldId, contactId])
+  @@index([contactId])
+}
+
+// ---------------------------------------------------------------------------
+// Pipelines & opportunities
+// ---------------------------------------------------------------------------
+
+model Pipeline {
+  id         String          @id @default(cuid())
+  locationId String
+  location   Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime        @default(now())
+  stages     PipelineStage[]
+  opportunities Opportunity[]
+
+  @@index([locationId])
+}
+
+model PipelineStage {
+  id         String        @id @default(cuid())
+  pipelineId String
+  pipeline   Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  position   Int           @default(0)
+  opportunities Opportunity[]
+
+  @@index([pipelineId])
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+  ABANDONED
+}
+
+model Opportunity {
+  id         String            @id @default(cuid())
+  locationId String
+  location   Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  pipelineId String
+  pipeline   Pipeline          @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageId    String
+  stage      PipelineStage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  contactId  String?
+  contact    Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  title      String
+  value      Float             @default(0)
+  status     OpportunityStatus @default(OPEN)
+  position   Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([locationId])
+  @@index([pipelineId])
+  @@index([stageId])
+}
+
+// ---------------------------------------------------------------------------
+// Conversations (unified inbox)
+// ---------------------------------------------------------------------------
+
+enum Channel {
+  SMS
+  EMAIL
+  WHATSAPP
+  WEBCHAT
+  NOTE
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model Conversation {
+  id         String    @id @default(cuid())
+  locationId String
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  contactId  String?
+  contact    Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  channel    Channel   @default(SMS)
+  subject    String?
+  lastMessageAt DateTime @default(now())
+  unread     Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  messages   Message[]
+
+  @@index([locationId])
+  @@index([locationId, lastMessageAt])
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      MessageDirection @default(OUTBOUND)
+  channel        Channel          @default(SMS)
+  body           String           @db.Text
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Calendars & appointments
+// ---------------------------------------------------------------------------
+
+model Calendar {
+  id         String        @id @default(cuid())
+  locationId String
+  location   Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String
+  durationMinutes Int      @default(30)
+  createdAt  DateTime      @default(now())
+  appointments Appointment[]
+
+  @@unique([locationId, slug])
+  @@index([locationId])
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+model Appointment {
+  id         String            @id @default(cuid())
+  locationId String
+  location   Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  calendarId String
+  calendar   Calendar          @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  contactId  String?
+  contact    Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  title      String
+  startAt    DateTime
+  endAt      DateTime
+  status     AppointmentStatus @default(CONFIRMED)
+  notes      String?           @db.Text
+  createdAt  DateTime          @default(now())
+
+  @@index([locationId])
+  @@index([locationId, startAt])
+}
+
+// ---------------------------------------------------------------------------
+// Tenant websites (public marketing sites per sub-account)
+// ---------------------------------------------------------------------------
+
+model Site {
+  id           String     @id @default(cuid())
+  locationId   String     @unique
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  published    Boolean    @default(false)
+  primaryColor String     @default("#1d5df5")
+  logoText     String?
+  tagline      String?
+  customDomain String?    @unique
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  pages        SitePage[]
+}
+
+model SitePage {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  title     String
+  slug      String // "" = home page
+  // Ordered list of content blocks stored as JSON.
+  blocks    Json     @default("[]")
+  isHome    Boolean  @default(false)
+  position  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+}

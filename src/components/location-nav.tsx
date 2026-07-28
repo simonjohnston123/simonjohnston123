@@ -1,0 +1,44 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+
+const items = [
+  { key: "", label: "Dashboard", icon: "◧" },
+  { key: "contacts", label: "Contacts", icon: "◍" },
+  { key: "pipelines", label: "Pipelines", icon: "▤" },
+  { key: "conversations", label: "Conversations", icon: "✉" },
+  { key: "calendar", label: "Calendar", icon: "◷" },
+  { key: "website", label: "Website", icon: "❖" },
+  { key: "settings", label: "Settings", icon: "⚙" },
+];
+
+export function LocationNav({ locationId }: { locationId: string }) {
+  const pathname = usePathname();
+  const base = `/dashboard/l/${locationId}`;
+
+  return (
+    <nav className="space-y-1">
+      {items.map((item) => {
+        const href = item.key ? `${base}/${item.key}` : base;
+        const active = item.key
+          ? pathname.startsWith(href)
+          : pathname === base;
+        return (
+          <Link
+            key={item.key || "home"}
+            href={href}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              active ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            )}
+          >
+            <span className="w-4 text-center opacity-80">{item.icon}</span>
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

@@ -1,0 +1,3 @@
+# Place TLS certificates here as fullchain.pem and privkey.pem.
+# See DEPLOY.md → "Step 5: TLS certificate". This directory is mounted into
+# the nginx container read-only. Do NOT commit real private keys.
