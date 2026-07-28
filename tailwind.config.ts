@@ -5,18 +5,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Placid brand — magenta (#c81fd6) → purple (#8e2de2)
         brand: {
-          50: "#eef6ff",
-          100: "#d9ebff",
-          200: "#bcdcff",
-          300: "#8ec5ff",
-          400: "#59a3ff",
-          500: "#337dff",
-          600: "#1d5df5",
-          700: "#1749e1",
-          800: "#193cb6",
-          900: "#1a378f",
+          50: "#faf2fe",
+          100: "#f3e0fc",
+          200: "#e6c2fa",
+          300: "#d494f4",
+          400: "#c05cec",
+          500: "#a833e0",
+          600: "#8e2de2",
+          700: "#7823bd",
+          800: "#631f9b",
+          900: "#521c7e",
         },
+      },
+      backgroundImage: {
+        "brand-gradient": "linear-gradient(120deg, #c81fd6 0%, #8e2de2 100%)",
       },
       fontFamily: {
         sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],

@@ -4,7 +4,7 @@ set -e
 # Apply the schema to the database before the app starts.
 # `db push` is idempotent: it creates/updates tables to match prisma/schema.prisma.
 echo "→ Syncing database schema…"
-node_modules/.bin/prisma db push --skip-generate || {
+node node_modules/prisma/build/index.js db push --skip-generate || {
   echo "prisma db push failed — is DATABASE_URL reachable?" >&2
   exit 1
 }
