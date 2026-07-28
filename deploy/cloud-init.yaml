@@ -1,0 +1,79 @@
+#cloud-config
+# ---------------------------------------------------------------------------
+# PlacidCRM one-shot provisioner for a DigitalOcean droplet.
+#
+# Paste the entire contents of this file into the "User data" box on the
+# DigitalOcean droplet-create screen (Advanced options → Add Initialization
+# scripts). On first boot the droplet will:
+#   1. install Docker,
+#   2. add swap (so the Next.js build won't run out of memory on 2 GB),
+#   3. clone this repo and check out the platform branch,
+#   4. generate a .env with strong random secrets,
+#   5. build and start PlacidCRM with automatic HTTPS (Caddy).
+#
+# After it finishes (~3–6 min) and once DNS points here, open
+# https://placidcrm.com/register to create your owner account.
+# ---------------------------------------------------------------------------
+
+package_update: true
+packages:
+  - git
+  - curl
+
+write_files:
+  - path: /opt/placidcrm-bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      REPO="https://github.com/simonjohnston123/simonjohnston123.git"
+      BRANCH="claude/placidcrm-saas-platform-trd4lf"
+      APP_DIR="/opt/placidcrm"
+
+      # --- swap (protects `next build` from OOM on small droplets) ---
+      if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      # --- Docker (includes the compose plugin) ---
+      if ! command -v docker >/dev/null 2>&1; then
+        curl -fsSL https://get.docker.com | sh
+      fi
+      systemctl enable --now docker
+
+      # --- code ---
+      rm -rf "$APP_DIR"
+      git clone --branch "$BRANCH" --depth 1 "$REPO" "$APP_DIR"
+      cd "$APP_DIR"
+
+      # --- environment (.env) with generated secrets ---
+      # Disable command tracing here so secrets don't land in the cloud-init log.
+      if [ ! -f .env ]; then
+        set +x
+        AUTH_SECRET="$(openssl rand -base64 48)"
+        POSTGRES_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=')"
+        cat > .env <<EOF
+      AUTH_SECRET=${AUTH_SECRET}
+      POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      APP_URL=https://placidcrm.com
+      ROOT_DOMAIN=placidcrm.com
+      ACME_EMAIL=simonjohnston123@gmail.com
+      EOF
+        chmod 600 .env
+        set -x
+      fi
+
+      # --- build & launch (auto-HTTPS via Caddy) ---
+      docker compose -f docker-compose.prod.yml up -d --build
+
+      echo "PlacidCRM bootstrap complete. Visit https://placidcrm.com/register"
+
+runcmd:
+  - ["/bin/bash", "/opt/placidcrm-bootstrap.sh"]
+
+final_message: "PlacidCRM provisioning finished after $UPTIME seconds."

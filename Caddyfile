@@ -1,0 +1,18 @@
+# PlacidCRM — automatic HTTPS reverse proxy.
+#
+# Caddy issues and renews Let's Encrypt certificates automatically for the
+# domains below, as soon as they point at this server. No manual certbot step.
+#
+# The email is used only for ACME expiry notices and is injected from the
+# environment (see docker-compose.prod.yml / .env) so it stays out of git.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Apex + www + any tenant subdomain (wildcard) all proxy to the Next.js app.
+# Tenant public sites are served by the same app under /sites/<slug>.
+placidcrm.com, www.placidcrm.com {
+	encode gzip
+	reverse_proxy app:3000
+}

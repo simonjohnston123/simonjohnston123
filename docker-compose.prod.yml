@@ -1,0 +1,58 @@
+# PlacidCRM production stack for a DigitalOcean droplet.
+# Auto-HTTPS via Caddy — no manual TLS certificate steps.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Requires a .env file next to it with AUTH_SECRET, POSTGRES_PASSWORD and
+# ACME_EMAIL (the deploy/cloud-init.yaml generates this for you on first boot).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: placid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: placidcrm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placid"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://placid:${POSTGRES_PASSWORD}@db:5432/placidcrm?schema=public"
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      APP_URL: ${APP_URL:-https://placidcrm.com}
+      ROOT_DOMAIN: ${ROOT_DOMAIN:-placidcrm.com}
+      NODE_ENV: production
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-admin@placidcrm.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
