@@ -10,6 +10,7 @@ const items = [
   { key: "pipelines", label: "Pipelines", icon: "▤" },
   { key: "tasks", label: "Tasks", icon: "✓" },
   { key: "conversations", label: "Conversations", icon: "✉" },
+  { key: "automations", label: "Automations", icon: "⚡" },
   { key: "calendar", label: "Calendar", icon: "◷" },
   { key: "website", label: "Website", icon: "❖" },
   { key: "settings", label: "Settings", icon: "⚙" },

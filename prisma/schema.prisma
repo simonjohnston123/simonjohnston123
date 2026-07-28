@@ -66,6 +66,7 @@ model Location {
   appointments  Appointment[]
   tasks         Task[]
   site          Site?
+  workflows     Workflow[]
 
   @@index([agencyId])
 }
@@ -387,4 +388,96 @@ model SitePage {
 
   @@unique([siteId, slug])
   @@index([siteId])
+}
+
+// ---------------------------------------------------------------------------
+// Automations / workflows  (GHL-style: a trigger fires a chain of actions)
+// ---------------------------------------------------------------------------
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum TriggerType {
+  CONTACT_CREATED
+  TAG_ADDED
+  OPPORTUNITY_CREATED
+  FORM_SUBMITTED
+  MANUAL
+}
+
+enum ActionType {
+  SEND_EMAIL
+  SEND_SMS
+  ADD_TAG
+  CREATE_TASK
+  CREATE_NOTE
+  WAIT
+}
+
+enum RunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Workflow {
+  id            String         @id @default(cuid())
+  locationId    String
+  location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  status        WorkflowStatus @default(DRAFT)
+  triggerType   TriggerType    @default(MANUAL)
+  triggerConfig Json           @default("{}")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  steps         WorkflowStep[]
+  runs          WorkflowRun[]
+
+  @@index([locationId])
+  @@index([locationId, status, triggerType])
+}
+
+model WorkflowStep {
+  id         String     @id @default(cuid())
+  workflowId String
+  workflow   Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  position   Int        @default(0)
+  actionType ActionType
+  config     Json       @default("{}")
+
+  @@index([workflowId])
+}
+
+model WorkflowRun {
+  id         String            @id @default(cuid())
+  workflowId String
+  workflow   Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  locationId String
+  contactId  String?
+  status     RunStatus         @default(RUNNING)
+  trigger    String?
+  context    Json              @default("{}")
+  startedAt  DateTime          @default(now())
+  finishedAt DateTime?
+  steps      WorkflowRunStep[]
+
+  @@index([workflowId])
+  @@index([locationId])
+}
+
+model WorkflowRunStep {
+  id         String      @id @default(cuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  position   Int         @default(0)
+  actionType ActionType
+  status     String
+  detail     String?
+  ranAt      DateTime    @default(now())
+
+  @@index([runId])
 }

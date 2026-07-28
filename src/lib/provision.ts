@@ -23,6 +23,13 @@ export interface NewBusinessInput {
   industry?: string | null;
   email?: string | null;
   phone?: string | null;
+  website?: string | null;
+  addressLine?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  timezone?: string | null;
 }
 
 /**
@@ -40,6 +47,13 @@ export async function createBusiness(input: NewBusinessInput) {
       industry: input.industry || null,
       email: input.email || null,
       phone: input.phone || null,
+      website: input.website || null,
+      addressLine: input.addressLine || null,
+      city: input.city || null,
+      state: input.state || null,
+      postalCode: input.postalCode || null,
+      country: input.country || "Australia",
+      timezone: input.timezone || "Australia/Brisbane",
       memberships: {
         create: { userId: input.ownerUserId, role: "ADMIN" },
       },

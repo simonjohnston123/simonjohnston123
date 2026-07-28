@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
+import { fireTrigger } from "@/lib/automations";
 
 const contactSchema = z.object({
   firstName: z.string().optional(),
@@ -51,6 +52,8 @@ export async function createContactAction(_prev: unknown, formData: FormData) {
       notes: data.notes || null,
     },
   });
+  // Fire any ACTIVE "Contact created" automations for this business.
+  await fireTrigger(locationId, "CONTACT_CREATED", { contactId: contact.id });
   revalidatePath(`/dashboard/l/${locationId}/contacts`);
   redirect(`/dashboard/l/${locationId}/contacts/${contact.id}`);
 }

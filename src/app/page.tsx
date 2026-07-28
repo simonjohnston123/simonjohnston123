@@ -5,63 +5,44 @@ export const dynamic = "force-dynamic";
 
 type Pool = { available: number; capacity: number; occupied: number };
 
-async function getStorage(): Promise<{ car: Pool | null; container: Pool | null }> {
+async function getStorageProof(): Promise<number | null> {
   try {
-    const res = await fetch("https://placidstoragesolutions.com.au/api/availability", {
-      cache: "no-store",
-    });
-    if (!res.ok) return { car: null, container: null };
+    const res = await fetch("https://placidstoragesolutions.com.au/api/availability", { cache: "no-store" });
+    if (!res.ok) return null;
     const data = (await res.json()) as { pools?: { car?: Pool; container?: Pool } };
-    return { car: data.pools?.car ?? null, container: data.pools?.container ?? null };
+    const a = data.pools?.car?.available ?? 0;
+    const b = data.pools?.container?.available ?? 0;
+    return a + b;
   } catch {
-    return { car: null, container: null };
+    return null;
   }
 }
 
-const businesses = [
-  {
-    name: "Placid Storage Solutions",
-    tag: "Flagship · Live",
-    body: "Self-storage units, lockers and secure car bays at 27 Toolooa St, South Gladstone — booked, paid and gated online.",
-    href: "https://placidstoragesolutions.com.au",
-    glow: true,
-  },
-  {
-    name: "Placid Homestead",
-    tag: "Property",
-    body: "Rural and residential property arm of the Placid group.",
-    href: "#",
-  },
-  {
-    name: "Placid Deals",
-    tag: "Retail",
-    body: "Online marketplace and dropship storefront across thousands of products.",
-    href: "#",
-  },
-  {
-    name: "Placid Auto Group",
-    tag: "Automotive",
-    body: "Vehicle sales and automotive services under the Placid banner.",
-    href: "#",
-  },
+// The SaaS side — what a business gets.
+const business = [
+  { icon: "◍", title: "CRM & contacts", body: "Every lead and customer in one place — tags, custom fields, full history." },
+  { icon: "▤", title: "Pipelines", body: "Track every deal from first enquiry to close with visual pipelines." },
+  { icon: "✉", title: "Unified inbox", body: "SMS, email and web chat in one stream so no message is missed." },
+  { icon: "◷", title: "Calendars & booking", body: "Let customers book your services online, around your availability." },
+  { icon: "⚡", title: "Automations", body: "Triggers → actions: welcome new leads, chase quotes, send reminders — hands-free." },
+  { icon: "❖", title: "Sites & storefront", body: "Publish a marketing site, booking funnel or product store — no separate tools." },
 ];
 
-const platform = [
-  { icon: "◍", title: "Contacts & CRM", body: "Every customer, lead and tenant across every business — tags, custom fields, full history." },
-  { icon: "▤", title: "Pipelines", body: "Track each opportunity from first enquiry to close with visual, per-business pipelines." },
-  { icon: "✉", title: "Unified inbox", body: "SMS, email and web chat land in one conversation stream so no lead ever goes cold." },
-  { icon: "◷", title: "Calendars & booking", body: "Per-business scheduling and appointments that keep the yard and the calendar full." },
-  { icon: "⚡", title: "Automations", body: "Trigger follow-ups, reminders and workflows the moment something happens." },
-  { icon: "❖", title: "Sites & funnels", body: "Publish a marketing site or landing funnel for any business, straight from the platform." },
+// The consumer side — Placid Connect, the demand engine.
+const connect = [
+  { icon: "🔎", title: "Get discovered", body: "Customers find your business and services in the Placid Connect app." },
+  { icon: "📅", title: "Book services", body: "One tap to book — the appointment lands straight in your calendar." },
+  { icon: "🚚", title: "Order & deliver", body: "Take delivery orders from nearby customers without building an app." },
+  { icon: "🛍", title: "Buy products", body: "Sell your products in the marketplace and to your own audience." },
+  { icon: "🔴", title: "Live sales shows", body: "Go live, showcase products and sell in real time to a ready audience." },
 ];
 
 export default async function HomePage() {
   const user = await getCurrentUser();
-  const { car, container } = await getStorage();
+  const proof = await getStorageProof();
 
   return (
     <main className="dark-scroll relative min-h-screen overflow-hidden bg-ink-950 text-white">
-      {/* Aurora + grid backdrop */}
       <div className="pointer-events-none absolute inset-0 -z-10 bg-aurora" />
       <div className="pointer-events-none absolute inset-0 -z-10 animate-drift bg-aurora opacity-60" />
       <div
@@ -82,7 +63,7 @@ export default async function HomePage() {
             ) : (
               <>
                 <Link href="/login" className="btn-glass">Sign in</Link>
-                <Link href="/register" className="btn-primary">Get started</Link>
+                <Link href="/register" className="btn-primary">Start free</Link>
               </>
             )}
           </nav>
@@ -90,90 +71,72 @@ export default async function HomePage() {
       </header>
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pb-20 pt-16 text-center sm:pt-24">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-16 text-center sm:pt-24">
         <p className="animate-rise mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-brand-200 backdrop-blur-md">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-400" />
-          The operating system for the Placid group
+          The all-in-one platform for growing businesses
         </p>
         <h1 className="animate-rise mx-auto max-w-4xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-7xl">
-          One platform.<br />
-          <span className="text-gradient">Every Placid business.</span>
+          Run your whole business.<br />
+          <span className="text-gradient">Get found by new customers.</span>
         </h1>
         <p className="animate-rise mx-auto mt-6 max-w-2xl text-lg text-slate-300">
-          Contacts, pipelines, conversations, calendars, automations and websites — with a
-          dedicated sub-account for each business. Storage, Homestead, Deals and Auto Group,
-          all run from one command centre.
+          PlacidCRM gives any business one place to manage customers, bookings, payments, automations and an online
+          storefront — while <span className="font-semibold text-white">Placid Connect</span> puts you in front of
+          people ready to book, order and buy.
         </p>
         <div className="animate-rise mt-9 flex flex-wrap justify-center gap-3">
           <Link href={user ? "/dashboard" : "/register"} className="btn-primary px-7 py-3 text-base">
-            {user ? "Open dashboard" : "Launch the platform"}
+            {user ? "Open dashboard" : "Start free"}
           </Link>
-          <a href="https://placidstoragesolutions.com.au" className="btn-glass px-7 py-3 text-base">
-            Book storage now ↗
-          </a>
+          <Link href="/login" className="btn-glass px-7 py-3 text-base">See how it works</Link>
         </div>
+        {proof !== null ? (
+          <p className="mt-6 text-xs text-slate-500">
+            Real businesses already run on Placid — live right now, {proof} storage spaces bookable at Placid Storage Solutions.
+          </p>
+        ) : null}
       </section>
 
-      {/* Live flagship strip */}
-      <section className="mx-auto max-w-6xl px-6 pb-16">
-        <div className="glass-card animate-float overflow-hidden p-1">
-          <div className="rounded-[15px] bg-ink-900/60 p-7 sm:p-9">
-            <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-              <div>
-                <span className="badge bg-accent-500/15 text-accent-400">● Live now</span>
-                <h2 className="mt-3 text-2xl font-bold">Placid Storage Solutions</h2>
-                <p className="mt-1 max-w-md text-sm text-slate-300">
-                  The flagship — secure units, lockers and car bays, booked and gated online. Real-time availability from the live yard:
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <LiveStat label="Storage units / lockers" pool={container} />
-                <LiveStat label="Car bays" pool={car} />
-              </div>
-            </div>
+      {/* Two-sided platform */}
+      <section className="mx-auto max-w-6xl px-6 pb-8">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="glass-card p-6">
+            <span className="badge bg-brand-500/20 text-brand-200">For your business</span>
+            <h3 className="mt-3 text-xl font-bold">PlacidCRM — your command centre</h3>
+            <p className="mt-1 text-sm text-slate-400">Everything to run and grow, without stitching ten tools together.</p>
+          </div>
+          <div className="glass-card p-6 shadow-glow-accent">
+            <span className="badge bg-accent-500/15 text-accent-400">For your customers</span>
+            <h3 className="mt-3 text-xl font-bold">Placid Connect — the demand engine</h3>
+            <p className="mt-1 text-sm text-slate-400">A social marketplace that sends ready-to-buy customers your way.</p>
           </div>
         </div>
       </section>
 
-      {/* The empire */}
-      <section className="mx-auto max-w-6xl px-6 pb-16">
-        <h3 className="mb-6 text-sm font-semibold uppercase tracking-widest text-slate-400">The Placid group</h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {businesses.map((b) => (
-            <a
-              key={b.name}
-              href={b.href}
-              className={`glass-card group flex flex-col p-6 ${b.glow ? "shadow-glow" : ""}`}
-            >
-              <span className={`badge w-fit ${b.glow ? "bg-brand-500/20 text-brand-200" : "bg-white/10 text-slate-300"}`}>
-                {b.tag}
-              </span>
-              <h4 className="mt-3 text-lg font-semibold">{b.name}</h4>
-              <p className="mt-2 flex-1 text-sm text-slate-400">{b.body}</p>
-              <span className="mt-4 text-sm font-medium text-brand-300 opacity-0 transition group-hover:opacity-100">
-                Open ↗
-              </span>
-            </a>
+      {/* Business capabilities */}
+      <section className="mx-auto max-w-6xl px-6 pb-12">
+        <h4 className="mb-5 text-sm font-semibold uppercase tracking-widest text-slate-400">Run your business</h4>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {business.map((f) => (
+            <div key={f.title} className="glass-card p-6">
+              <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-brand-gradient text-lg shadow-glow">{f.icon}</div>
+              <h5 className="text-lg font-semibold">{f.title}</h5>
+              <p className="mt-2 text-sm text-slate-400">{f.body}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* Platform capabilities */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="mb-8 text-center">
-          <h3 className="text-3xl font-bold sm:text-4xl">Everything runs in one place</h3>
-          <p className="mx-auto mt-3 max-w-xl text-slate-400">
-            The CRM core — built to grow into the full command centre for the whole group.
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {platform.map((f) => (
-            <div key={f.title} className="glass-card p-6">
-              <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-brand-gradient text-lg shadow-glow">
-                {f.icon}
-              </div>
-              <h4 className="text-lg font-semibold">{f.title}</h4>
-              <p className="mt-2 text-sm text-slate-400">{f.body}</p>
+      {/* Placid Connect */}
+      <section className="mx-auto max-w-6xl px-6 pb-16">
+        <h4 className="mb-5 text-sm font-semibold uppercase tracking-widest text-accent-400">Grow with Placid Connect</h4>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {connect.map((f) => (
+            <div key={f.title} className="glass-card p-5">
+              <div className="mb-3 text-2xl">{f.icon}</div>
+              <h5 className="text-base font-semibold">{f.title}</h5>
+              <p className="mt-1.5 text-sm text-slate-400">{f.body}</p>
             </div>
           ))}
         </div>
@@ -182,14 +145,14 @@ export default async function HomePage() {
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-6 pb-24">
         <div className="glass-card relative overflow-hidden p-10 text-center sm:p-14">
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-brand-gradient opacity-20 blur-2xl" />
-          <h3 className="text-3xl font-bold sm:text-4xl">Run the whole group from one login.</h3>
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-brand-accent opacity-20 blur-2xl" />
+          <h3 className="text-3xl font-bold sm:text-4xl">One platform to run it and grow it.</h3>
           <p className="mx-auto mt-3 max-w-lg text-slate-300">
-            Create your account and bring every Placid business into a single command centre.
+            Bring your customers, bookings, payments and storefront together — and get discovered on Placid Connect.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href={user ? "/dashboard" : "/register"} className="btn-primary px-7 py-3 text-base">
-              {user ? "Open dashboard" : "Create your account"}
+              {user ? "Open dashboard" : "Start free"}
             </Link>
             <Link href="/login" className="btn-glass px-7 py-3 text-base">Sign in</Link>
           </div>
@@ -200,17 +163,5 @@ export default async function HomePage() {
         © {new Date().getFullYear()} PlacidCRM · Placid Group Australia Pty Ltd · placidcrm.com
       </footer>
     </main>
-  );
-}
-
-function LiveStat({ label, pool }: { label: string; pool: Pool | null }) {
-  return (
-    <div className="min-w-[130px] rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-      <div className="text-3xl font-bold">
-        {pool ? <span className="text-gradient">{pool.available}</span> : <span className="text-slate-500">—</span>}
-      </div>
-      <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-[11px] text-slate-500">{pool ? "available now" : "checking…"}</div>
-    </div>
   );
 }
