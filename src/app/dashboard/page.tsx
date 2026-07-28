@@ -33,7 +33,12 @@ export default async function AgencyDashboard() {
             {locations.length} {locations.length === 1 ? "business" : "businesses"} · pick one to manage, or add a new one.
           </p>
         </div>
-        <AddBusiness />
+        <div className="flex items-center gap-2">
+          {user.globalRole === "SUPER_ADMIN" ? (
+            <Link href="/dashboard/team" className="btn-secondary">Team</Link>
+          ) : null}
+          <AddBusiness />
+        </div>
       </div>
 
       {locations.length === 0 ? (

@@ -8,6 +8,7 @@ const items = [
   { key: "", label: "Dashboard", icon: "◧" },
   { key: "contacts", label: "Contacts", icon: "◍" },
   { key: "pipelines", label: "Pipelines", icon: "▤" },
+  { key: "tasks", label: "Tasks", icon: "✓" },
   { key: "conversations", label: "Conversations", icon: "✉" },
   { key: "calendar", label: "Calendar", icon: "◷" },
   { key: "website", label: "Website", icon: "❖" },

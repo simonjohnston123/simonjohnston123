@@ -64,6 +64,7 @@ model Location {
   conversations Conversation[]
   calendars     Calendar[]
   appointments  Appointment[]
+  tasks         Task[]
   site          Site?
 
   @@index([agencyId])
@@ -80,6 +81,7 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   memberships  Membership[]
+  assignedTasks Task[]
 
   @@index([agencyId])
 }
@@ -121,9 +123,34 @@ model Contact {
   opportunities Opportunity[]
   conversations Conversation[]
   appointments  Appointment[]
+  tasks         Task[]
 
   @@index([locationId])
   @@index([locationId, email])
+}
+
+// ---------------------------------------------------------------------------
+// Tasks / follow-ups
+// ---------------------------------------------------------------------------
+
+model Task {
+  id         String    @id @default(cuid())
+  locationId String
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  contactId  String?
+  contact    Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assigneeId String?
+  assignee   User?     @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  title      String
+  notes      String?   @db.Text
+  dueAt      DateTime?
+  completed  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, completed])
+  @@index([contactId])
 }
 
 model Tag {

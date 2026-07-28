@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ContactEditor } from "@/components/contact-editor";
+import { NewTaskButton } from "@/components/new-task";
 import { Badge } from "@/components/ui";
 import { contactName, formatMoney, formatDateTime } from "@/lib/utils";
 import { addTagAction, removeTagAction, deleteContactAction } from "../actions";
+import { toggleTaskAction } from "../../tasks/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +24,16 @@ export default async function ContactDetail({
       tags: { include: { tag: true } },
       opportunities: { include: { stage: true, pipeline: true } },
       appointments: { orderBy: { startAt: "desc" }, take: 5 },
+      tasks: { orderBy: [{ completed: "asc" }, { dueAt: "asc" }] },
     },
   });
   if (!contact) notFound();
+
+  const members = await prisma.membership.findMany({
+    where: { locationId: params.locationId },
+    include: { user: true },
+  });
+  const memberOptions = members.map((m) => ({ id: m.user.id, label: m.user.name }));
 
   const base = `/dashboard/l/${params.locationId}`;
 
@@ -88,6 +97,45 @@ export default async function ContactDetail({
                       <Badge>{o.stage.name}</Badge>
                       <span className="text-slate-500">{formatMoney(o.value)}</span>
                     </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="card p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900">Tasks</h2>
+              <NewTaskButton
+                locationId={params.locationId}
+                contacts={[{ id: contact.id, label: contactName(contact) }]}
+                members={memberOptions}
+                defaultContactId={contact.id}
+                compact
+              />
+            </div>
+            {contact.tasks.length === 0 ? (
+              <p className="text-sm text-slate-400">No tasks yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {contact.tasks.map((t) => (
+                  <li key={t.id} className="flex items-center gap-2 text-sm">
+                    <form action={toggleTaskAction}>
+                      <input type="hidden" name="locationId" value={params.locationId} />
+                      <input type="hidden" name="taskId" value={t.id} />
+                      <input type="hidden" name="completed" value={String(t.completed)} />
+                      <button
+                        className={
+                          "flex h-4 w-4 items-center justify-center rounded border text-[10px] " +
+                          (t.completed ? "border-green-500 bg-green-500 text-white" : "border-slate-300")
+                        }
+                        aria-label="Toggle task"
+                      >
+                        {t.completed ? "✓" : ""}
+                      </button>
+                    </form>
+                    <span className={t.completed ? "text-slate-400 line-through" : "text-slate-700"}>{t.title}</span>
+                    {t.dueAt ? <span className="ml-auto text-xs text-slate-400">{formatDateTime(t.dueAt)}</span> : null}
                   </li>
                 ))}
               </ul>
