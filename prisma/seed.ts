@@ -29,7 +29,7 @@ async function main() {
     },
   });
 
-  await provisionBusiness({
+  const storage = await provisionBusiness({
     agencyId: agency.id,
     ownerId: admin.id,
     slug: "placid-storage-solutions",
@@ -39,6 +39,10 @@ async function main() {
     color: "#1d5df5",
     heroSub: "Clean, secure, drive-up storage units in a range of sizes. Book a unit today.",
   });
+
+  // Give Placid Storage Solutions a full, real self-storage website — all
+  // managed from the CRM as a sub-account. Safe to re-run.
+  await buildStorageWebsite(storage.id);
 
   await provisionBusiness({
     agencyId: agency.id,
@@ -162,6 +166,101 @@ async function provisionBusiness(opts: {
 
   console.log(`  · Created ${opts.name} (/sites/${opts.slug})`);
   return location;
+}
+
+async function buildStorageWebsite(locationId: string) {
+  const site = await prisma.site.findUnique({
+    where: { locationId },
+    include: { pages: true },
+  });
+  if (!site) return;
+  const home = site.pages.find((p) => p.isHome);
+  if (!home) return;
+
+  await prisma.sitePage.update({
+    where: { id: home.id },
+    data: {
+      blocks: [
+        {
+          type: "hero",
+          heading: "Placid Storage Solutions",
+          subheading: "Clean, secure, drive-up self storage in a range of sizes — with simple month-to-month terms and no lock-in contracts.",
+          ctaLabel: "Check availability",
+          ctaHref: "#contact",
+        },
+        {
+          type: "features",
+          heading: "Why store with Placid",
+          items: [
+            { icon: "🔒", title: "Gated & monitored", body: "Individual PIN access, CCTV and perimeter fencing keep your belongings safe around the clock." },
+            { icon: "🚗", title: "Drive-up units", body: "Pull right up to your unit — load and unload straight from the car or trailer." },
+            { icon: "📅", title: "Month-to-month", body: "Flexible terms with no long lock-in. Stay a month or stay for years." },
+            { icon: "🕐", title: "24/7 access", body: "Reach your unit any time of day or night, seven days a week." },
+            { icon: "📦", title: "Boxes & supplies", body: "Grab moving boxes, tape and locks on site so you're ready to pack." },
+            { icon: "💬", title: "Local support", body: "A friendly local team on hand to help you pick the right size." },
+          ],
+        },
+        {
+          type: "pricing",
+          heading: "Unit sizes & pricing",
+          subheading: "Not sure what you need? Send an enquiry and we'll help you choose.",
+          plans: [
+            { name: "Small", size: "3 m² · ~1.5m × 2m", price: "$45/mo", features: ["Ideal for boxes & small furniture", "Fits the contents of a small room", "Ground-floor, drive-up"] },
+            { name: "Medium", size: "9 m² · 3m × 3m", price: "$120/mo", features: ["A 1–2 bedroom home", "Appliances & furniture", "Drive-up access"] },
+            { name: "Large", size: "18 m² · 3m × 6m", price: "$210/mo", features: ["A 3–4 bedroom home", "Business stock or tools", "Vehicle-height roller door"] },
+          ],
+        },
+        {
+          type: "faq",
+          heading: "Frequently asked questions",
+          items: [
+            { q: "Do I need a long contract?", a: "No — storage is month-to-month. Give us a week's notice when you're ready to move out." },
+            { q: "How do I pay?", a: "Rent is billed monthly. We can set up automatic card payments so you never miss one." },
+            { q: "Is my unit insured?", a: "We recommend contents insurance; we can point you to affordable options that cover stored goods." },
+            { q: "Can I access after hours?", a: "Yes. Your PIN gives you 24/7 gated access, 365 days a year." },
+          ],
+        },
+        {
+          type: "cta",
+          heading: "Ready to reserve your unit?",
+          subheading: "Tell us what you're storing and we'll confirm the right size and price.",
+          ctaLabel: "Get a quote",
+          ctaHref: "#contact",
+        },
+        {
+          type: "contact",
+          heading: "Check availability",
+          body: "Send us a message and our team will get straight back to you with availability and pricing.",
+        },
+      ] as any,
+    },
+  });
+
+  // Refresh the secondary page into a storage-relevant "Sizes & pricing" page.
+  const services = site.pages.find((p) => p.slug === "services");
+  if (services) {
+    await prisma.sitePage.update({
+      where: { id: services.id },
+      data: {
+        title: "Sizes & Pricing",
+        blocks: [
+          { type: "text", heading: "Find the right size", body: "Every unit is ground-floor and drive-up. Prices are per month with no lock-in contract. Reach out for current availability." },
+          {
+            type: "pricing",
+            heading: "All unit sizes",
+            plans: [
+              { name: "Locker", size: "1 m²", price: "$25/mo", features: ["Documents & valuables", "Small boxes"] },
+              { name: "Small", size: "3 m²", price: "$45/mo", features: ["A small room", "Boxes & furniture"] },
+              { name: "Medium", size: "9 m²", price: "$120/mo", features: ["1–2 bedroom home"] },
+              { name: "Large", size: "18 m²", price: "$210/mo", features: ["3–4 bedroom home", "Business stock"] },
+              { name: "Vehicle / boat", size: "Outdoor bay", price: "from $90/mo", features: ["Cars, trailers, boats", "Secure gated yard"] },
+            ],
+          },
+          { type: "contact", heading: "Enquire about a unit", body: "We'll confirm availability and pricing." },
+        ] as any,
+      },
+    });
+  }
 }
 
 main()
