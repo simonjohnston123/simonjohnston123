@@ -15,13 +15,18 @@ const items = [
   { key: "settings", label: "Settings", icon: "⚙" },
 ];
 
-export function LocationNav({ locationId }: { locationId: string }) {
+export function LocationNav({ locationId, locationName }: { locationId: string; locationName?: string }) {
   const pathname = usePathname();
   const base = `/dashboard/l/${locationId}`;
 
+  // The Storage panel only makes sense for the Placid Storage sub-account.
+  const navItems = /storage/i.test(locationName ?? "")
+    ? [...items.slice(0, 1), { key: "storage", label: "Storage", icon: "▦" }, ...items.slice(1)]
+    : items;
+
   return (
     <nav className="space-y-1">
-      {items.map((item) => {
+      {navItems.map((item) => {
         const href = item.key ? `${base}/${item.key}` : base;
         const active = item.key
           ? pathname.startsWith(href)

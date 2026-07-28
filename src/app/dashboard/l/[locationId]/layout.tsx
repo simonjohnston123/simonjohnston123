@@ -39,7 +39,7 @@ export default async function LocationLayout({
             {location.name}
           </div>
         )}
-        <LocationNav locationId={location.id} />
+        <LocationNav locationId={location.id} locationName={location.name} />
       </aside>
       <main className="min-w-0 flex-1">{children}</main>
     </div>
