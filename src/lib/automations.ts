@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { ActionType, TriggerType, Prisma } from "@prisma/client";
 import { TRIGGERS } from "@/lib/automation-catalog";
+import { sendEmail, sendSms } from "@/lib/comms";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,6 +68,11 @@ export async function runWorkflow(workflowId: string, ctx: RunContext): Promise<
     ? await prisma.contact.findFirst({ where: { id: ctx.contactId, locationId: workflow.locationId } })
     : null;
 
+  const location = await prisma.location.findUnique({
+    where: { id: workflow.locationId },
+    select: { name: true, email: true },
+  });
+
   const run = await prisma.workflowRun.create({
     data: {
       workflowId: workflow.id,
@@ -88,6 +94,8 @@ export async function runWorkflow(workflowId: string, ctx: RunContext): Promise<
       detail = await executeAction(step.actionType, cfg, {
         locationId: workflow.locationId,
         contact,
+        locationName: location?.name ?? null,
+        locationEmail: location?.email ?? null,
       });
       if (step.actionType === "WAIT") status = "skipped";
     } catch (err) {
@@ -112,7 +120,7 @@ export async function runWorkflow(workflowId: string, ctx: RunContext): Promise<
 async function executeAction(
   actionType: ActionType,
   cfg: Record<string, string>,
-  env: { locationId: string; contact: ContactLike },
+  env: { locationId: string; contact: ContactLike; locationName?: string | null; locationEmail?: string | null },
 ): Promise<string> {
   const { locationId, contact } = env;
 
@@ -164,6 +172,17 @@ async function executeAction(
       const subject = render(cfg.subject ?? "", contact).trim();
       const body = render(cfg.body ?? "", contact).trim();
       if (!body && !subject) throw new Error("Email is empty");
+      if (!contact.email) throw new Error("Contact has no email address");
+
+      // Send first (throws on provider error → step is marked failed), then log the message.
+      const result = await sendEmail({
+        to: contact.email,
+        subject,
+        text: body,
+        fromName: env.locationName ?? undefined,
+        replyTo: env.locationEmail ?? undefined,
+      });
+
       const conversationId = await getOrCreateConversation(locationId, contact.id, "EMAIL");
       await prisma.message.create({
         data: {
@@ -174,19 +193,23 @@ async function executeAction(
         },
       });
       await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } });
-      return `Email queued to ${contact.email ?? "contact"} (logged — no provider connected yet)`;
+      return result.sent ? `Email sent to ${contact.email}` : `Email ${result.detail}`;
     }
 
     case "SEND_SMS": {
       if (!contact) throw new Error("No contact to text");
       const body = render(cfg.body ?? "", contact).trim();
       if (!body) throw new Error("Message is empty");
+      if (!contact.phone) throw new Error("Contact has no phone number");
+
+      const result = await sendSms({ to: contact.phone, body });
+
       const conversationId = await getOrCreateConversation(locationId, contact.id, "SMS");
       await prisma.message.create({
         data: { conversationId, direction: "OUTBOUND", channel: "SMS", body },
       });
       await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } });
-      return `SMS queued to ${contact.phone ?? "contact"} (logged — no provider connected yet)`;
+      return result.sent ? `SMS sent to ${contact.phone}` : `SMS ${result.detail}`;
     }
 
     case "WAIT": {

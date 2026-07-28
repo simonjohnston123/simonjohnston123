@@ -1,18 +1,54 @@
 import { requireLocationAccess } from "@/lib/auth";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, Badge } from "@/components/ui";
 import { LocationSettingsForm } from "@/components/location-settings-form";
+import { emailConfigured, smsConfigured } from "@/lib/comms";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage({ params }: { params: { locationId: string } }) {
   const { location } = await requireLocationAccess(params.locationId);
+  const email = emailConfigured();
+  const sms = smsConfigured();
 
   return (
     <div>
       <PageHeader title="Settings" subtitle="Business details for this sub-account" />
-      <div className="max-w-3xl">
+      <div className="max-w-3xl space-y-6">
         <LocationSettingsForm location={location} />
-        <p className="mt-3 text-xs text-slate-400">
+
+        <section className="card p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Sending — automations & messages</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            Powers the Send email / Send SMS actions in Automations. Until a channel is connected, those actions are
+            recorded in Conversations but not actually delivered.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-800">Email (Resend)</span>
+                {email ? <Badge color="green">Connected</Badge> : <Badge color="amber">Not connected</Badge>}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {email
+                  ? "Emails from automations are delivered live."
+                  : "Add RESEND_API_KEY and EMAIL_FROM to the server to switch on real delivery."}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-800">SMS (Twilio)</span>
+                {sms ? <Badge color="green">Connected</Badge> : <Badge color="amber">Not connected</Badge>}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {sms
+                  ? "Text messages from automations are delivered live."
+                  : "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM to switch on real delivery."}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <p className="text-xs text-slate-400">
           Sub-account ID: <code className="font-mono">{location.id}</code> · public slug:{" "}
           <code className="font-mono">{location.slug}</code>
         </p>

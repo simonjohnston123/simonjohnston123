@@ -34,6 +34,12 @@ services:
       APP_URL: ${APP_URL:-https://placidcrm.com}
       ROOT_DOMAIN: ${ROOT_DOMAIN:-placidcrm.com}
       NODE_ENV: production
+      # Comms providers — automations send for real once these are set in .env.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
     expose:
       - "3000"
 
