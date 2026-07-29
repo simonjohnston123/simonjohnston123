@@ -68,3 +68,54 @@ export async function deleteAppointmentAction(formData: FormData) {
   await prisma.appointment.delete({ where: { id: appointmentId, locationId } });
   revalidatePath(`/dashboard/l/${locationId}/calendar`);
 }
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "calendar";
+}
+
+export async function createCalendarAction(_prev: unknown, formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  await requireLocationAccess(locationId);
+  if (!name) return { error: "Name the calendar." };
+
+  let slug = slugify(name);
+  let n = 1;
+  // eslint-disable-next-line no-await-in-loop
+  while (await prisma.calendar.findFirst({ where: { locationId, slug } })) {
+    n += 1;
+    slug = `${slugify(name)}-${n}`;
+  }
+  await prisma.calendar.create({ data: { locationId, name, slug, durationMinutes: 30 } });
+  revalidatePath(`/dashboard/l/${locationId}/calendar`);
+  return { error: "", ok: true };
+}
+
+export async function updateCalendarAction(_prev: unknown, formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const calendarId = String(formData.get("calendarId") ?? "");
+  await requireLocationAccess(locationId);
+
+  const durationMinutes = Math.min(Math.max(Number(formData.get("durationMinutes")) || 30, 5), 600);
+  const bookingWindowDays = Math.min(Math.max(Number(formData.get("bookingWindowDays")) || 14, 1), 60);
+
+  let availability: Record<string, [string, string][]> = {};
+  try {
+    const raw = JSON.parse(String(formData.get("availability") ?? "{}"));
+    if (raw && typeof raw === "object") availability = raw;
+  } catch {
+    /* keep empty */
+  }
+
+  await prisma.calendar.update({
+    where: { id: calendarId, locationId },
+    data: {
+      name: String(formData.get("name") ?? "").trim() || "Calendar",
+      durationMinutes,
+      bookingWindowDays,
+      availability: availability as any,
+    },
+  });
+  revalidatePath(`/dashboard/l/${locationId}/calendar`);
+  return { error: "", ok: true };
+}

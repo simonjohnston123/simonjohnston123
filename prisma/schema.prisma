@@ -324,6 +324,9 @@ model Calendar {
   name       String
   slug       String
   durationMinutes Int      @default(30)
+  // Weekly availability: { "1": [["09:00","17:00"]], ... } keyed by weekday 0=Sun..6=Sat.
+  availability     Json    @default("{}")
+  bookingWindowDays Int    @default(14)
   createdAt  DateTime      @default(now())
   appointments Appointment[]
 

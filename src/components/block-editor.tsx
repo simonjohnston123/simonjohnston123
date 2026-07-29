@@ -5,6 +5,7 @@ import { useFormState } from "react-dom";
 import { updatePageAction } from "@/app/dashboard/l/[locationId]/website/actions";
 import { SubmitButton } from "@/components/submit-button";
 import { BLOCK_DEFS, blockDef, type BlockField } from "@/lib/site-blocks-catalog";
+import { TEMPLATES } from "@/lib/site-templates";
 
 type AnyBlock = { type: string } & Record<string, unknown>;
 
@@ -30,6 +31,15 @@ export function BlockEditor({
     Array.isArray(page.blocks) ? (page.blocks as AnyBlock[]) : [],
   );
   const [adding, setAdding] = useState(false);
+  const [templating, setTemplating] = useState(false);
+
+  const applyTemplate = (key: string) => {
+    const t = TEMPLATES.find((x) => x.key === key);
+    if (!t) return;
+    if (blocks.length && !confirm("Replace the current page content with this template?")) return;
+    setBlocks(structuredClone(t.blocks) as AnyBlock[]);
+    setTemplating(false);
+  };
 
   const update = (i: number, patch: Record<string, unknown>) =>
     setBlocks((b) => b.map((blk, idx) => (idx === i ? { ...blk, ...patch } : blk)));
@@ -105,9 +115,22 @@ export function BlockEditor({
         )}
       </div>
 
-      {/* Add block */}
-      <div className="relative">
-        <button type="button" onClick={() => setAdding((a) => !a)} className="btn-secondary text-sm">+ Add block</button>
+      {/* Add block + templates */}
+      <div className="relative flex items-center gap-2">
+        <button type="button" onClick={() => { setAdding((a) => !a); setTemplating(false); }} className="btn-secondary text-sm">+ Add block</button>
+        <div className="relative">
+          <button type="button" onClick={() => { setTemplating((t) => !t); setAdding(false); }} className="btn-ghost text-sm">Templates</button>
+          {templating ? (
+            <div className="absolute z-10 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+              {TEMPLATES.map((t) => (
+                <button key={t.key} type="button" onClick={() => applyTemplate(t.key)} className="block w-full rounded px-2 py-2 text-left hover:bg-slate-100">
+                  <div className="text-sm font-medium text-slate-800">{t.name}</div>
+                  <div className="text-xs text-slate-500">{t.description}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
         {adding ? (
           <div className="absolute z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
             {(["Layout", "Content", "Media", "Convert"] as const).map((cat) => (

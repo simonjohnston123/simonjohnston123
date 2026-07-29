@@ -120,6 +120,17 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
   if (Number.isNaN(startAt.getTime())) return { error: "That time doesn't look right." };
   const endAt = new Date(startAt.getTime() + calendar.durationMinutes * 60 * 1000);
 
+  // Prevent double-booking: reject if it clashes with an existing appointment.
+  const clash = await prisma.appointment.findFirst({
+    where: {
+      calendarId: calendar.id,
+      status: "CONFIRMED",
+      startAt: { lt: endAt },
+      endAt: { gt: startAt },
+    },
+  });
+  if (clash) return { error: "Sorry, that time was just taken — please pick another." };
+
   const contact = await upsertLeadContact(location.id, {
     name,
     email,

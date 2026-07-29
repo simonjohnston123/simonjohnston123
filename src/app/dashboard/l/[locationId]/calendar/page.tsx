@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewAppointmentButton } from "@/components/new-appointment";
+import { CalendarSettings, NewCalendarForm } from "@/components/calendar-settings";
 import { setAppointmentStatusAction, deleteAppointmentAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 
@@ -67,6 +68,25 @@ export default async function CalendarPage({ params }: { params: { locationId: s
           <Section title="Past" items={past} base={base} locationId={params.locationId} empty="No past appointments." />
         </div>
       )}
+
+      <section className="mt-10">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Booking availability</h2>
+          <NewCalendarForm locationId={params.locationId} />
+        </div>
+        <p className="mb-3 text-xs text-slate-500">
+          Set when each calendar takes bookings. Add a <span className="font-medium">Booking</span> block to your website and pick the calendar — customers will only see open times.
+        </p>
+        <div className="space-y-4">
+          {calendars.map((c) => (
+            <CalendarSettings
+              key={c.id}
+              locationId={params.locationId}
+              calendar={{ id: c.id, name: c.name, durationMinutes: c.durationMinutes, bookingWindowDays: c.bookingWindowDays, availability: c.availability }}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
