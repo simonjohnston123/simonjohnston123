@@ -786,3 +786,71 @@ model StorageServiceRequest {
 
   @@index([locationId])
 }
+
+// ===== Placid Connect — native social platform (replaces the OSSN site) =====
+model ConnectMember {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  passwordHash String
+  name         String
+  handle       String           @unique
+  avatarUrl    String?
+  bio          String?          @db.Text
+  createdAt    DateTime         @default(now())
+  posts        ConnectPost[]
+  comments     ConnectComment[]
+  likes        ConnectLike[]
+  following    ConnectFriend[]  @relation("follower")
+  followers    ConnectFriend[]  @relation("following")
+
+  @@index([handle])
+}
+
+model ConnectPost {
+  id         String           @id @default(cuid())
+  authorId   String
+  author     ConnectMember    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body       String           @db.Text
+  bg         String?          // OssnPostBackground: a colour/gradient token
+  imageUrl   String?
+  createdAt  DateTime         @default(now())
+  comments   ConnectComment[]
+  likes      ConnectLike[]
+
+  @@index([createdAt])
+  @@index([authorId])
+}
+
+model ConnectComment {
+  id        String        @id @default(cuid())
+  postId    String
+  post      ConnectPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    ConnectMember @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String        @db.Text
+  createdAt DateTime      @default(now())
+
+  @@index([postId])
+}
+
+model ConnectLike {
+  id        String        @id @default(cuid())
+  postId    String
+  post      ConnectPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    ConnectMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, memberId])
+}
+
+model ConnectFriend {
+  id          String        @id @default(cuid())
+  followerId  String
+  follower    ConnectMember @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   ConnectMember @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+
+  @@unique([followerId, followingId])
+}

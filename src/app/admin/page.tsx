@@ -6,14 +6,15 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin — Overview" };
 
 export default async function AdminOverview() {
-  const [agencies, suspended, locations, users, contacts, orders, drivers, recent] = await Promise.all([
+  const [agencies, suspended, locations, users, contacts, orders, members, posts, recent] = await Promise.all([
     prisma.agency.count(),
     prisma.agency.count({ where: { status: "SUSPENDED" } }),
     prisma.location.count(),
     prisma.user.count(),
     prisma.contact.count(),
     prisma.order.count(),
-    prisma.driver.count(),
+    prisma.connectMember.count(),
+    prisma.connectPost.count(),
     prisma.agency.findMany({
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -27,7 +28,7 @@ export default async function AdminOverview() {
     { label: "Users", value: users },
     { label: "Contacts", value: contacts },
     { label: "Orders", value: orders },
-    { label: "Drivers", value: drivers },
+    { label: "Connect members", value: members, sub: `${posts} posts` },
   ];
 
   return (
@@ -42,6 +43,10 @@ export default async function AdminOverview() {
             {s.sub ? <div className="mt-0.5 text-xs text-slate-400">{s.sub}</div> : null}
           </div>
         ))}
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Link href="/admin/connect" className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-brand-300 hover:text-brand-700">◎ Placid Connect moderation →</Link>
       </div>
 
       <div className="mt-8">
