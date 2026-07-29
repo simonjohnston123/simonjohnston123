@@ -14,6 +14,10 @@ export type ProviderKey =
   | "SQUARE"
   | "SHOPIFY"
   | "EBAY"
+  | "TIKTOK"
+  | "FACEBOOK_SHOP"
+  | "INSTAGRAM_SHOP"
+  | "WHATNOT"
   | "GOOGLE_CALENDAR";
 
 // "oauth"  → click-to-connect via the provider (needs a Placid dev app + approval)
@@ -174,6 +178,42 @@ export const PROVIDERS: ProviderDef[] = [
     icon: "🏷️",
     category: "E-commerce",
     blurb: "Pull eBay orders and listings into the CRM. Connect via secure eBay sign-in.",
+    connectType: "oauth",
+    ready: false,
+  },
+  {
+    key: "TIKTOK",
+    name: "TikTok Shop",
+    icon: "🎵",
+    category: "E-commerce",
+    blurb: "Sync TikTok Shop orders, products and messages. Connect via TikTok sign-in.",
+    connectType: "oauth",
+    ready: false,
+  },
+  {
+    key: "FACEBOOK_SHOP",
+    name: "Facebook Shop",
+    icon: "🛒",
+    category: "E-commerce",
+    blurb: "Manage your Facebook Shop catalogue and orders from the CRM.",
+    connectType: "oauth",
+    ready: false,
+  },
+  {
+    key: "INSTAGRAM_SHOP",
+    name: "Instagram Shop",
+    icon: "📸",
+    category: "E-commerce",
+    blurb: "Manage your Instagram Shop catalogue and orders from the CRM.",
+    connectType: "oauth",
+    ready: false,
+  },
+  {
+    key: "WHATNOT",
+    name: "Whatnot",
+    icon: "🎥",
+    category: "E-commerce",
+    blurb: "Bring your Whatnot live-shopping orders and buyers into the CRM.",
     connectType: "oauth",
     ready: false,
   },
