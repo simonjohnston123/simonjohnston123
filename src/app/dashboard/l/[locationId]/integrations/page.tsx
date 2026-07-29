@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
 import { PROVIDERS, type ProviderKey } from "@/lib/integrations-catalog";
+import { isConfigured } from "@/lib/oauth-providers";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                 {items.map((p) => {
                   const conn = byProvider.get(p.key as ProviderKey as never);
                   const connected = conn?.status === "CONNECTED";
+                  const oauthReady = p.connectType === "oauth" && isConfigured(p.key);
                   return (
                     <div key={p.key} className="card flex flex-col p-5">
                       <div className="flex items-start justify-between gap-2">
@@ -54,7 +56,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                         </div>
                         {connected ? (
                           <Badge color="green">Connected</Badge>
-                        ) : p.connectType === "oauth" && !p.ready ? (
+                        ) : p.connectType === "oauth" && !oauthReady ? (
                           <Badge color="slate">Soon</Badge>
                         ) : (
                           <Badge color="amber">Off</Badge>
@@ -62,7 +64,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                       </div>
                       <p className="mt-3 flex-1 text-sm text-slate-500">{p.blurb}</p>
                       <div className="mt-4 flex items-center gap-2">
-                        <ConnectButton locationId={locationId} provider={p.key as ProviderKey} connected={connected} />
+                        <ConnectButton locationId={locationId} provider={p.key as ProviderKey} connected={connected} oauthReady={oauthReady} />
                         {connected ? <DisconnectButton locationId={locationId} provider={p.key as ProviderKey} /> : null}
                       </div>
                     </div>

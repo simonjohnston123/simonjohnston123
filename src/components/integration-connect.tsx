@@ -13,10 +13,12 @@ export function ConnectButton({
   locationId,
   provider,
   connected,
+  oauthReady = false,
 }: {
   locationId: string;
   provider: ProviderKey;
   connected: boolean;
+  oauthReady?: boolean;
 }) {
   const def = providerDef(provider);
   const [open, setOpen] = useState(false);
@@ -24,11 +26,11 @@ export function ConnectButton({
 
   if (!def) return null;
 
-  // OAuth providers that aren't wired up yet.
+  // OAuth providers: live only once Placid's app for them is configured.
   if (def.connectType === "oauth") {
-    return def.ready ? (
-      <a href={`/api/integrations/${provider.toLowerCase()}/connect?locationId=${locationId}`} className="btn-primary text-sm">
-        Connect
+    return oauthReady ? (
+      <a href={`/api/integrations/${provider.toLowerCase()}/connect?locationId=${locationId}`} className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"}>
+        {connected ? "Reconnect" : "Connect"}
       </a>
     ) : (
       <span className="btn-secondary cursor-not-allowed text-sm opacity-60" title="Available once Placid's app for this provider is approved">

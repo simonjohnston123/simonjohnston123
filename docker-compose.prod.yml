@@ -42,6 +42,9 @@ services:
       TWILIO_FROM: ${TWILIO_FROM:-}
       INBOUND_DOMAIN: ${INBOUND_DOMAIN:-inbox.placid.group}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      # Meta (Facebook + Instagram) OAuth app — flips those channels live once set.
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
     expose:
       - "3000"
 
