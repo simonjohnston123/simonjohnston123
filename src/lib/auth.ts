@@ -70,6 +70,15 @@ export async function getCurrentUser() {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Suspended tenants can't use the app (the platform owner is exempt).
+  if (user.agency?.status === "SUSPENDED" && user.globalRole !== "SUPER_ADMIN") redirect("/suspended");
+  return user;
+}
+
+/** Platform owner only — gates the /admin super-admin area. */
+export async function requireSuperAdmin() {
+  const user = await requireUser();
+  if (user.globalRole !== "SUPER_ADMIN") redirect("/dashboard");
   return user;
 }
 

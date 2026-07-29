@@ -19,6 +19,11 @@ enum GlobalRole {
   AGENCY_USER
 }
 
+enum AgencyStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 enum LocationRole {
   ADMIN
   MEMBER
@@ -27,10 +32,12 @@ enum LocationRole {
 // The top-level tenant. Everything belongs to exactly one agency.
 // PlacidCRM runs a single agency by default, but the model supports more.
 model Agency {
-  id        String     @id @default(cuid())
+  id        String       @id @default(cuid())
   name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  status    AgencyStatus @default(ACTIVE)
+  plan      String       @default("free")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
   users     User[]
   locations Location[]
 }

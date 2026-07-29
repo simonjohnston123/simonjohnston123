@@ -35,7 +35,10 @@ export default async function AgencyDashboard() {
         </div>
         <div className="flex items-center gap-2">
           {user.globalRole === "SUPER_ADMIN" ? (
-            <Link href="/dashboard/team" className="btn-secondary">Team</Link>
+            <>
+              <Link href="/admin" className="btn-secondary">⚙ Admin</Link>
+              <Link href="/dashboard/team" className="btn-secondary">Team</Link>
+            </>
           ) : null}
           <AddBusiness />
         </div>
