@@ -39,6 +39,7 @@ export default async function WebsitePage({ params }: { params: { locationId: st
           <div className="flex items-center gap-2">
             {site.published ? <Badge color="green">Published</Badge> : <Badge color="amber">Draft</Badge>}
             <Link href={publicUrl} target="_blank" className="btn-secondary text-sm">Open site ↗</Link>
+            <Link href={`/build/${params.locationId}`} className="btn-primary text-sm">✨ New builder (beta)</Link>
           </div>
         }
       />

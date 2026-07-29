@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Placid CRM — Website Builder UI reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PLACID BUILDER — DESIGN TOKENS
+   Every value used in this file comes from here. Copy this block
+   into the real app as CSS vars / Tailwind theme extension.
+   ============================================================ */
+:root{
+  --ink-900:#0E1116; --ink-800:#151920; --ink-750:#1A1F27; --ink-700:#212731;
+  --ink-600:#2A313D; --line:#262D38; --line-soft:#1E242D;
+  --text-hi:#E8ECF2; --text-mid:#A3ADBC; --text-lo:#6B7688;
+  --sel:#00C7A9; --sel-soft:rgba(0,199,169,.14);
+  --drop:#FF5C8A; --drop-soft:rgba(255,92,138,.16);
+  --warn:#F2B441; --danger:#FF6B6B;
+  --sec:#7C9CFF; --row:#9B8CFF; --col:#63C7F5;
+  --r-sm:6px; --r-md:9px; --r-lg:13px;
+  --rail-w:56px; --panel-w:288px; --inspector-w:304px; --topbar-h:52px; --statusbar-h:30px;
+}
+/* NOTE: This file is the DESIGN SPEC only (kept for reference). The real
+   builder is implemented in React under src/components/builder/ + src/app/build/.
+   See PROJECT_LOG for the phased plan. Original full mockup preserved in git history. */
+body{background:#0E1116;color:#E8ECF2;font-family:'Inter Tight',system-ui,sans-serif;padding:40px}
+</style>
+</head>
+<body>
+<h1>Placid CRM — Website Builder design reference</h1>
+<p>The full interactive mockup the client supplied on 2026-07-29 is preserved in git history at this path's first commit. Design tokens + spec above. Key decisions the real build follows:</p>
+<ul>
+<li>Dark chrome (ink-900/800/750), bright WHITE canvas = brightest thing on screen.</li>
+<li>5-zone shell: rail 56px · panel 288px · canvas 1fr · inspector 304px; topbar 52px; status bar 30px.</li>
+<li>Two-signal colour: TEAL #00C7A9 = selected/yours; CORAL #FF5C8A = drop target. Never share meaning.</li>
+<li>Structure tints: Section #7C9CFF, Row #9B8CFF, Column #63C7F5 (kind dots + breadcrumb).</li>
+<li>Rail panels: Add elements · Section library · Layers · Pages · Theme &amp; brand · Media · Page settings.</li>
+<li>Add-elements panel = tile grid grouped Layout / Basic / CRM &amp; Convert, with search.</li>
+<li>Canvas: device frame + breakpoint switch (1180/768/390); element hover = faint teal outline + mono name badge; selected = solid teal + floating tools (move/duplicate/save-to-library/delete); coral drop-line with "DROP: ROW → COLUMN n"; "Add section" pill between sections.</li>
+<li>Inspector: kindchip + name; tabs Content / Style / Advanced; box-model spacing editor (margin/padding); responsive visibility chips (DESK/TAB/MOB); desktop-styles-cascade-down model.</li>
+<li>Status bar: clickable ancestry breadcrumb (Section › Row › Column › Button) + dimensions + autosave + version.</li>
+<li>Selection rule: innermost element wins (stopPropagation); breadcrumb shows full path.</li>
+<li>Fonts: Inter Tight (UI), IBM Plex Mono (labels/units/meta).</li>
+</ul>
+</body>
+</html>
