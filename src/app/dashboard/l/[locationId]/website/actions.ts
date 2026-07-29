@@ -54,6 +54,8 @@ export async function updatePageAction(_prev: unknown, formData: FormData) {
     data: {
       title: String(formData.get("title") ?? "").trim() || "Untitled",
       blocks: blocks as any,
+      seoTitle: String(formData.get("seoTitle") ?? "").trim() || null,
+      seoDescription: String(formData.get("seoDescription") ?? "").trim() || null,
     },
   });
   revalidatePath(`/dashboard/l/${locationId}/website`);

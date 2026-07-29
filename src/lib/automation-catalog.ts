@@ -42,8 +42,8 @@ export const TRIGGERS: Record<TriggerKey, { label: string; description: string; 
   },
   FORM_SUBMITTED: {
     label: "Form / booking submitted",
-    description: "Runs when a website form or booking comes in (via inbound webhook).",
-    live: false,
+    description: "Runs when a website form or booking is submitted.",
+    live: true,
   },
   MANUAL: {
     label: "Manual / test only",

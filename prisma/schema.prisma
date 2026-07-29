@@ -385,6 +385,8 @@ model SitePage {
   blocks    Json     @default("[]")
   isHome    Boolean  @default(false)
   position  Int      @default(0)
+  seoTitle       String?
+  seoDescription String?
   updatedAt DateTime @updatedAt
 
   @@unique([siteId, slug])

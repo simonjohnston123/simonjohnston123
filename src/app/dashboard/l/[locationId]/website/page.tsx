@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
-import { SiteSettingsForm, PageEditor } from "@/components/site-editors";
+import { SiteSettingsForm } from "@/components/site-editors";
+import { BlockEditor } from "@/components/block-editor";
 import { createPageAction, deletePageAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,11 @@ export default async function WebsitePage({ params }: { params: { locationId: st
   const site = await prisma.site.findUnique({
     where: { locationId: params.locationId },
     include: { pages: { orderBy: { position: "asc" } } },
+  });
+  const calendars = await prisma.calendar.findMany({
+    where: { locationId: params.locationId },
+    select: { id: true, name: true },
+    orderBy: { createdAt: "asc" },
   });
 
   if (!site) {
@@ -64,7 +70,7 @@ export default async function WebsitePage({ params }: { params: { locationId: st
           <div className="space-y-4">
             {site.pages.map((page) => (
               <div key={page.id}>
-                <PageEditor locationId={params.locationId} page={page} />
+                <BlockEditor locationId={params.locationId} page={page} calendars={calendars} />
                 {!page.isHome ? (
                   <form action={deletePageAction} className="mt-1 text-right">
                     <input type="hidden" name="locationId" value={params.locationId} />

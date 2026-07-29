@@ -9,9 +9,10 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const data = await getPublishedSite(params.slug);
   if (!data) return { title: "Not found" };
+  const home = data.site.pages.find((p) => p.isHome) ?? data.site.pages[0];
   return {
-    title: data.site.logoText || data.location.name,
-    description: data.site.tagline || `${data.location.name} — official website.`,
+    title: home?.seoTitle || data.site.logoText || data.location.name,
+    description: home?.seoDescription || data.site.tagline || `${data.location.name} — official website.`,
   };
 }
 
