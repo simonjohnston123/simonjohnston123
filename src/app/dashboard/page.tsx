@@ -25,25 +25,6 @@ export default async function AgencyDashboard() {
   });
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-bold tracking-tight">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-gradient text-white shadow-[0_4px_12px_-4px_rgba(142,45,226,0.6)]">◆</span>
-            <span className="text-slate-900">Placid<span className="bg-gradient-to-r from-brand-600 to-accent-500 bg-clip-text text-transparent">CRM</span></span>
-          </Link>
-          <div className="ml-auto flex items-center gap-1.5">
-            {user.globalRole === "SUPER_ADMIN" ? (
-              <>
-                <Link href="/admin" className="btn-ghost text-sm">⚙ Admin</Link>
-                <Link href="/dashboard/team" className="btn-ghost text-sm">Team</Link>
-              </>
-            ) : null}
-            <Link href="/dashboard/billing" className="btn-ghost text-sm">Billing</Link>
-          </div>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -52,7 +33,16 @@ export default async function AgencyDashboard() {
               {locations.length} {locations.length === 1 ? "business" : "businesses"} · pick one to manage, or add a new one.
             </p>
           </div>
-          <AddBusiness />
+          <div className="flex items-center gap-1.5">
+            {user.globalRole === "SUPER_ADMIN" ? (
+              <>
+                <Link href="/admin" className="btn-secondary text-sm">⚙ Admin</Link>
+                <Link href="/dashboard/team" className="btn-secondary text-sm">Team</Link>
+              </>
+            ) : null}
+            <Link href="/dashboard/billing" className="btn-secondary text-sm">Billing</Link>
+            <AddBusiness />
+          </div>
         </div>
 
         {locations.length === 0 ? (
@@ -95,7 +85,6 @@ export default async function AgencyDashboard() {
           </div>
         )}
       </main>
-    </div>
   );
 }
 
