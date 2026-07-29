@@ -29,12 +29,27 @@ async function validate(provider: ProviderKey, creds: Record<string, string>): P
       return "Fill in host, username, password and from address.";
     }
   }
+  if (provider === "STRIPE") {
+    const sk = creds.secretKey || "";
+    if (!/^(sk|rk)_(live|test)_/.test(sk)) return "That doesn't look like a Stripe secret key (starts with sk_live_ or rk_live_).";
+    try {
+      const res = await fetch("https://api.stripe.com/v1/account", { headers: { Authorization: `Bearer ${sk}` } });
+      if (!res.ok) return "Stripe rejected that key — double-check you copied the secret key correctly.";
+    } catch {
+      return "Couldn't reach Stripe to verify the key. Try again.";
+    }
+  }
   return null;
 }
 
 function labelFor(provider: ProviderKey, creds: Record<string, string>): string | null {
   if (provider === "TWILIO") return creds.fromNumber ?? null;
   if (provider === "SMTP") return creds.fromEmail ?? null;
+  if (provider === "STRIPE") {
+    const sk = creds.secretKey || "";
+    const mode = sk.includes("_live_") ? "Live" : "Test";
+    return `${mode} · ••••${sk.slice(-4)}`;
+  }
   return null;
 }
 

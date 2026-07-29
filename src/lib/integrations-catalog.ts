@@ -131,9 +131,13 @@ export const PROVIDERS: ProviderDef[] = [
     name: "Stripe",
     icon: "💳",
     category: "Payments",
-    blurb: "Take payments and see transactions in the CRM.",
-    connectType: "oauth",
-    ready: false,
+    blurb: "Connect your own Stripe account to take card payments, subscriptions and invoices.",
+    connectType: "apikey",
+    ready: true,
+    fields: [
+      { key: "secretKey", label: "Secret key", placeholder: "sk_live_… or rk_live_…", secret: true },
+      { key: "publishableKey", label: "Publishable key", placeholder: "pk_live_…" },
+    ],
   },
 ];
 

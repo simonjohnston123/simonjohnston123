@@ -18,6 +18,31 @@ function key(): string {
   return k;
 }
 
+/**
+ * The Stripe secret key a given sub-account connected under Payments → Gateways.
+ * Returns null if this location hasn't connected its own Stripe. Payment
+ * features should prefer this (each business gets paid into its OWN account)
+ * and only fall back to the platform key for platform-level billing.
+ */
+export async function getLocationStripeKey(locationId: string): Promise<string | null> {
+  const { prisma } = await import("@/lib/db");
+  const { decryptJson } = await import("@/lib/crypto");
+  const conn = await prisma.connection.findUnique({
+    where: { locationId_provider: { locationId, provider: "STRIPE" } },
+  });
+  if (!conn?.secretCipher || conn.status !== "CONNECTED") return null;
+  try {
+    const creds = decryptJson<{ secretKey?: string }>(conn.secretCipher);
+    return creds.secretKey ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function locationStripeConnected(locationId: string): Promise<boolean> {
+  return (await getLocationStripeKey(locationId)) !== null;
+}
+
 async function post(path: string, params: URLSearchParams): Promise<Record<string, unknown>> {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
