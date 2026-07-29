@@ -67,6 +67,7 @@ model Location {
   tasks         Task[]
   site          Site?
   workflows     Workflow[]
+  connections   Connection[]
 
   @@index([agencyId])
 }
@@ -480,4 +481,45 @@ model WorkflowRunStep {
   ranAt      DateTime    @default(now())
 
   @@index([runId])
+}
+
+// ---------------------------------------------------------------------------
+// Integrations — each sub-account connects its OWN channels (multi-tenant).
+// Secrets are stored encrypted (AES-256-GCM) and never returned to the client.
+// ---------------------------------------------------------------------------
+
+enum ConnectionProvider {
+  GMAIL
+  OUTLOOK
+  SMTP
+  FACEBOOK
+  INSTAGRAM
+  GOOGLE_BUSINESS
+  WHATSAPP
+  TWILIO
+  STRIPE
+  GOOGLE_CALENDAR
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  PENDING
+}
+
+model Connection {
+  id           String             @id @default(cuid())
+  locationId   String
+  location     Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  provider     ConnectionProvider
+  status       ConnectionStatus   @default(CONNECTED)
+  accountLabel String?            // e.g. connected email, page name, or phone number
+  secretCipher String?            @db.Text // encrypted JSON blob of tokens/keys
+  meta         Json               @default("{}") // non-secret display info
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([locationId, provider])
+  @@index([locationId])
 }
