@@ -69,6 +69,7 @@ model Location {
   workflows     Workflow[]
   connections   Connection[]
   orders        Order[]
+  deliveryJobs  DeliveryJob[]
 
   @@index([agencyId])
 }
@@ -572,4 +573,66 @@ model Order {
   @@index([locationId])
   @@index([locationId, status])
   @@index([contactId])
+}
+
+// ---------------------------------------------------------------------------
+// Placid Deliveries — a hybrid driver marketplace. Drivers are their OWN
+// audience (separate accounts/session). Businesses post delivery jobs; jobs are
+// SHARED (any approved driver) or OWN (a business's own drivers — later).
+// ---------------------------------------------------------------------------
+
+enum DriverStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum DeliveryStatus {
+  POSTED
+  ACCEPTED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryScope {
+  OWN
+  SHARED
+}
+
+model Driver {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  phone        String?
+  passwordHash String
+  vehicle      String?
+  status       DriverStatus  @default(APPROVED)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  jobs         DeliveryJob[]
+}
+
+model DeliveryJob {
+  id             String         @id @default(cuid())
+  locationId     String
+  location       Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orderId        String?
+  status         DeliveryStatus @default(POSTED)
+  scope          DeliveryScope  @default(SHARED)
+  driverId       String?
+  driver         Driver?        @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  pickupAddress  String
+  dropoffAddress String
+  customerName   String?
+  customerPhone  String?
+  fee            Float          @default(0)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  acceptedAt     DateTime?
+  deliveredAt    DateTime?
+
+  @@index([status])
+  @@index([locationId])
+  @@index([driverId])
 }

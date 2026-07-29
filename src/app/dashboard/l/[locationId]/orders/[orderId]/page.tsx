@@ -4,7 +4,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Badge } from "@/components/ui";
 import { formatMoney, formatDateTime, contactName } from "@/lib/utils";
-import { setOrderStatusAction, deleteOrderAction } from "../actions";
+import { setOrderStatusAction, deleteOrderAction, postDeliveryJobAction, cancelDeliveryJobAction } from "../actions";
 import { STATUS_COLOR, statusLabel } from "../page";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,22 @@ export default async function OrderDetailPage({ params }: { params: { locationId
 
   const order = await prisma.order.findFirst({ where: { id: orderId, locationId }, include: { contact: true } });
   if (!order) notFound();
+
+  const deliveryJob =
+    order.type === "DELIVERY"
+      ? await prisma.deliveryJob.findFirst({
+          where: { orderId: order.id, locationId },
+          include: { driver: { select: { name: true, phone: true } } },
+        })
+      : null;
+
+  const jobColor: Record<string, "slate" | "blue" | "amber" | "green" | "red"> = {
+    POSTED: "slate",
+    ACCEPTED: "blue",
+    PICKED_UP: "amber",
+    DELIVERED: "green",
+    CANCELLED: "red",
+  };
 
   const items = Array.isArray(order.items) ? (order.items as { name: string; qty: number; price: number }[]) : [];
   const base = `/dashboard/l/${locationId}/orders`;
@@ -120,6 +136,40 @@ export default async function OrderDetailPage({ params }: { params: { locationId
               </div>
             ) : null}
           </section>
+
+          {order.type === "DELIVERY" ? (
+            <section className="card p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Placid Deliveries</h2>
+              {deliveryJob ? (
+                <div className="mt-3 space-y-2 text-sm">
+                  <Badge color={jobColor[deliveryJob.status]}>{statusLabel(deliveryJob.status)}</Badge>
+                  {deliveryJob.driver ? (
+                    <div className="text-slate-700">Driver: <span className="font-medium">{deliveryJob.driver.name}</span> {deliveryJob.driver.phone}</div>
+                  ) : (
+                    <div className="text-slate-500">Waiting for a driver to accept…</div>
+                  )}
+                  <div className="text-slate-500">Driver fee: {formatMoney(deliveryJob.fee)}</div>
+                  {deliveryJob.status === "POSTED" ? (
+                    <form action={cancelDeliveryJobAction}>
+                      <input type="hidden" name="locationId" value={locationId} />
+                      <input type="hidden" name="jobId" value={deliveryJob.id} />
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <button className="text-xs text-slate-400 hover:text-red-600">Remove from board</button>
+                    </form>
+                  ) : null}
+                </div>
+              ) : (
+                <form action={postDeliveryJobAction} className="mt-3 space-y-2">
+                  <input type="hidden" name="locationId" value={locationId} />
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <label className="label">Driver fee</label>
+                  <input name="fee" type="number" min="0" step="0.01" className="input" placeholder="15.00" />
+                  <button className="btn-primary w-full text-sm" disabled={!order.deliveryAddress}>Post to Placid Deliveries →</button>
+                  {!order.deliveryAddress ? <p className="text-xs text-amber-600">Add a delivery address first.</p> : null}
+                </form>
+              )}
+            </section>
+          ) : null}
         </div>
       </div>
     </div>

@@ -109,3 +109,48 @@ export async function deleteOrderAction(formData: FormData) {
   revalidatePath(`/dashboard/l/${locationId}/orders`);
   redirect(`/dashboard/l/${locationId}/orders`);
 }
+
+/** Post a delivery order to the Placid Deliveries driver board. */
+export async function postDeliveryJobAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const orderId = String(formData.get("orderId") ?? "");
+  const fee = Math.max(Number(formData.get("fee")) || 0, 0);
+  const { location } = await requireLocationAccess(locationId);
+
+  const order = await prisma.order.findFirst({ where: { id: orderId, locationId } });
+  if (!order || order.type !== "DELIVERY" || !order.deliveryAddress) return;
+
+  // Don't double-post.
+  const existing = await prisma.deliveryJob.findFirst({ where: { orderId, locationId } });
+  if (existing) return;
+
+  const pickup =
+    [location.addressLine, location.city, location.state, location.postalCode].filter(Boolean).join(", ") || location.name;
+
+  await prisma.deliveryJob.create({
+    data: {
+      locationId,
+      orderId,
+      status: "POSTED",
+      scope: "SHARED",
+      pickupAddress: pickup,
+      dropoffAddress: order.deliveryAddress,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      fee,
+      notes: order.notes,
+    },
+  });
+  await prisma.order.update({ where: { id: orderId }, data: { status: "OUT_FOR_DELIVERY" } });
+  revalidatePath(`/dashboard/l/${locationId}/orders/${orderId}`);
+}
+
+export async function cancelDeliveryJobAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const jobId = String(formData.get("jobId") ?? "");
+  const orderId = String(formData.get("orderId") ?? "");
+  await requireLocationAccess(locationId);
+  // Only pull it back if a driver hasn't accepted yet.
+  await prisma.deliveryJob.deleteMany({ where: { id: jobId, locationId, status: "POSTED" } });
+  revalidatePath(`/dashboard/l/${locationId}/orders/${orderId}`);
+}
