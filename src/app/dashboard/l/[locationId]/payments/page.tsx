@@ -18,10 +18,13 @@ const modules = [
 export default async function PaymentsPage({ params }: { params: { locationId: string } }) {
   await requireLocationAccess(params.locationId);
 
-  const stripeConn = await prisma.connection.findUnique({
-    where: { locationId_provider: { locationId: params.locationId, provider: "STRIPE" } },
+  const conns = await prisma.connection.findMany({
+    where: { locationId: params.locationId, provider: { in: ["STRIPE", "SQUARE"] } },
   });
+  const stripeConn = conns.find((c) => c.provider === "STRIPE");
+  const squareConn = conns.find((c) => c.provider === "SQUARE");
   const stripeConnected = stripeConn?.status === "CONNECTED";
+  const squareConnected = squareConn?.status === "CONNECTED";
 
   return (
     <div>
@@ -58,16 +61,27 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
             </div>
           </div>
 
-          {/* Square — placeholder */}
-          <div className="card flex flex-col p-5 opacity-80">
+          {/* Square — connectable now */}
+          <div className="card flex flex-col p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xl">◼️</span>
-                <h3 className="font-semibold text-slate-900">Square</h3>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Square</h3>
+                  {squareConnected && squareConn?.accountLabel ? (
+                    <p className="text-xs text-slate-500">{squareConn.accountLabel}</p>
+                  ) : null}
+                </div>
               </div>
-              <Badge color="slate">Coming soon</Badge>
+              {squareConnected ? <Badge color="green">Connected</Badge> : <Badge color="amber">Not connected</Badge>}
             </div>
-            <p className="mt-3 flex-1 text-sm text-slate-500">Connect Square to take payments and sync transactions.</p>
+            <p className="mt-3 flex-1 text-sm text-slate-500">
+              Take card payments and sync transactions with your own Square account.
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <ConnectButton locationId={params.locationId} provider="SQUARE" connected={squareConnected} oauthReady={false} />
+              {squareConnected ? <DisconnectButton locationId={params.locationId} provider="SQUARE" /> : null}
+            </div>
           </div>
         </div>
         {stripeConnected ? (

@@ -11,6 +11,7 @@ export type ProviderKey =
   | "WHATSAPP"
   | "TWILIO"
   | "STRIPE"
+  | "SQUARE"
   | "GOOGLE_CALENDAR";
 
 // "oauth"  → click-to-connect via the provider (needs a Placid dev app + approval)
@@ -137,6 +138,19 @@ export const PROVIDERS: ProviderDef[] = [
     fields: [
       { key: "secretKey", label: "Secret key", placeholder: "sk_live_… or rk_live_…", secret: true },
       { key: "publishableKey", label: "Publishable key", placeholder: "pk_live_…" },
+    ],
+  },
+  {
+    key: "SQUARE",
+    name: "Square",
+    icon: "◼️",
+    category: "Payments",
+    blurb: "Connect your own Square account to take card payments and sync transactions.",
+    connectType: "apikey",
+    ready: true,
+    fields: [
+      { key: "accessToken", label: "Access token", placeholder: "EAAA… (production)", secret: true },
+      { key: "locationId", label: "Location ID (optional)", placeholder: "L…" },
     ],
   },
 ];

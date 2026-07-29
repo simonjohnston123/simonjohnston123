@@ -1,13 +1,14 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPublishedSite } from "@/lib/site";
+import { getViewableSite } from "@/lib/site";
 import { SiteChrome } from "@/components/site-chrome";
 import { SiteBlocks, type Block } from "@/components/site-blocks";
+import { DraftBanner } from "@/components/draft-banner";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const data = await getPublishedSite(params.slug);
+  const data = await getViewableSite(params.slug);
   if (!data) return { title: "Not found" };
   const home = data.site.pages.find((p) => p.isHome) ?? data.site.pages[0];
   return {
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 export default async function SiteHome({ params }: { params: { slug: string } }) {
-  const data = await getPublishedSite(params.slug);
+  const data = await getViewableSite(params.slug);
   if (!data) notFound();
 
   const { site, location } = data;
@@ -25,6 +26,8 @@ export default async function SiteHome({ params }: { params: { slug: string } })
   const blocks = (home?.blocks as unknown as Block[]) ?? [];
 
   return (
+    <>
+      {data.draft ? <DraftBanner locationId={location.id} /> : null}
     <SiteChrome
       slug={location.slug}
       logoText={site.logoText || location.name}
@@ -34,5 +37,6 @@ export default async function SiteHome({ params }: { params: { slug: string } })
     >
       <SiteBlocks blocks={blocks} slug={location.slug} primaryColor={site.primaryColor} />
     </SiteChrome>
+    </>
   );
 }

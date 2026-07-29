@@ -62,6 +62,17 @@ export async function updatePageAction(_prev: unknown, formData: FormData) {
   return { error: "", ok: true };
 }
 
+export async function publishSiteAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const site = await getSite(locationId);
+  if (!site) return;
+  await prisma.site.update({ where: { id: site.id }, data: { published: true } });
+  const loc = await prisma.location.findUnique({ where: { id: locationId }, select: { slug: true } });
+  if (loc) revalidatePath(`/sites/${loc.slug}`);
+  revalidatePath(`/dashboard/l/${locationId}/website`);
+}
+
 export async function createPageAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
   const title = String(formData.get("title") ?? "").trim();

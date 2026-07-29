@@ -526,6 +526,7 @@ enum ConnectionProvider {
   WHATSAPP
   TWILIO
   STRIPE
+  SQUARE
   GOOGLE_CALENDAR
 }
 

@@ -39,6 +39,18 @@ async function validate(provider: ProviderKey, creds: Record<string, string>): P
       return "Couldn't reach Stripe to verify the key. Try again.";
     }
   }
+  if (provider === "SQUARE") {
+    const token = creds.accessToken || "";
+    if (!token) return "Enter your Square access token.";
+    try {
+      const res = await fetch("https://connect.squareup.com/v2/locations", {
+        headers: { Authorization: `Bearer ${token}`, "Square-Version": "2024-06-04" },
+      });
+      if (!res.ok) return "Square rejected that token — check you copied the production access token correctly.";
+    } catch {
+      return "Couldn't reach Square to verify the token. Try again.";
+    }
+  }
   return null;
 }
 
@@ -49,6 +61,10 @@ function labelFor(provider: ProviderKey, creds: Record<string, string>): string 
     const sk = creds.secretKey || "";
     const mode = sk.includes("_live_") ? "Live" : "Test";
     return `${mode} · ••••${sk.slice(-4)}`;
+  }
+  if (provider === "SQUARE") {
+    const t = creds.accessToken || "";
+    return `Square · ••••${t.slice(-4)}`;
   }
   return null;
 }
