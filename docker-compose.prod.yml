@@ -48,6 +48,9 @@ services:
       # Stripe platform billing (charge businesses for PlacidCRM plans).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Placid Storage yard feed (Storage tab pulls live yard data from the storage app).
+      STORAGE_URL: ${STORAGE_URL:-https://placidstoragesolutions.com.au}
+      STORAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}
     expose:
       - "3000"
 

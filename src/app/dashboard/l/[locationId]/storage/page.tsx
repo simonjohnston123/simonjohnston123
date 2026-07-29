@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-const STORAGE = "https://placidstoragesolutions.com.au";
+const STORAGE = process.env.STORAGE_URL || "https://placidstoragesolutions.com.au";
 
 type Pool = { available: number; capacity: number; occupied: number };
 
@@ -20,21 +20,19 @@ export default async function StoragePage({ params }: { params: { locationId: st
       container = data.pools?.container ?? null;
     }
   } catch {
-    /* storage site unreachable — show links only */
+    /* offline */
   }
 
   const Stat = ({ label, pool }: { label: string; pool: Pool | null }) => (
-    <div className="card p-5">
+    <div className="card p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       {pool ? (
         <>
-          <div className="mt-1 text-3xl font-bold text-slate-900">
-            {pool.occupied}/{pool.capacity}
-          </div>
-          <div className="text-sm text-brand-600 font-medium">{pool.available} available now</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{pool.occupied}/{pool.capacity}</div>
+          <div className="text-sm font-medium text-brand-600">{pool.available} available</div>
         </>
       ) : (
-        <div className="mt-1 text-sm text-slate-400">Live data unavailable</div>
+        <div className="mt-1 text-sm text-slate-400">—</div>
       )}
     </div>
   );
@@ -42,33 +40,32 @@ export default async function StoragePage({ params }: { params: { locationId: st
   return (
     <div>
       <PageHeader
-        title="Storage"
-        subtitle="Placid Storage Solutions — the live yard at 27 Toolooa Street, South Gladstone"
+        title="Storage yard"
+        subtitle="Placid Storage Solutions — 27 Toolooa Street, South Gladstone"
+        action={
+          <a className="btn-secondary text-sm" href={`${STORAGE}/admin`} target="_blank" rel="noopener noreferrer">
+            Open full-screen ↗
+          </a>
+        }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <Stat label="Car bays" pool={car} />
-        <Stat label="Storage units / lockers" pool={container} />
+        <Stat label="Units / lockers" pool={container} />
       </div>
 
-      <div className="card p-6">
-        <h3 className="text-base font-semibold text-slate-900">Manage the yard</h3>
-        <p className="mt-1 text-sm text-slate-600">
-          Bookings, payments, gate PINs, occupancy grid, waitlist, service requests, terms &amp;
-          signatures — everything for the storage business runs in the full admin.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <a className="btn-primary" href={`${STORAGE}/admin`} target="_blank" rel="noopener noreferrer">
-            Open Storage Admin ↗
-          </a>
-          <a className="btn-secondary" href={`${STORAGE}/admin/bookings`} target="_blank" rel="noopener noreferrer">
-            Bookings &amp; customers ↗
-          </a>
-          <a className="btn-ghost" href={STORAGE} target="_blank" rel="noopener noreferrer">
-            View public site ↗
-          </a>
-        </div>
+      {/* The full yard admin — bookings, occupancy grid, PINs, waitlist, service requests — embedded here. */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <iframe
+          src={`${STORAGE}/admin`}
+          title="Placid Storage yard admin"
+          className="h-[78vh] w-full"
+        />
       </div>
+      <p className="mt-2 text-xs text-slate-400">
+        The full yard admin runs live above. If it asks you to log in and won&rsquo;t hold the session (some browsers block
+        embedded logins), use <span className="font-medium">Open full-screen ↗</span>.
+      </p>
     </div>
   );
 }
