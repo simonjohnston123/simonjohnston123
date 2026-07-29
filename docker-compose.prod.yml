@@ -45,6 +45,9 @@ services:
       # Meta (Facebook + Instagram) OAuth app — flips those channels live once set.
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      # Stripe platform billing (charge businesses for PlacidCRM plans).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     expose:
       - "3000"
 

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createBusiness } from "@/lib/provision";
+import { prisma } from "@/lib/db";
+import { planByKey } from "@/lib/plans";
 
 const schema = z.object({
   name: z.string().min(2, "Enter a business name."),
@@ -26,6 +28,15 @@ function field(formData: FormData, key: string): string {
 
 export async function createBusinessAction(_prev: unknown, formData: FormData) {
   const user = await requireUser();
+
+  // Plan limit on number of businesses (the platform owner is unlimited).
+  if (user.globalRole !== "SUPER_ADMIN") {
+    const plan = planByKey(user.agency?.plan);
+    const count = await prisma.location.count({ where: { agencyId: user.agencyId } });
+    if (count >= plan.subAccountLimit) {
+      return { error: `Your ${plan.name} plan includes ${plan.subAccountLimit} business${plan.subAccountLimit === 1 ? "" : "es"}. Upgrade in Billing to add more.` };
+    }
+  }
 
   const parsed = schema.safeParse({
     name: field(formData, "name"),

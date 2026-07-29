@@ -40,6 +40,7 @@ export default async function AgencyDashboard() {
               <Link href="/dashboard/team" className="btn-secondary">Team</Link>
             </>
           ) : null}
+          <Link href="/dashboard/billing" className="btn-secondary">Billing</Link>
           <AddBusiness />
         </div>
       </div>
