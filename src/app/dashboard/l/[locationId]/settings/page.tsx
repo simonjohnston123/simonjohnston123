@@ -9,6 +9,8 @@ export default async function SettingsPage({ params }: { params: { locationId: s
   const { location } = await requireLocationAccess(params.locationId);
   const email = emailConfigured();
   const sms = smsConfigured();
+  const inboundAddress = `${location.slug}@${process.env.INBOUND_DOMAIN || "inbox.placid.group"}`;
+  const inboundLive = Boolean(process.env.RESEND_WEBHOOK_SECRET);
 
   return (
     <div>
@@ -45,6 +47,20 @@ export default async function SettingsPage({ params }: { params: { locationId: s
                   : "Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM to switch on real delivery."}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-800">Inbox address</span>
+              {inboundLive ? <Badge color="green">Receiving</Badge> : <Badge color="amber">Not receiving yet</Badge>}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Emails sent to{" "}
+              <code className="rounded bg-white px-1.5 py-0.5 font-mono text-slate-700">{inboundAddress}</code>{" "}
+              land in this business&rsquo;s Conversations. {inboundLive
+                ? "Give this address to customers, or set it as the reply-to on your forms."
+                : "Activates once the inbound MX + webhook are connected (final email step)."}
+            </p>
           </div>
         </section>
 
