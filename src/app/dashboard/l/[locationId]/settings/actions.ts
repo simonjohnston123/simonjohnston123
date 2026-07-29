@@ -25,6 +25,8 @@ export async function updateLocationAction(_prev: unknown, formData: FormData) {
       state: String(formData.get("state") ?? "").trim() || null,
       postalCode: String(formData.get("postalCode") ?? "").trim() || null,
       country: String(formData.get("country") ?? "").trim() || "Australia",
+      taxId: String(formData.get("taxId") ?? "").trim() || null,
+      companyNumber: String(formData.get("companyNumber") ?? "").trim() || null,
     },
   });
   revalidatePath(`/dashboard/l/${locationId}/settings`);

@@ -51,6 +51,9 @@ services:
       # Placid Storage yard feed (Storage tab pulls live yard data from the storage app).
       STORAGE_URL: ${STORAGE_URL:-https://placidstoragesolutions.com.au}
       STORAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}
+      # AI helpers (pipeline stage generation, etc.). Optional — features fall back to heuristics.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
     expose:
       - "3000"
 

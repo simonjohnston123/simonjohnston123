@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState } from "react-dom";
 import { updateLocationAction } from "@/app/dashboard/l/[locationId]/settings/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { taxFields, COUNTRIES } from "@/lib/tax";
 
 type Location = {
   id: string;
@@ -17,11 +19,15 @@ type Location = {
   state: string | null;
   postalCode: string | null;
   country: string | null;
+  taxId: string | null;
+  companyNumber: string | null;
   slug: string;
 };
 
 export function LocationSettingsForm({ location }: { location: Location }) {
   const [state, formAction] = useFormState(updateLocationAction, { error: "", ok: false } as { error: string; ok?: boolean });
+  const [country, setCountry] = useState(location.country ?? "Australia");
+  const tf = taxFields(country);
 
   return (
     <form action={formAction} className="card space-y-4 p-5">
@@ -72,8 +78,23 @@ export function LocationSettingsForm({ location }: { location: Location }) {
         </div>
         <div>
           <label className="label" htmlFor="country">Country</label>
-          <input id="country" name="country" defaultValue={location.country ?? "Australia"} className="input" />
+          <input id="country" name="country" list="country-list" value={country} onChange={(e) => setCountry(e.target.value)} className="input" />
+          <datalist id="country-list">{COUNTRIES.map((c) => <option key={c} value={c} />)}</datalist>
         </div>
+      </div>
+
+      {/* Tax — labels adapt to the country */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor="taxId">{tf.primary.label}</label>
+          <input id="taxId" name="taxId" defaultValue={location.taxId ?? ""} placeholder={tf.primary.placeholder} className="input" />
+        </div>
+        {tf.secondary ? (
+          <div>
+            <label className="label" htmlFor="companyNumber">{tf.secondary.label}</label>
+            <input id="companyNumber" name="companyNumber" defaultValue={location.companyNumber ?? ""} placeholder={tf.secondary.placeholder} className="input" />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-3">

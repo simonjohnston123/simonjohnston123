@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewOpportunityButton } from "@/components/new-opportunity";
+import { NewPipelineButton, StageEditor } from "@/components/pipeline-manager";
 import { StageSelect } from "@/components/stage-select";
 import { setOpportunityStatusAction, deleteOpportunityAction } from "./actions";
 import { formatMoney, contactName } from "@/lib/utils";
@@ -27,8 +28,14 @@ export default async function PipelinesPage({
   if (pipelines.length === 0) {
     return (
       <div>
-        <PageHeader title="Pipelines" />
-        <EmptyState title="No pipelines yet" body="This business has no pipeline configured." />
+        <PageHeader
+          title="Pipelines"
+          action={<NewPipelineButton locationId={params.locationId} />}
+        />
+        <EmptyState
+          title="No pipelines yet"
+          body="Create your first pipeline — describe your business and let AI draft the stages, or set them yourself."
+        />
       </div>
     );
   }
@@ -62,12 +69,16 @@ export default async function PipelinesPage({
         title="Pipelines"
         subtitle={`${active.name} · ${formatMoney(totalValue)} open`}
         action={
-          <NewOpportunityButton
-            locationId={params.locationId}
-            pipelineId={active.id}
-            stages={stageOptions}
-            contacts={contactOptions}
-          />
+          <div className="flex items-center gap-2">
+            <StageEditor locationId={params.locationId} pipelineId={active.id} stages={stageOptions} />
+            <NewPipelineButton locationId={params.locationId} />
+            <NewOpportunityButton
+              locationId={params.locationId}
+              pipelineId={active.id}
+              stages={stageOptions}
+              contacts={contactOptions}
+            />
+          </div>
         }
       />
 

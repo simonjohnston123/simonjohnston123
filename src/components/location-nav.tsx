@@ -11,6 +11,8 @@ const items = [
   { key: "tasks", label: "Tasks", icon: "✓" },
   { key: "conversations", label: "Conversations", icon: "✉" },
   { key: "orders", label: "Orders", icon: "🧾" },
+  { key: "payments", label: "Payments", icon: "💳" },
+  { key: "marketing", label: "Marketing", icon: "📣" },
   { key: "automations", label: "Automations", icon: "⚡" },
   { key: "calendar", label: "Calendar", icon: "◷" },
   { key: "website", label: "Website", icon: "❖" },

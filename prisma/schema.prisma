@@ -61,6 +61,8 @@ model Location {
   state      String?
   postalCode String?
   country    String?  @default("Australia")
+  taxId         String? // ABN / VAT / EIN / GST (primary, label depends on country)
+  companyNumber String? // ACN / Company number / NZBN (secondary)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
