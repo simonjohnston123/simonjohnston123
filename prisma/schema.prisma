@@ -79,6 +79,11 @@ model Location {
   connections   Connection[]
   orders        Order[]
   deliveryJobs  DeliveryJob[]
+  storageSettings StorageSettings?
+  storageProducts StorageProduct[]
+  storageBookings StorageBooking[]
+  storageWaitlist StorageWaitlist[]
+  storageRequests StorageServiceRequest[]
 
   @@index([agencyId])
 }
@@ -644,4 +649,127 @@ model DeliveryJob {
   @@index([status])
   @@index([locationId])
   @@index([driverId])
+}
+
+// ---------------------------------------------------------------------------
+// Storage module — Placid Storage's yard (bookings/inventory/PINs) built NATIVELY
+// into the CRM, scoped to a Location. Ported from the standalone storage app so
+// a storage sub-account is managed entirely inside PlacidCRM (no separate login).
+// ---------------------------------------------------------------------------
+
+enum StorageSpotType {
+  CAR
+  CONTAINER
+}
+
+enum StorageTerm {
+  WEEKLY
+  MONTHLY
+}
+
+enum StorageBookingStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  ENDED
+  WAITLISTED
+}
+
+enum StorageRequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model StorageSettings {
+  id                 String   @id @default(cuid())
+  locationId         String   @unique
+  location           Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  siteAddress        String?
+  carCapacity        Int      @default(0)
+  containerCapacity  Int      @default(0)
+  currency           String   @default("AUD")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model StorageProduct {
+  id                String          @id @default(cuid())
+  locationId        String
+  location          Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  spotType          StorageSpotType
+  sizeLabel         String?
+  priceMonthlyCents Int             @default(0)
+  priceWeeklyCents  Int?
+  active            Boolean         @default(true)
+  sortOrder         Int             @default(0)
+  bookings          StorageBooking[]
+
+  @@unique([locationId, code])
+  @@index([locationId])
+}
+
+model StorageBooking {
+  id                String               @id @default(cuid())
+  locationId        String
+  location          Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  ref               String               @unique
+  contactId         String?
+  productId         String?
+  product           StorageProduct?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  spotType          StorageSpotType
+  term              StorageTerm          @default(MONTHLY)
+  startDate         DateTime
+  endDate           DateTime?
+  openEnded         Boolean              @default(true)
+  amountCents       Int                  @default(0)
+  status            StorageBookingStatus @default(ACTIVE)
+  pin               String?
+  spotLabel         String?
+  storedDescription String?
+  vehicleMake       String?
+  vehicleModel      String?
+  vehicleRego       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, status])
+}
+
+model StorageWaitlist {
+  id             String          @id @default(cuid())
+  locationId     String
+  location       Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  spotType       StorageSpotType
+  status         String          @default("waiting")
+  contactId      String?
+  name           String
+  email          String
+  productName    String?
+  requestedStart DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@index([locationId])
+}
+
+model StorageServiceRequest {
+  id          String               @id @default(cuid())
+  locationId  String
+  location    Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  bookingRef  String?
+  contactId   String?
+  name        String
+  email       String
+  phone       String?
+  category    String
+  message     String               @db.Text
+  status      StorageRequestStatus @default(OPEN)
+  createdAt   DateTime             @default(now())
+
+  @@index([locationId])
 }
