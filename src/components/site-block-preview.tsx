@@ -6,6 +6,8 @@
  * real page. Interactive blocks (forms/booking) render as static mockups.
  */
 
+import { SiteRow, type RowBlock } from "@/components/site-element";
+
 const FIELD_LABELS: Record<string, string> = {
   name: "Name",
   email: "Email",
@@ -24,6 +26,8 @@ export function BlockPreview({
   const s = (k: string) => String(block[k] ?? "");
 
   switch (block.type) {
+    case "row":
+      return <SiteRow block={block as RowBlock} primaryColor={primaryColor} />;
     case "hero":
       return (
         <section className="px-6 py-20 text-center text-white" style={{ background: `linear-gradient(135deg, ${primaryColor}, #0f172a)` }}>

@@ -1,4 +1,5 @@
 import { LeadForm, BookingForm } from "@/components/site-forms";
+import { SiteRow, type RowBlock } from "@/components/site-element";
 
 export type Block = { type: string; [k: string]: unknown };
 
@@ -16,6 +17,8 @@ export function SiteBlocks({
       {blocks.map((block, i) => {
         const s = (k: string) => String(block[k] ?? "");
         switch (block.type) {
+          case "row":
+            return <SiteRow key={i} block={block as RowBlock} primaryColor={primaryColor} />;
           case "hero":
             return (
               <section key={i} className="px-6 py-24 text-center text-white" style={{ background: `linear-gradient(135deg, ${primaryColor}, #0f172a)` }}>
