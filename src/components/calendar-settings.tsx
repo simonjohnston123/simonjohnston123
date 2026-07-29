@@ -34,7 +34,7 @@ export function CalendarSettings({
   calendar,
 }: {
   locationId: string;
-  calendar: { id: string; name: string; durationMinutes: number; bookingWindowDays: number; availability: unknown };
+  calendar: { id: string; name: string; description: string | null; price: number | null; active: boolean; durationMinutes: number; bookingWindowDays: number; availability: unknown };
 }) {
   const [state, formAction] = useFormState(updateCalendarAction, { error: "", ok: false } as { error: string; ok?: boolean });
   const [days, setDays] = useState<Record<string, DayState>>(() => initDays((calendar.availability as Availability) ?? {}));
@@ -56,18 +56,31 @@ export function CalendarSettings({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <label className="label">Calendar name</label>
+          <label className="label">Service / calendar name</label>
           <input name="name" defaultValue={calendar.name} className="input" />
+        </div>
+        <div>
+          <label className="label">Price (AUD, optional)</label>
+          <input name="price" type="number" min="0" step="1" defaultValue={calendar.price ?? ""} placeholder="e.g. 120" className="input" />
         </div>
         <div>
           <label className="label">Slot length (min)</label>
           <input name="durationMinutes" type="number" defaultValue={calendar.durationMinutes} className="input" />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label">Description (shown to customers)</label>
+          <input name="description" defaultValue={calendar.description ?? ""} placeholder="What this booking / service includes" className="input" />
         </div>
         <div>
           <label className="label">Book up to (days ahead)</label>
           <input name="bookingWindowDays" type="number" defaultValue={calendar.bookingWindowDays} className="input" />
         </div>
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="active" defaultChecked={calendar.active} />
+        Bookable — customers can book this service online
+      </label>
 
       <div>
         <label className="label">Weekly availability</label>

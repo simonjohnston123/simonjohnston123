@@ -71,18 +71,18 @@ export default async function CalendarPage({ params }: { params: { locationId: s
 
       <section className="mt-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Booking availability</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Services & booking options</h2>
           <NewCalendarForm locationId={params.locationId} />
         </div>
         <p className="mb-3 text-xs text-slate-500">
-          Set when each calendar takes bookings. Add a <span className="font-medium">Booking</span> block to your website and pick the calendar — customers will only see open times.
+          Each calendar is a bookable <span className="font-medium">service</span> — give it a price, description and availability. Add a <span className="font-medium">Calendar</span> widget to your website and pick the service; customers only see open times.
         </p>
         <div className="space-y-4">
           {calendars.map((c) => (
             <CalendarSettings
               key={c.id}
               locationId={params.locationId}
-              calendar={{ id: c.id, name: c.name, durationMinutes: c.durationMinutes, bookingWindowDays: c.bookingWindowDays, availability: c.availability }}
+              calendar={{ id: c.id, name: c.name, description: c.description, price: c.price, active: c.active, durationMinutes: c.durationMinutes, bookingWindowDays: c.bookingWindowDays, availability: c.availability }}
             />
           ))}
         </div>

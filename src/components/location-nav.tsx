@@ -33,9 +33,14 @@ export function LocationNav({
   const base = `/dashboard/l/${locationId}`;
   const horizontal = orientation === "horizontal";
 
-  // The Storage panel only makes sense for the Placid Storage sub-account.
+  // The Storage + CCTV panels only make sense for the Placid Storage sub-account.
   const navItems = /storage/i.test(locationName ?? "")
-    ? [...items.slice(0, 1), { key: "storage", label: "Storage", icon: "▦" }, ...items.slice(1)]
+    ? [
+        ...items.slice(0, 1),
+        { key: "storage", label: "Storage", icon: "▦" },
+        { key: "cctv", label: "CCTV", icon: "📹" },
+        ...items.slice(1),
+      ]
     : items;
 
   return (

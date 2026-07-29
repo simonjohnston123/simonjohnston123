@@ -107,10 +107,16 @@ export async function updateCalendarAction(_prev: unknown, formData: FormData) {
     /* keep empty */
   }
 
+  const priceRaw = String(formData.get("price") ?? "").trim();
+  const price = priceRaw === "" ? null : Math.max(0, Math.round(Number(priceRaw) || 0));
+
   await prisma.calendar.update({
     where: { id: calendarId, locationId },
     data: {
       name: String(formData.get("name") ?? "").trim() || "Calendar",
+      description: String(formData.get("description") ?? "").trim() || null,
+      price,
+      active: formData.get("active") === "on",
       durationMinutes,
       bookingWindowDays,
       availability: availability as any,

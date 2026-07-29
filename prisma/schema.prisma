@@ -343,6 +343,10 @@ model Calendar {
   name       String
   slug       String
   durationMinutes Int      @default(30)
+  // Each calendar doubles as a bookable service / booking option.
+  description String?      @db.Text
+  price       Int?         // whole-dollar price for this service/booking option (optional)
+  active      Boolean      @default(true)
   // Weekly availability: { "1": [["09:00","17:00"]], ... } keyed by weekday 0=Sun..6=Sat.
   availability     Json    @default("{}")
   bookingWindowDays Int    @default(14)
