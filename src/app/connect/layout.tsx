@@ -21,6 +21,8 @@ export default async function ConnectLayout({ children }: { children: React.Reac
           <nav className="ml-auto flex items-center gap-1 text-sm font-medium">
             <Link href="/connect" className="rounded-lg px-3 py-2 hover:bg-white/15">Home</Link>
             <Link href="/connect/directory" className="rounded-lg px-3 py-2 hover:bg-white/15">Business pages</Link>
+            <Link href="/connect/marketplace" className="rounded-lg px-3 py-2 hover:bg-white/15">Marketplace</Link>
+            <Link href="/connect/groups" className="rounded-lg px-3 py-2 hover:bg-white/15">Groups</Link>
             {member ? (
               <>
                 <Link href={`/connect/u/${member.handle}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/15">

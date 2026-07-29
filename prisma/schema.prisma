@@ -802,14 +802,68 @@ model ConnectMember {
   likes        ConnectLike[]
   following    ConnectFriend[]  @relation("follower")
   followers    ConnectFriend[]  @relation("following")
+  listings     ConnectListing[]
+  ownedGroups      ConnectGroup[]       @relation("groupOwner")
+  groupMemberships ConnectGroupMember[]
 
   @@index([handle])
+}
+
+model ConnectGroup {
+  id          String              @id @default(cuid())
+  name        String
+  slug        String              @unique
+  description String?             @db.Text
+  coverColor  String?             // brand tint for the header
+  ownerId     String
+  owner       ConnectMember       @relation("groupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  members     ConnectGroupMember[]
+  posts       ConnectPost[]
+}
+
+model ConnectGroupMember {
+  id        String        @id @default(cuid())
+  groupId   String
+  group     ConnectGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    ConnectMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([groupId, memberId])
+  @@index([memberId])
+}
+
+enum ConnectListingStatus {
+  ACTIVE
+  SOLD
+}
+
+// Placid Connect marketplace listing (Facebook Marketplace-style).
+model ConnectListing {
+  id          String                @id @default(cuid())
+  sellerId    String
+  seller      ConnectMember         @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  title       String
+  description String                @db.Text
+  price       Int                   @default(0) // whole dollars; 0 = Free
+  category    String
+  condition   String?
+  location    String?
+  imageUrl    String?
+  status      ConnectListingStatus  @default(ACTIVE)
+  createdAt   DateTime              @default(now())
+
+  @@index([category])
+  @@index([status, createdAt])
 }
 
 model ConnectPost {
   id         String           @id @default(cuid())
   authorId   String
   author     ConnectMember    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  groupId    String?
+  group      ConnectGroup?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   body       String           @db.Text
   bg         String?          // OssnPostBackground: a colour/gradient token
   imageUrl   String?
@@ -819,6 +873,7 @@ model ConnectPost {
 
   @@index([createdAt])
   @@index([authorId])
+  @@index([groupId])
 }
 
 model ConnectComment {

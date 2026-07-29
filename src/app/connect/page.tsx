@@ -16,6 +16,7 @@ function ago(d: Date) {
 export default async function ConnectFeed() {
   const member = await getCurrentMember();
   const posts = await prisma.connectPost.findMany({
+    where: { groupId: null },
     orderBy: { createdAt: "desc" },
     take: 40,
     include: { author: true, _count: { select: { likes: true, comments: true } }, comments: { include: { author: true }, orderBy: { createdAt: "asc" }, take: 3 } },
@@ -37,7 +38,7 @@ export default async function ConnectFeed() {
               <div><div className="font-semibold text-slate-800">{member.name}</div><div className="text-xs text-slate-500">@{member.handle}</div></div>
             </Link>
           ) : null}
-          {[["🏠", "Home", "/connect"], ["🏢", "Business pages", "/connect/directory"], ["👥", "Friends", "/connect"], ["🛍", "Marketplace", "/connect/directory"], ["💬", "Messages", "/connect"]].map(([i, l, h]) => (
+          {[["🏠", "Home", "/connect"], ["🏢", "Business pages", "/connect/directory"], ["🛍", "Marketplace", "/connect/marketplace"], ["👥", "Groups", "/connect/groups"], ["💬", "Messages", "/connect"]].map(([i, l, h]) => (
             <Link key={l} href={h} className="flex items-center gap-3 rounded-xl px-3 py-2 text-slate-700 hover:bg-white">
               <span>{i}</span>{l}
             </Link>

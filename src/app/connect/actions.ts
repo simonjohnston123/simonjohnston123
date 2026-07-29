@@ -50,9 +50,10 @@ export async function createPostAction(formData: FormData) {
   const member = await requireMember();
   const body = String(formData.get("body") ?? "").trim();
   const bg = String(formData.get("bg") ?? "").trim() || null;
+  const groupId = String(formData.get("groupId") ?? "").trim() || null;
   if (!body) return;
-  await prisma.connectPost.create({ data: { authorId: member.id, body, bg } });
-  revalidatePath("/connect");
+  await prisma.connectPost.create({ data: { authorId: member.id, body, bg, groupId } });
+  revalidatePath(groupId ? `/connect/groups` : "/connect");
 }
 
 export async function toggleLikeAction(formData: FormData) {
