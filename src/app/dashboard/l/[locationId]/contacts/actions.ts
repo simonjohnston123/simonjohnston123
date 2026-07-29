@@ -120,3 +120,109 @@ export async function removeTagAction(formData: FormData) {
   await prisma.contactTag.delete({ where: { contactId_tagId: { contactId, tagId } } });
   revalidatePath(`/dashboard/l/${locationId}/contacts/${contactId}`);
 }
+
+// ---- CSV import -----------------------------------------------------------
+
+/** Minimal RFC-4180-ish CSV parser (handles quotes + embedded commas/newlines). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false;
+      } else cur += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+    else if (c !== "\r") cur += c;
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+}
+
+function findCol(headers: string[], names: string[]): number {
+  return headers.findIndex((h) => names.includes(h.trim().toLowerCase()));
+}
+
+export async function importContactsAction(_prev: unknown, formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+
+  const file = formData.get("file");
+  if (!file || typeof file === "string") return { error: "Choose a CSV file." };
+
+  const text = await (file as File).text();
+  const rows = parseCsv(text);
+  if (rows.length < 2) return { error: "That file has no rows to import." };
+
+  const headers = rows[0].map((h) => h.trim().toLowerCase());
+  const col = {
+    first: findCol(headers, ["first name", "firstname", "first", "given name"]),
+    last: findCol(headers, ["last name", "lastname", "last", "surname"]),
+    name: findCol(headers, ["name", "full name", "contact", "contact name"]),
+    email: findCol(headers, ["email", "e-mail", "email address"]),
+    phone: findCol(headers, ["phone", "mobile", "phone number", "cell", "telephone", "contact number"]),
+    company: findCol(headers, ["company", "business", "organisation", "organization", "company name"]),
+  };
+  if (col.email === -1 && col.phone === -1 && col.name === -1 && col.first === -1) {
+    return { error: "Couldn't find name, email or phone columns. Add a header row with those." };
+  }
+
+  const get = (r: string[], i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
+  let imported = 0;
+  let skipped = 0;
+
+  for (const r of rows.slice(1, 5001)) {
+    let first = get(r, col.first);
+    let last = get(r, col.last);
+    const full = get(r, col.name);
+    if (!first && full) {
+      const parts = full.split(" ");
+      first = parts[0];
+      last = parts.slice(1).join(" ");
+    }
+    const email = get(r, col.email);
+    const phone = get(r, col.phone);
+    const company = get(r, col.company);
+
+    if (!first && !last && !email && !phone) { skipped++; continue; }
+
+    const existing = email
+      ? await prisma.contact.findFirst({ where: { locationId, email } })
+      : phone
+      ? await prisma.contact.findFirst({ where: { locationId, phone } })
+      : null;
+
+    if (existing) {
+      await prisma.contact.update({
+        where: { id: existing.id },
+        data: {
+          firstName: existing.firstName || first || null,
+          lastName: existing.lastName || last || null,
+          phone: existing.phone || phone || null,
+          companyName: existing.companyName || company || null,
+        },
+      });
+    } else {
+      await prisma.contact.create({
+        data: {
+          locationId,
+          firstName: first || null,
+          lastName: last || null,
+          email: email || null,
+          phone: phone || null,
+          companyName: company || null,
+          source: "CSV import",
+        },
+      });
+    }
+    imported++;
+  }
+
+  revalidatePath(`/dashboard/l/${locationId}/contacts`);
+  return { error: "", ok: true, imported, skipped };
+}

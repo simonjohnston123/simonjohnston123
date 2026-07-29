@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewContactButton } from "@/components/contact-form";
+import { ImportContactsButton } from "@/components/import-contacts";
 import { contactName, formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,12 @@ export default async function ContactsPage({
       <PageHeader
         title="Contacts"
         subtitle={`${contacts.length} contact${contacts.length === 1 ? "" : "s"}`}
-        action={<NewContactButton locationId={params.locationId} />}
+        action={
+          <div className="flex items-center gap-2">
+            <ImportContactsButton locationId={params.locationId} />
+            <NewContactButton locationId={params.locationId} />
+          </div>
+        }
       />
 
       <form className="mb-4" action={`${base}/contacts`}>
