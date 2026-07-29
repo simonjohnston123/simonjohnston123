@@ -12,6 +12,8 @@ export type ProviderKey =
   | "TWILIO"
   | "STRIPE"
   | "SQUARE"
+  | "SHOPIFY"
+  | "EBAY"
   | "GOOGLE_CALENDAR";
 
 // "oauth"  → click-to-connect via the provider (needs a Placid dev app + approval)
@@ -24,7 +26,7 @@ export type ProviderDef = {
   key: ProviderKey;
   name: string;
   icon: string;
-  category: "Email" | "Messaging" | "Social" | "Payments" | "Calendar";
+  category: "Email" | "Messaging" | "Social" | "Payments" | "Calendar" | "E-commerce";
   blurb: string;
   connectType: ConnectType;
   // For apikey providers: the fields the client fills in.
@@ -152,6 +154,28 @@ export const PROVIDERS: ProviderDef[] = [
       { key: "accessToken", label: "Access token", placeholder: "EAAA… (production)", secret: true },
       { key: "locationId", label: "Location ID (optional)", placeholder: "L…" },
     ],
+  },
+  {
+    key: "SHOPIFY",
+    name: "Shopify",
+    icon: "🛍️",
+    category: "E-commerce",
+    blurb: "Sync orders, products and customers from your own Shopify store.",
+    connectType: "apikey",
+    ready: true,
+    fields: [
+      { key: "shopDomain", label: "Store domain", placeholder: "your-store.myshopify.com" },
+      { key: "adminToken", label: "Admin API access token", placeholder: "shpat_…", secret: true },
+    ],
+  },
+  {
+    key: "EBAY",
+    name: "eBay",
+    icon: "🏷️",
+    category: "E-commerce",
+    blurb: "Pull eBay orders and listings into the CRM. Connect via secure eBay sign-in.",
+    connectType: "oauth",
+    ready: false,
   },
 ];
 

@@ -51,6 +51,21 @@ async function validate(provider: ProviderKey, creds: Record<string, string>): P
       return "Couldn't reach Square to verify the token. Try again.";
     }
   }
+  if (provider === "SHOPIFY") {
+    const domain = (creds.shopDomain || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
+    const token = creds.adminToken || "";
+    if (!/\.myshopify\.com$/i.test(domain)) return "Store domain should look like your-store.myshopify.com.";
+    if (!token) return "Enter your Shopify Admin API access token.";
+    try {
+      const res = await fetch(`https://${domain}/admin/api/2024-07/shop.json`, {
+        headers: { "X-Shopify-Access-Token": token },
+      });
+      if (!res.ok) return "Shopify rejected those details — check the store domain and Admin API token.";
+    } catch {
+      return "Couldn't reach Shopify to verify the connection. Try again.";
+    }
+    creds.shopDomain = domain; // store normalised
+  }
   return null;
 }
 
@@ -66,6 +81,7 @@ function labelFor(provider: ProviderKey, creds: Record<string, string>): string 
     const t = creds.accessToken || "";
     return `Square · ••••${t.slice(-4)}`;
   }
+  if (provider === "SHOPIFY") return creds.shopDomain ?? null;
   return null;
 }
 

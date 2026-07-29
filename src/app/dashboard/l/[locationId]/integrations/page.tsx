@@ -7,7 +7,7 @@ import { isConfigured } from "@/lib/oauth-providers";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["Email", "Messaging", "Social", "Calendar", "Payments"] as const;
+const CATEGORIES = ["Email", "Messaging", "Social", "Calendar", "Payments", "E-commerce"] as const;
 
 export default async function IntegrationsPage({ params }: { params: { locationId: string } }) {
   const { locationId } = params;
