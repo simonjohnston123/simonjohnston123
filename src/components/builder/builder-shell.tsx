@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormState } from "react-dom";
 import { updatePageAction, publishSiteAction } from "@/app/dashboard/l/[locationId]/website/actions";
 import { BLOCK_DEFS, blockDef } from "@/lib/site-blocks-catalog";
 import { ELEMENT_DEFS, elementDef } from "@/lib/site-elements";
@@ -37,7 +37,23 @@ export function BuilderShell({
   page: { id: string; title: string; slug: string; isHome: boolean; blocks: unknown; seoTitle: string | null; seoDescription: string | null };
 }) {
   const [state, formAction] = useFormState(updatePageAction, { error: "", ok: false } as { error: string; ok?: boolean });
-  const [blocks, setBlocks] = useState<AnyBlock[]>(() => (Array.isArray(page.blocks) ? (page.blocks as AnyBlock[]) : []));
+  // History-backed blocks (undo/redo). setBlocks keeps the same (value|updater)
+  // signature so every mutation helper records an undo step automatically.
+  const [hist, setHist] = useState<{ past: AnyBlock[][]; present: AnyBlock[]; future: AnyBlock[][] }>(() => ({
+    past: [], present: Array.isArray(page.blocks) ? (page.blocks as AnyBlock[]) : [], future: [],
+  }));
+  const blocks = hist.present;
+  const setBlocks = (updater: AnyBlock[] | ((b: AnyBlock[]) => AnyBlock[])) =>
+    setHist((h) => {
+      const next = typeof updater === "function" ? (updater as (b: AnyBlock[]) => AnyBlock[])(h.present) : updater;
+      if (next === h.present) return h;
+      return { past: [...h.past, h.present].slice(-50), present: next, future: [] };
+    });
+  const undo = () => setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, 50) } : h));
+  const redo = () => setHist((h) => (h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h));
+  const canUndo = hist.past.length > 0;
+  const canRedo = hist.future.length > 0;
+  const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
   const [title, setTitle] = useState(page.title);
   const [seoTitle, setSeoTitle] = useState(page.seoTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(page.seoDescription ?? "");
@@ -66,6 +82,31 @@ export function BuilderShell({
   const delCol = (b: number, c: number) => setBlocks((bs) => bs.map((blk, bi) => (bi !== b ? blk : { ...blk, columns: (blk.columns ?? []).filter((_, k) => k !== c) })));
 
   const dropOnCol = (b: number, c: number) => { const d = drag.current; drag.current = null; setOver(null); if (d?.kind === "el" && d.type) addEl(b, c, d.type); };
+
+  // Autosave — 2s debounce after any change to blocks/title/SEO.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    setSaveState("saving");
+    const t = setTimeout(async () => {
+      const fd = new FormData();
+      fd.set("locationId", locationId); fd.set("pageId", page.id);
+      fd.set("blocks", JSON.stringify(blocks)); fd.set("title", title);
+      fd.set("seoTitle", seoTitle); fd.set("seoDescription", seoDescription);
+      try { await updatePageAction({ error: "", ok: false }, fd); } catch { /* keep last state */ }
+      setSaveState("saved");
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [blocks, title, seoTitle, seoDescription, locationId, page.id]);
+
+  // Undo / redo keyboard shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // ---- derived: selection kind/name/chain ----
   const selBlock = sel ? blocks[sel.b] : null;
@@ -115,9 +156,12 @@ export function BuilderShell({
             </button>
           ))}
         </div>
-        <div className="pb-save"><span className="pb-dot" style={{ background: state?.ok ? "var(--sel)" : "var(--text-lo)" }} /> {state?.ok ? "Saved" : "Unsaved"}</div>
+        <div style={{ display: "flex", gap: 2 }}>
+          <button type="button" className="pb-icon-btn" title="Undo (⌘Z)" disabled={!canUndo} onClick={undo}>↺</button>
+          <button type="button" className="pb-icon-btn" title="Redo (⇧⌘Z)" disabled={!canRedo} onClick={redo}>↻</button>
+        </div>
+        <div className="pb-save"><span className="pb-dot" style={{ background: saveState === "saving" ? "#F2B441" : "var(--sel)" }} /> {saveState === "saving" ? "Saving…" : "Saved"}</div>
         <Link href={`/dashboard/l/${locationId}/website`} className="pb-ghost">Exit</Link>
-        <SaveBtn />
         <button type="submit" formAction={publishSiteAction} className="pb-primary" title={published ? "Re-publish" : "Publish live"}>Publish</button>
       </header>
 
@@ -289,7 +333,7 @@ export function BuilderShell({
               </div>
             </div>
           ) : (
-            <p className="pb-hint">Click any element on the canvas to edit it here. Add rows &amp; elements from the left, then <b>Save</b> and <b>Publish</b>.</p>
+            <p className="pb-hint">Click any element on the canvas to edit it here. Add rows &amp; elements from the left — changes <b>auto-save</b>; hit <b>Publish</b> to go live.</p>
           )}
         </div>
       </aside>
@@ -312,9 +356,4 @@ export function BuilderShell({
       </footer>
     </form>
   );
-}
-
-function SaveBtn() {
-  const { pending } = useFormStatus();
-  return <button type="submit" className="pb-ghost" disabled={pending}>{pending ? "Saving…" : "Save"}</button>;
 }
