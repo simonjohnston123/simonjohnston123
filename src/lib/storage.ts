@@ -1,10 +1,12 @@
 import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
+import type { StorageBookingStatus, StorageRequestStatus } from "@prisma/client";
 
 // Native storage module — the Placid Storage yard, inside the CRM.
 
-const OCCUPYING: string[] = ["ACTIVE", "SUSPENDED", "PENDING_PAYMENT"];
+const OCCUPYING: StorageBookingStatus[] = ["ACTIVE", "SUSPENDED", "PENDING_PAYMENT"];
+const OCCUPYING_STR: string[] = OCCUPYING;
 
 export function storageRef(): string {
   return "PSS-" + crypto.randomBytes(4).toString("hex").toUpperCase().slice(0, 6);
@@ -14,13 +16,49 @@ export function storagePin(): string {
   return String(crypto.randomInt(1000, 10000)); // 4-digit
 }
 
+export const SPOT_PREFIX: Record<"CAR" | "CONTAINER", string> = { CAR: "Bay", CONTAINER: "Unit" };
+
+/** Next free spot label for a type (e.g. "Bay 3"), based on active bookings. */
+export async function nextSpotLabel(locationId: string, spotType: "CAR" | "CONTAINER"): Promise<string> {
+  const settings = await prisma.storageSettings.findUnique({ where: { locationId } });
+  const cap = spotType === "CAR" ? settings?.carCapacity ?? 0 : settings?.containerCapacity ?? 0;
+  const taken = new Set(
+    (
+      await prisma.storageBooking.findMany({
+        where: { locationId, spotType, status: { in: OCCUPYING }, spotLabel: { not: null } },
+        select: { spotLabel: true },
+      })
+    ).map((b) => b.spotLabel),
+  );
+  const prefix = SPOT_PREFIX[spotType];
+  for (let n = 1; n <= Math.max(cap, 1); n++) {
+    if (!taken.has(`${prefix} ${n}`)) return `${prefix} ${n}`;
+  }
+  return `${prefix} ${cap + 1}`;
+}
+
+/** A grid of every spot for a type with the active booking (if any) on it. */
+export function buildGrid(
+  spotType: "CAR" | "CONTAINER",
+  capacity: number,
+  bookings: { spotType: string; status: string; spotLabel: string | null; ref: string; contactId: string | null }[],
+): { label: string; booking: { ref: string; contactId: string | null } | null }[] {
+  const prefix = SPOT_PREFIX[spotType];
+  const active = bookings.filter((b) => b.spotType === spotType && OCCUPYING_STR.includes(b.status));
+  return Array.from({ length: capacity }, (_, i) => {
+    const label = `${prefix} ${i + 1}`;
+    const b = active.find((x) => x.spotLabel === label);
+    return { label, booking: b ? { ref: b.ref, contactId: b.contactId } : null };
+  });
+}
+
 export async function getYard(locationId: string) {
   const [settings, products, bookings, waitlist, requests] = await Promise.all([
     prisma.storageSettings.findUnique({ where: { locationId } }),
     prisma.storageProduct.findMany({ where: { locationId }, orderBy: { sortOrder: "asc" } }),
     prisma.storageBooking.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 300, include: { product: true } }),
     prisma.storageWaitlist.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 100 }),
-    prisma.storageServiceRequest.findMany({ where: { locationId, status: { in: ["OPEN", "IN_PROGRESS"] } }, orderBy: { createdAt: "desc" }, take: 100 }),
+    prisma.storageServiceRequest.findMany({ where: { locationId, status: { in: ["OPEN", "IN_PROGRESS"] as StorageRequestStatus[] } }, orderBy: { createdAt: "desc" }, take: 100 }),
   ]);
 
   const occ = (type: "CAR" | "CONTAINER") =>

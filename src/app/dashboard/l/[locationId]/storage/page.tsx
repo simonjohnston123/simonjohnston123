@@ -1,9 +1,17 @@
+import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
-import { getYard } from "@/lib/storage";
+import { getYard, buildGrid } from "@/lib/storage";
 import { StorageNewBooking } from "@/components/storage-new-booking";
-import { seedStorageAction, setStorageBookingStatusAction, setStorageRequestStatusAction } from "./actions";
+import {
+  seedStorageAction,
+  setStorageBookingStatusAction,
+  setStorageRequestStatusAction,
+  updateStorageSettingsAction,
+  saveStorageProductAction,
+  deleteStorageProductAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +55,32 @@ export default async function StoragePage({ params }: { params: { locationId: st
   const nameById = new Map(contacts.map((c) => [c.id, [c.firstName, c.lastName].filter(Boolean).join(" ") || "—"]));
 
   const products = yard.products.map((p) => ({ id: p.id, name: p.name, spotType: p.spotType }));
+  const base = `/dashboard/l/${locationId}`;
+  const carGrid = buildGrid("CAR", yard.occupancy.car.capacity, yard.bookings);
+  const containerGrid = buildGrid("CONTAINER", yard.occupancy.container.capacity, yard.bookings);
+
+  const Grid = ({ title, cells }: { title: string; cells: { label: string; booking: { ref: string } | null }[] }) => (
+    <div className="card p-5">
+      <h3 className="mb-3 text-sm font-semibold text-slate-800">{title}</h3>
+      {cells.length === 0 ? (
+        <p className="text-sm text-slate-400">Set a capacity in Yard settings to see the grid.</p>
+      ) : (
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+          {cells.map((c) => (
+            <div
+              key={c.label}
+              title={c.booking ? `${c.label} · ${c.booking.ref}` : `${c.label} · free`}
+              className={`grid aspect-square place-items-center rounded-lg border text-center text-[11px] font-medium ${
+                c.booking ? "border-transparent bg-brand-gradient text-white shadow-sm" : "border-dashed border-slate-300 text-slate-400"
+              }`}
+            >
+              {c.label.replace(/\D+/g, "")}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -62,6 +96,12 @@ export default async function StoragePage({ params }: { params: { locationId: st
         <Occ label="Units / lockers" o={yard.occupancy.container} />
         <div className="card p-5"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Waitlist</div><div className="mt-1 text-3xl font-bold text-slate-900">{yard.waitlist.length}</div></div>
         <div className="card p-5"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Open requests</div><div className="mt-1 text-3xl font-bold text-slate-900">{yard.requests.length}</div></div>
+      </div>
+
+      {/* Occupancy grid — which bays/units are booked */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <Grid title={`Car bays (${yard.occupancy.car.occupied}/${yard.occupancy.car.capacity})`} cells={carGrid} />
+        <Grid title={`Units / lockers (${yard.occupancy.container.occupied}/${yard.occupancy.container.capacity})`} cells={containerGrid} />
       </div>
 
       {/* Bookings */}
@@ -80,8 +120,11 @@ export default async function StoragePage({ params }: { params: { locationId: st
                 {yard.bookings.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50">
                     <td className="px-5 py-2 font-mono text-xs text-slate-500">{b.ref}</td>
-                    <td className="px-2 py-2 text-slate-800">{b.contactId ? nameById.get(b.contactId) : "—"}{b.vehicleRego ? <span className="block text-xs text-slate-400">{[b.vehicleMake, b.vehicleModel, b.vehicleRego].filter(Boolean).join(" ")}</span> : null}</td>
-                    <td className="px-2 py-2 text-slate-600">{b.product?.name ?? b.spotType}</td>
+                    <td className="px-2 py-2 text-slate-800">
+                      {b.contactId ? <Link href={`${base}/contacts/${b.contactId}`} className="text-brand-700 hover:underline">{nameById.get(b.contactId)}</Link> : "—"}
+                      {b.vehicleRego ? <span className="block text-xs text-slate-400">{[b.vehicleMake, b.vehicleModel, b.vehicleRego].filter(Boolean).join(" ")}</span> : null}
+                    </td>
+                    <td className="px-2 py-2 text-slate-600">{b.spotLabel ? <span className="font-medium">{b.spotLabel}</span> : b.product?.name ?? b.spotType}</td>
                     <td className="px-2 py-2 text-xs text-slate-500">{b.term.toLowerCase()}{b.openEnded ? " · open" : b.endDate ? ` · to ${fmt(b.endDate)}` : ""}</td>
                     <td className="px-2 py-2 font-mono text-slate-700">{b.pin ?? "—"}</td>
                     <td className="px-2 py-2 text-slate-700">{money(b.amountCents)}</td>
@@ -153,6 +196,62 @@ export default async function StoragePage({ params }: { params: { locationId: st
           ) : null}
         </section>
       </div>
+
+      {/* Editable yard settings */}
+      <details className="card mt-6 p-5">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Yard settings — capacity &amp; pricing</summary>
+
+        <form action={updateStorageSettingsAction} className="mt-4 grid gap-3 sm:grid-cols-3">
+          <input type="hidden" name="locationId" value={locationId} />
+          <div>
+            <label className="label">Car bays (capacity)</label>
+            <input name="carCapacity" type="number" min="0" defaultValue={yard.settings.carCapacity} className="input" />
+          </div>
+          <div>
+            <label className="label">Units / lockers (capacity)</label>
+            <input name="containerCapacity" type="number" min="0" defaultValue={yard.settings.containerCapacity} className="input" />
+          </div>
+          <div className="flex items-end">
+            <button className="btn-primary w-full">Save capacity</button>
+          </div>
+          <div className="sm:col-span-3">
+            <label className="label">Yard address</label>
+            <input name="siteAddress" defaultValue={yard.settings.siteAddress ?? ""} className="input" />
+          </div>
+        </form>
+
+        <h4 className="mb-2 mt-6 text-sm font-semibold text-slate-700">Products &amp; prices</h4>
+        <div className="space-y-2">
+          {yard.products.map((p) => (
+            <form key={p.id} action={saveStorageProductAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-2">
+              <input type="hidden" name="locationId" value={locationId} />
+              <input type="hidden" name="productId" value={p.id} />
+              <input name="name" defaultValue={p.name} className="input h-9 min-w-[180px] flex-1 py-1 text-sm" />
+              <select name="spotType" defaultValue={p.spotType} className="input h-9 w-28 py-1 text-sm">
+                <option value="CAR">Car bay</option>
+                <option value="CONTAINER">Unit</option>
+              </select>
+              <input name="monthly" type="number" step="0.01" defaultValue={(p.priceMonthlyCents / 100).toFixed(2)} className="input h-9 w-24 py-1 text-sm" placeholder="$/mo" />
+              <input name="weekly" type="number" step="0.01" defaultValue={p.priceWeeklyCents ? (p.priceWeeklyCents / 100).toFixed(2) : ""} className="input h-9 w-24 py-1 text-sm" placeholder="$/wk" />
+              <button className="btn-secondary text-sm">Save</button>
+              <button formAction={deleteStorageProductAction} className="btn-ghost text-sm text-slate-400 hover:text-red-600">Delete</button>
+            </form>
+          ))}
+        </div>
+
+        <h4 className="mb-2 mt-6 text-sm font-semibold text-slate-700">Add a product</h4>
+        <form action={saveStorageProductAction} className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="locationId" value={locationId} />
+          <input name="name" placeholder="Product name" className="input h-9 min-w-[180px] flex-1 py-1 text-sm" />
+          <select name="spotType" defaultValue="CONTAINER" className="input h-9 w-28 py-1 text-sm">
+            <option value="CAR">Car bay</option>
+            <option value="CONTAINER">Unit</option>
+          </select>
+          <input name="monthly" type="number" step="0.01" className="input h-9 w-24 py-1 text-sm" placeholder="$/mo" />
+          <input name="weekly" type="number" step="0.01" className="input h-9 w-24 py-1 text-sm" placeholder="$/wk" />
+          <button className="btn-primary text-sm">+ Add</button>
+        </form>
+      </details>
     </div>
   );
 }
