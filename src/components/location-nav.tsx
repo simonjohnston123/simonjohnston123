@@ -46,12 +46,12 @@ export function LocationNav({
             key={item.key || "home"}
             href={href}
             className={cn(
-              "flex items-center gap-2 rounded-lg text-sm font-medium transition-colors",
-              horizontal ? "shrink-0 whitespace-nowrap px-3 py-2" : "gap-3 px-3 py-2",
-              active ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-100"
+              "nav-link",
+              horizontal ? "shrink-0 whitespace-nowrap" : "",
+              active ? "nav-link-active" : "nav-link-idle"
             )}
           >
-            <span className="text-center opacity-80">{item.icon}</span>
+            <span className={cn("grid h-5 w-5 place-items-center text-[13px]", active ? "opacity-100" : "opacity-70")}>{item.icon}</span>
             {item.label}
           </Link>
         );
