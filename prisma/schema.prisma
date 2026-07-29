@@ -86,6 +86,9 @@ model Location {
   storageBookings StorageBooking[]
   storageWaitlist StorageWaitlist[]
   storageRequests StorageServiceRequest[]
+  homesteadRooms    HomesteadRoom[]
+  homesteadBookings HomesteadBooking[]
+  homesteadSettings HomesteadSettings?
 
   @@index([agencyId])
 }
@@ -908,4 +911,59 @@ model ConnectFriend {
   createdAt   DateTime      @default(now())
 
   @@unique([followerId, followingId])
+}
+
+// ===== Placid Homestead — short-term accommodation (rooms, weekly rental) =====
+enum HomesteadBookingStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+model HomesteadRoom {
+  id          String            @id @default(cuid())
+  locationId  String
+  location    Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name        String
+  description String?           @db.Text
+  weeklyPrice Int               @default(0) // AUD/week
+  imageUrl    String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  bookings    HomesteadBooking[]
+
+  @@index([locationId])
+}
+
+model HomesteadBooking {
+  id               String                 @id @default(cuid())
+  locationId       String
+  location         Location               @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  roomId           String?
+  room             HomesteadRoom?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  guestName        String
+  guestEmail       String
+  guestPhone       String?
+  startDate        DateTime
+  weeklyPrice      Int                    @default(0)
+  status           HomesteadBookingStatus @default(PENDING)
+  contractAccepted Boolean                @default(false)
+  signature        String?
+  stripeSubId      String?
+  createdAt        DateTime               @default(now())
+
+  @@index([locationId])
+  @@index([locationId, status])
+}
+
+model HomesteadSettings {
+  id               String   @id @default(cuid())
+  locationId       String   @unique
+  location         Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  houseRules       String?  @db.Text
+  welcomeInfo      String?  @db.Text // arrival: entry, parking, checkout
+  contractText     String?  @db.Text
+  bookingWindowDays Int     @default(21) // can book up to N days ahead
+  depositWeeks     Int      @default(1)  // weeks charged upfront
 }
