@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 import { setAgencyStatusAction, setAgencyPlanAction } from "../../actions";
+import { AdminAddBusiness } from "@/components/admin-add-business";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,10 @@ export default async function AdminAgencyDetail({ params }: { params: { agencyId
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Sub-accounts ({agency.locations.length})</h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Sub-accounts ({agency.locations.length})</h2>
+            <AdminAddBusiness agencyId={agency.id} />
+          </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             {agency.locations.length === 0 ? (
               <p className="p-4 text-sm text-slate-400">No sub-accounts.</p>

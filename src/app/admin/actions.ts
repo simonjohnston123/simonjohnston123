@@ -3,6 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/auth";
+import { createBusiness } from "@/lib/provision";
+
+export async function adminCreateBusinessAction(_prev: unknown, formData: FormData) {
+  await requireSuperAdmin();
+  const agencyId = String(formData.get("agencyId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Enter a business name." };
+
+  const owner = await prisma.user.findFirst({ where: { agencyId }, orderBy: { createdAt: "asc" } });
+  if (!owner) return { error: "That business has no owner user." };
+
+  await createBusiness({ agencyId, ownerUserId: owner.id, name });
+  revalidatePath(`/admin/businesses/${agencyId}`);
+  return { error: "", ok: true };
+}
 
 export async function setAgencyStatusAction(formData: FormData) {
   await requireSuperAdmin();
