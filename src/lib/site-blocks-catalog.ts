@@ -178,7 +178,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   },
   {
     type: "booking",
-    label: "Booking",
+    label: "Calendar",
     icon: "◷",
     category: "Convert",
     fields: [
@@ -189,6 +189,35 @@ export const BLOCK_DEFS: BlockDef[] = [
       { k: "thankYou", label: "Thank-you message", kind: "text" },
     ],
     default: { heading: "Book a time", body: "Request a booking and we'll confirm.", calendarId: "", submitLabel: "Request booking", thankYou: "Thanks — we'll confirm your booking soon." },
+  },
+  {
+    type: "products",
+    label: "Products",
+    icon: "🛍",
+    category: "Convert",
+    fields: [
+      { k: "heading", label: "Heading", kind: "text" },
+      {
+        k: "items",
+        label: "Products",
+        kind: "items",
+        itemFields: [
+          { k: "name", label: "Name", kind: "text" },
+          { k: "price", label: "Price (e.g. $49)", kind: "text" },
+          { k: "imageUrl", label: "Image URL", kind: "text" },
+          { k: "description", label: "Description", kind: "textarea" },
+          { k: "buttonLabel", label: "Button label", kind: "text" },
+          { k: "buttonHref", label: "Button link", kind: "text" },
+        ],
+      },
+    ],
+    default: {
+      heading: "Our products",
+      items: [
+        { name: "Product name", price: "$49", imageUrl: "", description: "A short description of this product.", buttonLabel: "Buy now", buttonHref: "#" },
+        { name: "Product name", price: "$79", imageUrl: "", description: "A short description of this product.", buttonLabel: "Buy now", buttonHref: "#" },
+      ],
+    },
   },
 ];
 

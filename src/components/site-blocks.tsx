@@ -146,6 +146,34 @@ export function SiteBlocks({
               </section>
             );
           }
+          case "products": {
+            const items = Array.isArray(block.items) ? (block.items as Record<string, unknown>[]) : [];
+            return (
+              <section key={i} className="mx-auto max-w-5xl px-6 py-16">
+                {block.heading ? <h2 className="mb-8 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {items.map((p, j) => (
+                    <div key={j} className="flex flex-col overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
+                      {p.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={String(p.imageUrl)} alt={String(p.name ?? "")} className="h-44 w-full object-cover" />
+                      ) : (
+                        <div className="grid h-44 w-full place-items-center bg-slate-100 text-sm text-slate-400">No image</div>
+                      )}
+                      <div className="flex flex-1 flex-col p-5">
+                        <h3 className="font-semibold text-slate-900">{String(p.name ?? "")}</h3>
+                        {p.price ? <p className="mt-1 text-xl font-bold" style={{ color: primaryColor }}>{String(p.price)}</p> : null}
+                        {p.description ? <p className="mt-2 flex-1 text-sm text-slate-600">{String(p.description)}</p> : null}
+                        {p.buttonLabel ? (
+                          <a href={String(p.buttonHref || "#")} className="mt-4 rounded-lg px-4 py-2 text-center text-sm font-semibold text-white" style={{ background: primaryColor }}>{String(p.buttonLabel)}</a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          }
           case "booking":
             return (
               <section key={i} id="booking" className="bg-slate-50 px-6 py-16">

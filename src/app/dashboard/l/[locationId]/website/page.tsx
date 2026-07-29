@@ -2,9 +2,7 @@ import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
-import { SiteSettingsForm } from "@/components/site-editors";
-import { BlockEditor } from "@/components/block-editor";
-import { createPageAction, deletePageAction } from "./actions";
+import { WebsiteWorkspace } from "@/components/website-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -35,14 +33,12 @@ export default async function WebsitePage({ params }: { params: { locationId: st
   return (
     <div>
       <PageHeader
-        title="Website"
-        subtitle={`Public marketing site for ${location.name}`}
+        title="Website builder"
+        subtitle={`Drag-and-drop marketing site for ${location.name}`}
         action={
           <div className="flex items-center gap-2">
             {site.published ? <Badge color="green">Published</Badge> : <Badge color="amber">Draft</Badge>}
-            <Link href={publicUrl} target="_blank" className="btn-secondary text-sm">
-              Preview ↗
-            </Link>
+            <Link href={publicUrl} target="_blank" className="btn-secondary text-sm">Open site ↗</Link>
           </div>
         }
       />
@@ -52,37 +48,13 @@ export default async function WebsitePage({ params }: { params: { locationId: st
         {site.customDomain ? <> · custom domain <code className="font-mono">{site.customDomain}</code></> : null}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <div>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Site settings</h2>
-          <SiteSettingsForm locationId={params.locationId} site={site} />
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Pages</h2>
-            <form action={createPageAction} className="flex gap-2">
-              <input type="hidden" name="locationId" value={params.locationId} />
-              <input name="title" placeholder="New page title" className="input h-9 py-1 text-sm" />
-              <button className="btn-secondary text-sm">Add page</button>
-            </form>
-          </div>
-          <div className="space-y-4">
-            {site.pages.map((page) => (
-              <div key={page.id}>
-                <BlockEditor locationId={params.locationId} page={page} calendars={calendars} />
-                {!page.isHome ? (
-                  <form action={deletePageAction} className="mt-1 text-right">
-                    <input type="hidden" name="locationId" value={params.locationId} />
-                    <input type="hidden" name="pageId" value={page.id} />
-                    <button className="text-xs text-slate-400 hover:text-red-600">Delete page</button>
-                  </form>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <WebsiteWorkspace
+        locationId={params.locationId}
+        siteSlug={location.slug}
+        site={site}
+        pages={site.pages}
+        calendars={calendars}
+      />
     </div>
   );
 }
