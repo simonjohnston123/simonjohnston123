@@ -5,6 +5,26 @@ import { fireTrigger } from "@/lib/automations";
 
 type Result = { ok?: boolean; error: string };
 
+/** Drop a website enquiry/booking into the sub-account's Conversations inbox. */
+async function logToInbox(locationId: string, contactId: string, body: string) {
+  let convo = await prisma.conversation.findFirst({
+    where: { locationId, contactId, channel: "WEBCHAT" },
+    orderBy: { lastMessageAt: "desc" },
+  });
+  if (!convo) {
+    convo = await prisma.conversation.create({
+      data: { locationId, contactId, channel: "WEBCHAT", subject: "Website enquiry" },
+    });
+  }
+  await prisma.message.create({
+    data: { conversationId: convo.id, direction: "INBOUND", channel: "WEBCHAT", body },
+  });
+  await prisma.conversation.update({
+    where: { id: convo.id },
+    data: { lastMessageAt: new Date(), unread: true },
+  });
+}
+
 /** Match or create a contact for this location by email/phone. */
 async function upsertLeadContact(
   locationId: string,
@@ -62,6 +82,18 @@ export async function submitLeadAction(_prev: unknown, formData: FormData): Prom
     note: message ? `Website enquiry: ${message}` : "Website enquiry",
   });
 
+  const summary = [
+    `📝 Website enquiry`,
+    name ? `From: ${name}` : null,
+    email ? `Email: ${email}` : null,
+    phone ? `Phone: ${phone}` : null,
+    company ? `Company: ${company}` : null,
+    message ? `\n${message}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  await logToInbox(location.id, contact.id, summary);
+
   await fireTrigger(location.id, "FORM_SUBMITTED", { contactId: contact.id, triggerLabel: "Website form" });
   return { ok: true, error: "" };
 }
@@ -108,6 +140,12 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
       notes: "Requested via website booking block",
     },
   });
+
+  await logToInbox(
+    location.id,
+    contact.id,
+    `📅 Booking request\n${name || email || phone}\nPreferred time: ${startAt.toLocaleString("en-AU")}`,
+  );
 
   await fireTrigger(location.id, "FORM_SUBMITTED", { contactId: contact.id, triggerLabel: "Website booking" });
   return { ok: true, error: "" };
