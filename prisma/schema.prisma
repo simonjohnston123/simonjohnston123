@@ -68,6 +68,7 @@ model Location {
   site          Site?
   workflows     Workflow[]
   connections   Connection[]
+  orders        Order[]
 
   @@index([agencyId])
 }
@@ -126,6 +127,7 @@ model Contact {
   conversations Conversation[]
   appointments  Appointment[]
   tasks         Task[]
+  orders        Order[]
 
   @@index([locationId])
   @@index([locationId, email])
@@ -527,4 +529,47 @@ model Connection {
 
   @@unique([locationId, provider])
   @@index([locationId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders — product orders and delivery jobs for a business.
+// ---------------------------------------------------------------------------
+
+enum OrderType {
+  PRODUCT
+  DELIVERY
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  locationId      String
+  location        Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  contactId       String?
+  contact         Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  number          Int         @default(0)
+  type            OrderType   @default(PRODUCT)
+  status          OrderStatus @default(NEW)
+  items           Json        @default("[]") // [{ name, qty, price }]
+  total           Float       @default(0)
+  customerName    String?
+  customerPhone   String?
+  customerEmail   String?
+  deliveryAddress String?
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, status])
+  @@index([contactId])
 }

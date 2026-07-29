@@ -27,21 +27,36 @@ export default async function LocationLayout({
   });
 
   return (
-    <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6 sm:px-6">
-      <aside className="hidden w-60 shrink-0 md:block">
-        <Link href="/dashboard" className="mb-3 inline-block text-xs font-medium text-slate-400 hover:text-slate-600">
-          ← All businesses
-        </Link>
-        {locations.length > 1 ? (
-          <LocationSwitcher current={location.id} locations={locations} />
-        ) : (
-          <div className="mb-4 truncate rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
-            {location.name}
-          </div>
-        )}
-        <LocationNav locationId={location.id} locationName={location.name} />
-      </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      {/* Mobile nav — the sidebar is hidden on phones, so give a scrollable tab bar. */}
+      <div className="mb-4 md:hidden">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <Link href="/dashboard" className="text-xs font-medium text-slate-400 hover:text-slate-600">← All businesses</Link>
+          {locations.length > 1 ? (
+            <LocationSwitcher current={location.id} locations={locations} />
+          ) : (
+            <span className="truncate text-sm font-semibold text-slate-800">{location.name}</span>
+          )}
+        </div>
+        <LocationNav locationId={location.id} locationName={location.name} orientation="horizontal" />
+      </div>
+
+      <div className="flex gap-6">
+        <aside className="hidden w-60 shrink-0 md:block">
+          <Link href="/dashboard" className="mb-3 inline-block text-xs font-medium text-slate-400 hover:text-slate-600">
+            ← All businesses
+          </Link>
+          {locations.length > 1 ? (
+            <LocationSwitcher current={location.id} locations={locations} />
+          ) : (
+            <div className="mb-4 truncate rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm">
+              {location.name}
+            </div>
+          )}
+          <LocationNav locationId={location.id} locationName={location.name} />
+        </aside>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }
