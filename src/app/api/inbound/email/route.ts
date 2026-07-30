@@ -64,28 +64,53 @@ function stripHtml(html: unknown): string {
 
 const INBOUND_DOMAIN = process.env.INBOUND_DOMAIN || "inbox.placid.group";
 
+type Parsed = { from: string; fromRaw: unknown; to: string; subject: string; text: string };
+
 export async function POST(req: NextRequest) {
-  const raw = await req.text();
+  const ct = (req.headers.get("content-type") || "").toLowerCase();
+  let parsed: Parsed;
 
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (secret && !verifySignature(secret, req, raw)) {
-    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  if (ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded")) {
+    // SendGrid Inbound Parse (or any form-post provider). Secure with a shared
+    // token in the webhook URL: /api/inbound/email?token=INBOUND_TOKEN
+    const token = process.env.INBOUND_TOKEN;
+    if (token && req.nextUrl.searchParams.get("token") !== token) {
+      return NextResponse.json({ error: "invalid token" }, { status: 401 });
+    }
+    const form = await req.formData();
+    const toRaw = String(form.get("to") ?? "").split(",")[0];
+    parsed = {
+      from: addressOf(form.get("from")),
+      fromRaw: form.get("from"),
+      to: addressOf(toRaw),
+      subject: String(form.get("subject") ?? "").trim(),
+      text: (String(form.get("text") ?? "").trim() || stripHtml(form.get("html"))).slice(0, 20000),
+    };
+  } else {
+    // Resend inbound (Svix-signed JSON).
+    const raw = await req.text();
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    if (secret && !verifySignature(secret, req, raw)) {
+      return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+    }
+    let evt: Record<string, unknown>;
+    try {
+      evt = JSON.parse(raw);
+    } catch {
+      return NextResponse.json({ error: "invalid json" }, { status: 400 });
+    }
+    const data = (evt.data ?? evt) as Record<string, unknown>;
+    const toRaw = Array.isArray(data.to) ? data.to[0] : data.to;
+    parsed = {
+      from: addressOf(data.from),
+      fromRaw: data.from,
+      to: addressOf(toRaw),
+      subject: String(data.subject ?? "").trim(),
+      text: (String(data.text ?? "").trim() || stripHtml(data.html)).slice(0, 20000),
+    };
   }
 
-  let evt: Record<string, unknown>;
-  try {
-    evt = JSON.parse(raw);
-  } catch {
-    return NextResponse.json({ error: "invalid json" }, { status: 400 });
-  }
-
-  const data = (evt.data ?? evt) as Record<string, unknown>;
-  const from = addressOf(data.from);
-  const toRaw = Array.isArray(data.to) ? data.to[0] : data.to;
-  const to = addressOf(toRaw);
-  const subject = String(data.subject ?? "").trim();
-  const text = (String(data.text ?? "").trim() || stripHtml(data.html)).slice(0, 20000);
-
+  const { from, to, subject, text, fromRaw } = parsed;
   if (!from) return NextResponse.json({ ok: true, skipped: "no sender" });
 
   // Route to a sub-account. Convention: the local-part of the recipient matches
@@ -108,7 +133,7 @@ export async function POST(req: NextRequest) {
     where: { locationId: location.id, email: from },
   });
   if (!contact) {
-    const nm = nameOf(data.from);
+    const nm = nameOf(fromRaw);
     const parts = (nm ?? "").split(" ");
     contact = await prisma.contact.create({
       data: {
