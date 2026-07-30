@@ -5,15 +5,15 @@ export const metadata = { title: "Privacy Policy" };
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-14 text-slate-800">
-      <Link href="/" className="text-sm font-medium text-brand-600 hover:underline">← PlacidCRM</Link>
+      <Link href="/" className="text-sm font-medium text-brand-600 hover:underline">← Placid Connect</Link>
       <h1 className="mt-4 text-3xl font-bold text-slate-900">Privacy Policy</h1>
       <p className="mt-2 text-sm text-slate-500">Last updated: 29 July 2026</p>
 
       <div className="prose mt-8 space-y-5 text-sm leading-relaxed">
         <p>
-          PlacidCRM is operated by <strong>Placid Group Australia Pty Ltd</strong> (ABN 22 695 488 674) (&ldquo;Placid&rdquo;,
+          Placid Connect is operated by <strong>Placid Group Australia Pty Ltd</strong> (ABN 22 695 488 674) (&ldquo;Placid&rdquo;,
           &ldquo;we&rdquo;, &ldquo;us&rdquo;). This policy explains what we collect, how we use it, and your rights. It
-          applies to placidcrm.com and the PlacidCRM platform.
+          applies to placidcrm.com and the Placid Connect platform.
         </p>
 
         <h2 className="text-lg font-semibold text-slate-900">Information we collect</h2>

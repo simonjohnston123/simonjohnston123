@@ -38,7 +38,7 @@ export function SiteChrome({
       {children}
       <footer className="border-t border-slate-100 px-6 py-8 text-center text-sm text-slate-400">
         © {new Date().getFullYear()} {logoText}
-        {tagline ? ` · ${tagline}` : ""} · Powered by PlacidCRM
+        {tagline ? ` · ${tagline}` : ""} · Powered by Placid Connect
       </footer>
     </div>
   );

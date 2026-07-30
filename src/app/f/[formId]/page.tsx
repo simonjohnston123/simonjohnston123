@@ -33,7 +33,7 @@ export default async function PublicFormPage({ params }: { params: { formId: str
             />
           </div>
         </div>
-        <p className="mt-4 text-center text-xs text-slate-400">Powered by PlacidCRM</p>
+        <p className="mt-4 text-center text-xs text-slate-400">Powered by Placid Connect</p>
       </div>
     </main>
   );

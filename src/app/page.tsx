@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { Logo } from "@/components/logo";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +54,7 @@ export default async function HomePage() {
       {/* Nav */}
       <header className="sticky top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient shadow-glow">◆</span>
-            Placid<span className="text-gradient">CRM</span>
-          </div>
+          <Logo dark markClass="h-8 w-8" textClass="text-lg" />
           <nav className="flex items-center gap-2">
             {user ? (
               <Link href="/dashboard" className="btn-primary">Open dashboard</Link>
@@ -81,7 +79,7 @@ export default async function HomePage() {
           <span className="text-gradient">Get found by new customers.</span>
         </h1>
         <p className="animate-rise mx-auto mt-6 max-w-2xl text-lg text-slate-300">
-          PlacidCRM gives any business one place to manage customers, bookings, payments, automations and an online
+          Placid Connect gives any business one place to manage customers, bookings, payments, automations and an online
           storefront — while <span className="font-semibold text-white">Placid Connect</span> puts you in front of
           people ready to book, order and buy.
         </p>
@@ -103,7 +101,7 @@ export default async function HomePage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="glass-card p-6">
             <span className="badge bg-brand-500/20 text-brand-200">For your business</span>
-            <h3 className="mt-3 text-xl font-bold">PlacidCRM — your command centre</h3>
+            <h3 className="mt-3 text-xl font-bold">Placid Connect — your command centre</h3>
             <p className="mt-1 text-sm text-slate-400">Everything to run and grow, without stitching ten tools together.</p>
           </div>
           <div className="glass-card p-6 shadow-glow-accent">
@@ -160,7 +158,7 @@ export default async function HomePage() {
       </section>
 
       <footer className="border-t border-white/10 py-8 text-center text-sm text-slate-500">
-        © {new Date().getFullYear()} PlacidCRM · Placid Group Australia Pty Ltd · placidcrm.com
+        © {new Date().getFullYear()} Placid Connect · Placid Group Australia Pty Ltd · placidcrm.com
       </footer>
     </main>
   );

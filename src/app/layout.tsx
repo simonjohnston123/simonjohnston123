@@ -3,10 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "PlacidCRM",
-    template: "%s · PlacidCRM",
+    default: "Placid Connect",
+    template: "%s · Placid Connect",
   },
-  description: "PlacidCRM — the all-in-one CRM platform powering the Placid group of businesses.",
+  description: "Placid Connect — the all-in-one CRM platform powering the Placid group of businesses.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

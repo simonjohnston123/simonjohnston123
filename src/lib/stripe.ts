@@ -76,7 +76,7 @@ export async function createCheckoutSession(opts: {
   else p.set("customer_email", opts.customerEmail);
   p.set("line_items[0][quantity]", "1");
   p.set("line_items[0][price_data][currency]", "aud");
-  p.set("line_items[0][price_data][product_data][name]", `PlacidCRM ${opts.plan.name}`);
+  p.set("line_items[0][price_data][product_data][name]", `Placid Connect ${opts.plan.name}`);
   p.set("line_items[0][price_data][unit_amount]", String(Math.round(opts.plan.priceMonthly * 100)));
   p.set("line_items[0][price_data][recurring][interval]", "month");
   p.set("metadata[agencyId]", opts.agencyId);

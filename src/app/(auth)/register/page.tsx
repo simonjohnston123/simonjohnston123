@@ -10,7 +10,7 @@ export default function RegisterPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Set up PlacidCRM</h1>
+      <h1 className="text-xl font-semibold text-slate-900">Set up Placid Connect</h1>
       <p className="mt-1 text-sm text-slate-500">Create the owner account for your platform.</p>
 
       <form action={formAction} className="mt-6 space-y-4">

@@ -1,4 +1,4 @@
-// Subscription plans + feature gating for PlacidCRM. Client-safe (no secrets).
+// Subscription plans + feature gating for Placid Connect. Client-safe (no secrets).
 // Prices are defined here and passed to Stripe Checkout as inline price_data, so
 // there's no need to pre-create Products/Prices in the Stripe dashboard.
 

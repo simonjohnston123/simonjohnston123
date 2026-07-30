@@ -11,7 +11,7 @@ export default function LoginPage() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-slate-900">Sign in</h1>
-      <p className="mt-1 text-sm text-slate-500">Welcome back to PlacidCRM.</p>
+      <p className="mt-1 text-sm text-slate-500">Welcome back to Placid Connect.</p>
 
       <form action={formAction} className="mt-6 space-y-4">
         <div>

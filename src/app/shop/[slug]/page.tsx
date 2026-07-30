@@ -53,7 +53,7 @@ export default async function ShopPage({ params }: { params: { slug: string } })
           </div>
         )}
 
-        <p className="mt-10 text-center text-xs text-slate-400">Powered by PlacidCRM</p>
+        <p className="mt-10 text-center text-xs text-slate-400">Powered by Placid Connect</p>
       </div>
     </main>
   );

@@ -60,7 +60,7 @@ const GOOGLE_ID_ENV = "GOOGLE_CLIENT_ID";
 const GOOGLE_SECRET_ENV = "GOOGLE_CLIENT_SECRET";
 const GOOGLE_OFFLINE = { access_type: "offline", prompt: "consent", include_granted_scopes: "true" };
 
-// Square uses the merchant's own OAuth. One PlacidCRM Square app; each business
+// Square uses the merchant's own OAuth. One Placid Connect Square app; each business
 // signs into their own Square account. Sandbox vs production via SQUARE_ENV.
 const SQUARE_BASE =
   process.env.SQUARE_ENV === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";

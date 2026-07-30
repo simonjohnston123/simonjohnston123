@@ -5,25 +5,25 @@ export const metadata = { title: "Terms of Service" };
 export default function TermsPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-14 text-slate-800">
-      <Link href="/" className="text-sm font-medium text-brand-600 hover:underline">← PlacidCRM</Link>
+      <Link href="/" className="text-sm font-medium text-brand-600 hover:underline">← Placid Connect</Link>
       <h1 className="mt-4 text-3xl font-bold text-slate-900">Terms of Service</h1>
       <p className="mt-2 text-sm text-slate-500">Last updated: 29 July 2026</p>
 
       <div className="mt-8 space-y-5 text-sm leading-relaxed">
         <p>
-          These terms govern your use of PlacidCRM, operated by <strong>Placid Group Australia Pty Ltd</strong>
+          These terms govern your use of Placid Connect, operated by <strong>Placid Group Australia Pty Ltd</strong>
           (ABN 22 695 488 674). By creating an account or using the service, you agree to them.
         </p>
 
         <h2 className="text-lg font-semibold text-slate-900">The service</h2>
-        <p>PlacidCRM is an all-in-one CRM platform (contacts, inbox, automations, calendars, websites and integrations) provided on a subscription basis.</p>
+        <p>Placid Connect is an all-in-one CRM platform (contacts, inbox, automations, calendars, websites and integrations) provided on a subscription basis.</p>
 
         <h2 className="text-lg font-semibold text-slate-900">Your account</h2>
         <p>You&rsquo;re responsible for your account, your users, and the data you put into the platform, and for keeping your credentials secure.</p>
 
         <h2 className="text-lg font-semibold text-slate-900">Acceptable use</h2>
         <p>
-          You agree not to use PlacidCRM to send spam or unlawful content, to breach any third-party platform&rsquo;s rules
+          You agree not to use Placid Connect to send spam or unlawful content, to breach any third-party platform&rsquo;s rules
           (including Meta, Google, Twilio and email anti-spam laws), or to infringe others&rsquo; rights. You must have the
           necessary consent to message the contacts you import.
         </p>

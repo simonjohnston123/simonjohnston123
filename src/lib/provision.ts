@@ -99,7 +99,7 @@ export async function createBusiness(input: NewBusinessInput) {
                 {
                   type: "text",
                   heading: "About us",
-                  body: "Tell your customers who you are and what you do. Edit this page from the Website tab in PlacidCRM.",
+                  body: "Tell your customers who you are and what you do. Edit this page from the Website tab in Placid Connect.",
                 },
                 {
                   type: "contact",
