@@ -155,6 +155,16 @@ function heuristicFields(description: string, kind: "FORM" | "SURVEY"): FormFiel
   return base;
 }
 
+/** A short, friendly product description from a name (+ optional hint). */
+export async function generateProductDescription(name: string, hint?: string): Promise<string> {
+  const prompt =
+    `Write a single friendly product description (2 sentences, under 40 words, no markdown, ` +
+    `no quotes) for an online store listing.\n\nProduct: ${name}${hint ? `\nDetails: ${hint}` : ""}`;
+  const raw = await complete(prompt, 160);
+  if (raw) return raw.replace(/^["']|["']$/g, "").trim();
+  return `${name}${hint ? ` — ${hint}` : ""}. Get in touch to order or find out more.`;
+}
+
 export type SetupService = {
   name: string;
   price: number | null;

@@ -91,6 +91,7 @@ model Location {
   homesteadSettings HomesteadSettings?
   externalBusy      ExternalBusy[]
   forms             Form[]
+  products          Product[]
 
   @@index([agencyId])
 }
@@ -409,6 +410,26 @@ model ExternalBusy {
 
   @@unique([locationId, provider, externalId])
   @@index([locationId, startAt])
+}
+
+// ---------------------------------------------------------------------------
+// Products — a simple catalogue per business, shown at /shop/[slug].
+// ---------------------------------------------------------------------------
+
+model Product {
+  id          String   @id @default(cuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name        String
+  price       Int?     // whole-dollar price (optional)
+  description String?  @db.Text
+  imageUrl    String?
+  active      Boolean  @default(true)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([locationId])
 }
 
 // ---------------------------------------------------------------------------

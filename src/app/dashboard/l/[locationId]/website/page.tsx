@@ -70,9 +70,9 @@ export default async function WebsitePage({ params }: { params: { locationId: st
           <p className="mt-2 text-sm text-slate-600">Your bookable services — prices, durations, availability and booking questions.</p>
         </Link>
 
-        <Link href={`/build/${params.locationId}`} className="card p-5 transition hover:border-slate-300">
+        <Link href={`/dashboard/l/${params.locationId}/products`} className="card p-5 transition hover:border-slate-300">
           <div className="flex items-center gap-2"><span className="text-xl">🛍️</span><h3 className="font-semibold text-slate-900">Products</h3></div>
-          <p className="mt-2 text-sm text-slate-600">Add product blocks to your pages in the builder. Dedicated manager coming next.</p>
+          <p className="mt-2 text-sm text-slate-600">Build your catalogue with AI-written descriptions, shown on your public shop page.</p>
         </Link>
       </div>
 
