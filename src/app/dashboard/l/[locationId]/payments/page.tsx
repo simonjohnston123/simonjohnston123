@@ -2,6 +2,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
+import { isConfigured } from "@/lib/oauth-providers";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Payments" };
@@ -25,6 +26,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
   const squareConn = conns.find((c) => c.provider === "SQUARE");
   const stripeConnected = stripeConn?.status === "CONNECTED";
   const squareConnected = squareConn?.status === "CONNECTED";
+  const squareOauth = isConfigured("SQUARE"); // one-click when the Square app is set up
 
   return (
     <div>
@@ -79,7 +81,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
               Take card payments and sync transactions with your own Square account.
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <ConnectButton locationId={params.locationId} provider="SQUARE" connected={squareConnected} oauthReady={false} />
+              <ConnectButton locationId={params.locationId} provider="SQUARE" connected={squareConnected} oauthReady={squareOauth} />
               {squareConnected ? <DisconnectButton locationId={params.locationId} provider="SQUARE" /> : null}
             </div>
           </div>

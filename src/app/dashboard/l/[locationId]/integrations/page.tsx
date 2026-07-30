@@ -41,7 +41,9 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                 {items.map((p) => {
                   const conn = byProvider.get(p.key as ProviderKey as never);
                   const connected = conn?.status === "CONNECTED";
-                  const oauthReady = p.connectType === "oauth" && isConfigured(p.key);
+                  // Any provider with a configured Placid app can do one-click OAuth —
+                  // including api-key providers like Square (keys stay as a fallback).
+                  const oauthReady = isConfigured(p.key);
                   return (
                     <div key={p.key} className="card flex flex-col p-5">
                       <div className="flex items-start justify-between gap-2">

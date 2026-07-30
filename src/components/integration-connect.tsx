@@ -26,28 +26,13 @@ export function ConnectButton({
 
   if (!def) return null;
 
-  // OAuth providers: live only once Placid's app for them is configured.
-  if (def.connectType === "oauth") {
-    return oauthReady ? (
-      <a href={`/api/integrations/${provider.toLowerCase()}/connect?locationId=${locationId}`} className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"}>
-        {connected ? "Reconnect" : "Connect"}
-      </a>
-    ) : (
-      <span className="btn-secondary cursor-not-allowed text-sm opacity-60" title="Available once Placid's app for this provider is approved">
-        Coming soon
-      </span>
-    );
-  }
+  const oauthHref = `/api/integrations/${provider.toLowerCase()}/connect?locationId=${locationId}`;
+  const hasKeys = Boolean(def.fields?.length);
 
   // API-key providers open a modal to paste credentials.
   if (state?.ok && open) setTimeout(() => setOpen(false), 0);
-
-  return (
-    <>
-      <button className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"} onClick={() => setOpen(true)}>
-        {connected ? "Update" : "Connect"}
-      </button>
-      {open ? (
+  const keyModal =
+    hasKeys && open ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4" onClick={() => setOpen(false)}>
           <div className="card my-8 w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 flex items-center justify-between">
@@ -84,7 +69,41 @@ export function ConnectButton({
             </form>
           </div>
         </div>
-      ) : null}
+      ) : null;
+
+  // Prefer one-click OAuth when this provider's Placid app is configured.
+  if (oauthReady) {
+    return (
+      <>
+        <a href={oauthHref} className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"}>
+          {connected ? "Reconnect" : `Connect ${def.name}`}
+        </a>
+        {hasKeys ? (
+          <button type="button" onClick={() => setOpen(true)} className="btn-ghost text-xs text-slate-400">
+            Enter keys manually
+          </button>
+        ) : null}
+        {keyModal}
+      </>
+    );
+  }
+
+  // OAuth-only provider whose Placid app isn't configured yet.
+  if (def.connectType === "oauth") {
+    return (
+      <span className="btn-secondary cursor-not-allowed text-sm opacity-60" title="Available once Placid's app for this provider is approved">
+        Coming soon
+      </span>
+    );
+  }
+
+  // API-key provider (no OAuth app configured): paste credentials manually.
+  return (
+    <>
+      <button className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"} onClick={() => setOpen(true)}>
+        {connected ? "Update" : "Connect"}
+      </button>
+      {keyModal}
     </>
   );
 }
