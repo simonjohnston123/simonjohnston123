@@ -95,7 +95,7 @@ export default function DesignSystemPage() {
           <div className="grid grid-cols-3 gap-2.5">
             {[["148", "Contacts"], ["$2,140", "This week"], ["6", "Bookings"]].map(([v, l]) => (
               <div key={l} className="stat">
-                <p className="text-2xl font-semibold text-slate-900">{v}</p>
+                <p className="stat-num">{v}</p>
                 <p className="mt-0.5 text-[11px] text-slate-500">{l}</p>
               </div>
             ))}

@@ -54,15 +54,15 @@ export default async function LocationHome({ params }: { params: { locationId: s
       {/* Glanceable stats */}
       <div className="mb-4 grid grid-cols-3 gap-2.5">
         <Link href={`${base}/contacts`} className="stat">
-          <p className="text-2xl font-semibold text-slate-900">{contacts}</p>
+          <p className="stat-num">{contacts}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">Contacts</p>
         </Link>
         <Link href={`${base}/pipelines`} className="stat">
-          <p className="text-2xl font-semibold text-slate-900">{formatMoney(openValue)}</p>
+          <p className="stat-num">{formatMoney(openValue)}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">Open value</p>
         </Link>
         <Link href={`${base}/calendar`} className="stat">
-          <p className="text-2xl font-semibold text-slate-900">{upcoming.length}</p>
+          <p className="stat-num">{upcoming.length}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">Upcoming</p>
         </Link>
       </div>
