@@ -92,6 +92,9 @@ model Location {
   externalBusy      ExternalBusy[]
   forms             Form[]
   products          Product[]
+  // Provider keys this business chose to use (set at onboarding) — drives which
+  // integrations we surface first.
+  wantedIntegrations Json @default("[]")
 
   @@index([agencyId])
 }

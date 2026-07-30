@@ -124,6 +124,15 @@ export async function connectApiKeyAction(_prev: unknown, formData: FormData) {
   return { error: "", ok: true };
 }
 
+/** Save the integrations a business says it wants to use (onboarding chooser). */
+export async function saveWantedIntegrationsAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const wanted = formData.getAll("wanted").map(String).filter(Boolean);
+  await prisma.location.update({ where: { id: locationId }, data: { wantedIntegrations: wanted } });
+  revalidatePath(`/dashboard/l/${locationId}/integrations`);
+}
+
 export async function disconnectAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
   const provider = String(formData.get("provider") ?? "") as ProviderKey;

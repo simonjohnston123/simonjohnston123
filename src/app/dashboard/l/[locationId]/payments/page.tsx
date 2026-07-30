@@ -27,6 +27,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
   const stripeConnected = stripeConn?.status === "CONNECTED";
   const squareConnected = squareConn?.status === "CONNECTED";
   const squareOauth = isConfigured("SQUARE"); // one-click when the Square app is set up
+  const stripeOauth = isConfigured("STRIPE"); // one-click when Stripe Connect is set up
 
   return (
     <div>
@@ -58,7 +59,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
               Take card payments, Apple &amp; Google Pay, subscriptions and invoices with your own Stripe account.
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <ConnectButton locationId={params.locationId} provider="STRIPE" connected={stripeConnected} oauthReady={false} />
+              <ConnectButton locationId={params.locationId} provider="STRIPE" connected={stripeConnected} oauthReady={stripeOauth} />
               {stripeConnected ? <DisconnectButton locationId={params.locationId} provider="STRIPE" /> : null}
             </div>
           </div>

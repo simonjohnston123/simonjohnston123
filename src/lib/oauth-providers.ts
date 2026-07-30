@@ -79,6 +79,26 @@ async function squareLabel(token: string): Promise<string | null> {
   }
 }
 
+async function stripeLabel(token: string): Promise<string | null> {
+  try {
+    // The connected account's own key → fetch its account profile.
+    const res = await fetch("https://api.stripe.com/v1/account", { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { business_profile?: { name?: string }; email?: string };
+    return json.business_profile?.name || json.email || "Stripe account";
+  } catch {
+    return null;
+  }
+}
+
+/** Provider-specific non-secret ids worth keeping on the connection (for API calls). */
+export function connectionMeta(provider: string, raw: unknown): Record<string, unknown> {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  if (provider === "STRIPE") return { stripeUserId: r.stripe_user_id, publishableKey: r.stripe_publishable_key };
+  if (provider === "SQUARE") return { merchantId: r.merchant_id };
+  return {};
+}
+
 // Facebook + Instagram share ONE Meta app (same App ID/Secret, different scopes).
 export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
   FACEBOOK: {
@@ -120,6 +140,17 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     authParams: { session: "false" },
     omitRedirectInAuth: true,
     fetchLabel: squareLabel,
+  },
+  STRIPE: {
+    // Stripe Connect (Standard) — "Connect with Stripe" one-click. clientId is
+    // the platform's Connect client id (ca_…); secret is the platform key (sk_…).
+    clientIdEnv: "STRIPE_CONNECT_CLIENT_ID",
+    clientSecretEnv: "STRIPE_SECRET_KEY",
+    authUrl: "https://connect.stripe.com/oauth/authorize",
+    tokenUrl: "https://connect.stripe.com/oauth/token",
+    scope: "read_write",
+    tokenStyle: "post",
+    fetchLabel: stripeLabel,
   },
 };
 

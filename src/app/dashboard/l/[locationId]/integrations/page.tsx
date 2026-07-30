@@ -4,6 +4,8 @@ import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
 import { PROVIDERS, type ProviderKey } from "@/lib/integrations-catalog";
 import { isConfigured } from "@/lib/oauth-providers";
+import { saveWantedIntegrationsAction } from "./actions";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +13,12 @@ const CATEGORIES = ["Email", "Messaging", "Social", "Calendar", "Payments", "E-c
 
 export default async function IntegrationsPage({ params }: { params: { locationId: string } }) {
   const { locationId } = params;
-  await requireLocationAccess(locationId);
+  const { location } = await requireLocationAccess(locationId);
 
   const connections = await prisma.connection.findMany({ where: { locationId } });
   const byProvider = new Map(connections.map((c) => [c.provider, c]));
   const connectedCount = connections.filter((c) => c.status === "CONNECTED").length;
+  const wanted = new Set(Array.isArray(location.wantedIntegrations) ? (location.wantedIntegrations as string[]) : []);
 
   return (
     <div>
@@ -23,6 +26,26 @@ export default async function IntegrationsPage({ params }: { params: { locationI
         title="Integrations"
         subtitle={`Connect this business's own channels — ${connectedCount} connected`}
       />
+
+      {/* Onboarding chooser — the business picks the tools it wants to use. */}
+      <form action={saveWantedIntegrationsAction} className="card mb-6 p-5">
+        <input type="hidden" name="locationId" value={locationId} />
+        <h2 className="text-sm font-semibold text-slate-800">Which tools do you use?</h2>
+        <p className="mt-1 text-xs text-slate-500">Pick the ones you want — we&rsquo;ll put them front and centre and prompt you to connect them.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {PROVIDERS.map((p) => (
+            <label key={p.key} className="cursor-pointer">
+              <input type="checkbox" name="wanted" value={p.key} defaultChecked={wanted.has(p.key)} className="peer sr-only" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 transition peer-checked:border-brand-400 peer-checked:bg-brand-50 peer-checked:text-brand-700 peer-hover:border-slate-300">
+                <span>{p.icon}</span>{p.name}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-4">
+          <button className="btn-primary text-sm">Save my tools</button>
+        </div>
+      </form>
 
       <p className="mb-6 max-w-2xl rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm text-slate-600">
         Each connection uses <span className="font-medium text-slate-800">this business&rsquo;s own account</span> — your
@@ -32,7 +55,10 @@ export default async function IntegrationsPage({ params }: { params: { locationI
 
       <div className="space-y-8">
         {CATEGORIES.map((category) => {
-          const items = PROVIDERS.filter((p) => p.category === category);
+          // Chosen tools float to the top of each category.
+          const items = PROVIDERS.filter((p) => p.category === category).sort(
+            (a, b) => (wanted.has(b.key) ? 1 : 0) - (wanted.has(a.key) ? 1 : 0),
+          );
           if (items.length === 0) return null;
           return (
             <section key={category}>
@@ -45,7 +71,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                   // including api-key providers like Square (keys stay as a fallback).
                   const oauthReady = isConfigured(p.key);
                   return (
-                    <div key={p.key} className="card flex flex-col p-5">
+                    <div key={p.key} className={cn("card flex flex-col p-5", wanted.has(p.key) && "ring-2 ring-brand-200")}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3">
                           <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xl">{p.icon}</span>
@@ -53,6 +79,8 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                             <h3 className="font-semibold text-slate-900">{p.name}</h3>
                             {connected && conn?.accountLabel ? (
                               <p className="text-xs text-slate-500">{conn.accountLabel}</p>
+                            ) : wanted.has(p.key) ? (
+                              <p className="text-xs font-medium text-brand-600">★ Your pick</p>
                             ) : null}
                           </div>
                         </div>

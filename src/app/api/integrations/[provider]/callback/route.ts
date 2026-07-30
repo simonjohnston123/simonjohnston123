@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { encryptJson } from "@/lib/crypto";
-import { verifyState, exchangeCode, oauthConfig } from "@/lib/oauth-providers";
+import { verifyState, exchangeCode, oauthConfig, connectionMeta } from "@/lib/oauth-providers";
 import type { ConnectionProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +40,8 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
     refreshToken: tok.refreshToken,
     expiresAt: tok.expiresAt,
   });
+  // Non-secret account ids we may need for API calls (Stripe acct, Square merchant).
+  const meta = connectionMeta(provider, tok.raw) as object;
 
   await prisma.connection.upsert({
     where: { locationId_provider: { locationId, provider: provider as ConnectionProvider } },
@@ -49,11 +51,13 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
       status: "CONNECTED",
       accountLabel: label,
       secretCipher: secret,
+      meta,
     },
     update: {
       status: "CONNECTED",
       accountLabel: label,
       secretCipher: secret,
+      meta,
     },
   });
 
