@@ -6,6 +6,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-placid}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-placid}
       POSTGRES_DB: ${POSTGRES_DB:-placidcrm}
+    # Exposed so a host-run `npm run dev` (hot reload) can reach the DB while
+    # developing locally. Production (docker-compose.prod.yml) keeps it internal.
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
