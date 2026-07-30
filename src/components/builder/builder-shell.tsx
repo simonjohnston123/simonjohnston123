@@ -62,6 +62,7 @@ export function BuilderShell({
   const [panel, setPanel] = useState<PanelKey>("add");
   const [tab, setTab] = useState<"content" | "style">("content");
   const [over, setOver] = useState<{ b: number; c: number } | null>(null);
+  const [overTop, setOverTop] = useState<number | null>(null);
   const drag = useRef<{ kind: "el" | "row" | "block"; type?: string; n?: number } | null>(null);
 
   // ---- mutations ----
@@ -82,6 +83,24 @@ export function BuilderShell({
   const delCol = (b: number, c: number) => setBlocks((bs) => bs.map((blk, bi) => (bi !== b ? blk : { ...blk, columns: (blk.columns ?? []).filter((_, k) => k !== c) })));
 
   const dropOnCol = (b: number, c: number) => { const d = drag.current; drag.current = null; setOver(null); if (d?.kind === "el" && d.type) addEl(b, c, d.type); };
+  // Top-level canvas drop: auto-wraps a bare element into a Row → Column.
+  const onTopDrop = (at: number) => {
+    const d = drag.current; drag.current = null; setOverTop(null); setOver(null);
+    if (!d) return;
+    if (d.kind === "row") insertRow(d.n ?? 1, at);
+    else if (d.kind === "el" && d.type) insertElAsRow(d.type, at);
+    else if (d.kind === "block" && d.type) insertBlock(d.type, at);
+  };
+  const topDrop = (at: number) => (
+    <div key={"td" + at} onDragOver={(e) => { e.preventDefault(); setOverTop(at); }} onDragLeave={() => setOverTop((v) => (v === at ? null : v))} onDrop={(e) => { e.preventDefault(); onTopDrop(at); }}
+      style={{ height: overTop === at ? 34 : 12, transition: "height .1s" }} className="relative">
+      {overTop === at ? (
+        <div style={{ position: "absolute", left: 8, right: 8, top: "50%", transform: "translateY(-50%)", height: 3, background: "var(--drop)", borderRadius: 2, boxShadow: "0 0 0 4px var(--drop-soft)" }}>
+          <span style={{ position: "absolute", left: "50%", top: -18, transform: "translateX(-50%)", background: "var(--drop)", color: "#2A0512", fontFamily: "var(--mono)", fontSize: 9, letterSpacing: ".06em", padding: "2px 7px", borderRadius: 4, whiteSpace: "nowrap" }}>DROP HERE</span>
+        </div>
+      ) : null}
+    </div>
+  );
   const setElStyle = (k: string, v: unknown) => {
     if (!sel || sel.c == null || sel.e == null) return;
     const cur = ((blocks[sel.b]?.columns?.[sel.c]?.elements?.[sel.e]?.style) as Record<string, unknown>) ?? {};
@@ -205,7 +224,10 @@ export function BuilderShell({
               <div className="pb-group pb-mono">Sections</div>
               <div className="pb-tiles">
                 {BLOCK_DEFS.map((b) => (
-                  <div key={b.type} className="pb-tile" onClick={() => insertBlock(b.type)} title={`Add ${b.label} section`}>
+                  <div key={b.type} className="pb-tile" draggable
+                    onDragStart={() => (drag.current = { kind: "block", type: b.type })}
+                    onDragEnd={() => { drag.current = null; setOverTop(null); }}
+                    onClick={() => insertBlock(b.type)} title={`Add ${b.label} section`}>
                     <span style={{ fontSize: 15 }}>{b.icon}</span>{b.label}
                   </div>
                 ))}
@@ -254,9 +276,15 @@ export function BuilderShell({
           <div className="pb-device-tag pb-mono"><span>{DEVICES[device]}</span></div>
           <div className="pb-page" onClick={(e) => e.stopPropagation()} onClickCapture={(e) => { const a = (e.target as HTMLElement).closest("a"); if (a) e.preventDefault(); }}>
             {blocks.length === 0 ? (
-              <div className="pb-el-empty" style={{ margin: 24, padding: 48 }}>Add a Row or Section from the left to start building.</div>
-            ) : blocks.map((block, i) => (
+              <div className="pb-el-empty" style={{ margin: 24, padding: 48, borderColor: overTop === 0 ? "var(--drop)" : undefined, background: overTop === 0 ? "var(--drop-soft)" : undefined }}
+                onDragOver={(e) => { e.preventDefault(); setOverTop(0); }} onDragLeave={() => setOverTop(null)} onDrop={(e) => { e.preventDefault(); onTopDrop(0); }}>
+                Drag any element, row or section here — or click one on the left.
+              </div>
+            ) : (
+              <>
+              {blocks.map((block, i) => (
               <div key={i}>
+                {topDrop(i)}
                 {block.type === "row" ? (
                   <div className={`pb-el ${sel?.b === i && sel.c == null ? "pb-on" : ""}`} data-kind="Row" onClick={(e) => { e.stopPropagation(); setSel({ b: i }); }}>
                     <Tools up={i > 0 ? () => moveBlock(i, i - 1) : undefined} down={i < blocks.length - 1 ? () => moveBlock(i, i + 2) : undefined} dup={() => dupBlock(i)} del={() => delBlock(i)} />
@@ -282,7 +310,10 @@ export function BuilderShell({
                   </div>
                 )}
               </div>
-            ))}
+              ))}
+              {topDrop(blocks.length)}
+              </>
+            )}
           </div>
         </div>
       </main>
