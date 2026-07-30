@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireLocationAccess, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { LocationNav } from "@/components/location-nav";
+import { MobileNav } from "@/components/mobile-nav";
 import { LocationSwitcher } from "@/components/location-switcher";
 
 export const dynamic = "force-dynamic";
@@ -36,18 +37,18 @@ export default async function LocationLayout({
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <Link href="/dashboard" className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600">
-        ← All businesses
-      </Link>
-
-      {/* Mobile nav — the sidebar is hidden on phones, so give a scrollable tab bar. */}
-      <div className="mb-4 md:hidden">
-        <div className="mb-2">
+    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
+      {/* Mobile top bar — business identity only; navigation lives in the bottom bar. */}
+      <div className="mb-4 flex items-center justify-between gap-2 md:hidden">
+        <div className="min-w-0 flex-1">
           {locations.length > 1 ? <LocationSwitcher current={location.id} locations={locations} /> : <BusinessChip />}
         </div>
-        <LocationNav locationId={location.id} locationName={location.name} orientation="horizontal" />
+        <Link href="/dashboard" className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-slate-400" aria-label="All businesses">⌄</Link>
       </div>
+
+      <Link href="/dashboard" className="mb-4 hidden items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600 md:inline-flex">
+        ← All businesses
+      </Link>
 
       <div className="flex gap-6">
         <aside className="hidden w-60 shrink-0 md:block">
@@ -58,8 +59,11 @@ export default async function LocationLayout({
             <LocationNav locationId={location.id} locationName={location.name} />
           </div>
         </aside>
-        <main className="min-w-0 flex-1">{children}</main>
+        {/* Extra bottom padding on mobile so content clears the fixed nav. */}
+        <main className="min-w-0 flex-1 pb-28 md:pb-0">{children}</main>
       </div>
+
+      <MobileNav locationId={location.id} locationName={location.name} />
     </div>
   );
 }
