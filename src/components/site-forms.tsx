@@ -51,6 +51,41 @@ export function LeadForm({
   );
 }
 
+// --- Booking widget helpers ------------------------------------------------
+
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const ymd = (y: number, m: number, d: number) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+
+function CalIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
+      <path d="M3 9h18M8 2.5v4M16 2.5v4" />
+    </svg>
+  );
+}
+function ClockIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+function Chevron({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={dir === "left" ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"} />
+    </svg>
+  );
+}
+
 export function BookingForm({
   slug,
   primaryColor,
@@ -67,8 +102,9 @@ export function BookingForm({
   const [state, action] = useFormState(bookingRequestAction, INIT);
   const [days, setDays] = useState<DaySlots[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeDay, setActiveDay] = useState(0);
-  const [selected, setSelected] = useState("");
+  const [selectedDate, setSelectedDate] = useState(""); // YYYY-MM-DD
+  const [selected, setSelected] = useState(""); // chosen slot ISO
+  const [view, setView] = useState<{ y: number; m: number } | null>(null); // month on screen
 
   useEffect(() => {
     if (!calendarId) return;
@@ -76,7 +112,15 @@ export function BookingForm({
     fetch(`/api/booking/slots?slug=${encodeURIComponent(slug)}&calendarId=${encodeURIComponent(calendarId)}`)
       .then((r) => r.json())
       .then((d) => {
-        if (alive) setDays(Array.isArray(d.slots) ? d.slots : []);
+        if (!alive) return;
+        const list: DaySlots[] = Array.isArray(d.slots) ? d.slots : [];
+        setDays(list);
+        // Preselect the first available day so times show immediately.
+        if (list[0]) {
+          setSelectedDate(list[0].date);
+          const [y, m] = list[0].date.split("-").map(Number);
+          setView({ y, m: m - 1 });
+        }
       })
       .catch(() => {})
       .finally(() => alive && setLoading(false));
@@ -86,67 +130,194 @@ export function BookingForm({
   }, [slug, calendarId]);
 
   if (state.ok) {
-    return <p className="rounded-lg bg-green-50 px-4 py-3 text-green-800">{thankYou}</p>;
+    return (
+      <p className="rounded-xl bg-green-50 px-4 py-3 text-green-800">{thankYou}</p>
+    );
   }
   if (!calendarId) {
-    return <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-800">Booking isn&rsquo;t configured yet.</p>;
+    return <p className="rounded-xl bg-amber-50 px-4 py-3 text-amber-800">Booking isn&rsquo;t configured yet.</p>;
   }
 
-  const day = days[activeDay];
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const dayLabel = (dateStr: string) => byDate.get(dateStr)?.label ?? "";
+  const times = byDate.get(selectedDate)?.items ?? [];
+
+  // Month-navigation bounds derived from what's actually bookable.
+  const firstDate = days[0]?.date;
+  const lastDate = days[days.length - 1]?.date;
+  const monthKey = (y: number, m: number) => y * 12 + m;
+  const boundKey = (dateStr?: string, fallback = 0) => {
+    if (!dateStr) return fallback;
+    const [y, m] = dateStr.split("-").map(Number);
+    return monthKey(y, m - 1);
+  };
+  const vk = view ? monthKey(view.y, view.m) : 0;
+  const canPrev = view != null && vk > boundKey(firstDate, vk);
+  const canNext = view != null && vk < boundKey(lastDate, vk);
+  const shiftMonth = (delta: number) => {
+    if (!view) return;
+    const total = view.y * 12 + view.m + delta;
+    setView({ y: Math.floor(total / 12), m: ((total % 12) + 12) % 12 });
+  };
+
+  // Build the calendar grid cells for the month on screen.
+  const cells: (number | null)[] = [];
+  if (view) {
+    const lead = new Date(view.y, view.m, 1).getDay();
+    const total = new Date(view.y, view.m + 1, 0).getDate();
+    for (let i = 0; i < lead; i++) cells.push(null);
+    for (let d = 1; d <= total; d++) cells.push(d);
+  }
+
+  const inputBase =
+    "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 placeholder:text-slate-400";
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-6">
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="calendarId" value={calendarId} />
       <input type="hidden" name="when" value={selected} />
 
-      <input name="name" placeholder="Your name" className="input" />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <input name="email" type="email" placeholder="Email" className="input" />
-        <input name="phone" placeholder="Phone" className="input" />
+      <div className="grid gap-5 md:grid-cols-2">
+        {/* Calendar */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-slate-800">
+            <CalIcon className="h-4 w-4" style={{ color: primaryColor }} />
+            <span className="text-sm font-semibold">Choose a date</span>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-7 gap-1.5">
+              {Array.from({ length: 28 }).map((_, i) => (
+                <div key={i} className="aspect-square animate-pulse rounded-lg bg-slate-100" />
+              ))}
+            </div>
+          ) : days.length === 0 || !view ? (
+            <p className="py-8 text-center text-sm text-slate-500">No times available right now — please get in touch.</p>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(-1)}
+                  disabled={!canPrev}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                  aria-label="Previous month"
+                >
+                  <Chevron dir="left" />
+                </button>
+                <span className="text-sm font-semibold text-slate-800">{MONTHS[view.m]} {view.y}</span>
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(1)}
+                  disabled={!canNext}
+                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                  aria-label="Next month"
+                >
+                  <Chevron dir="right" />
+                </button>
+              </div>
+
+              <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                {WEEKDAYS.map((w, i) => (<div key={i} className="py-1">{w}</div>))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1.5">
+                {cells.map((d, i) => {
+                  if (d == null) return <div key={`x${i}`} />;
+                  const dateStr = ymd(view.y, view.m, d);
+                  const available = byDate.has(dateStr);
+                  const isSelected = dateStr === selectedDate;
+                  return (
+                    <button
+                      key={dateStr}
+                      type="button"
+                      disabled={!available}
+                      onClick={() => { setSelectedDate(dateStr); setSelected(""); }}
+                      className={[
+                        "relative grid aspect-square place-items-center rounded-lg text-sm transition",
+                        isSelected
+                          ? "font-semibold text-white shadow-sm"
+                          : available
+                          ? "font-medium text-slate-800 hover:bg-slate-100"
+                          : "text-slate-300",
+                      ].join(" ")}
+                      style={isSelected ? { background: primaryColor } : undefined}
+                    >
+                      {d}
+                      {available && !isSelected ? (
+                        <span className="absolute bottom-1 h-1 w-1 rounded-full" style={{ background: primaryColor }} />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Times */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 text-slate-800">
+            <ClockIcon className="h-4 w-4" style={{ color: primaryColor }} />
+            <span className="text-sm font-semibold">
+              {selectedDate ? dayLabel(selectedDate) : "Available times"}
+            </span>
+          </div>
+
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading times…</p>
+          ) : !selectedDate ? (
+            <p className="py-8 text-center text-sm text-slate-500">Pick a date to see available times.</p>
+          ) : times.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-500">No times left on this day.</p>
+          ) : (
+            <div className="grid max-h-64 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3">
+              {times.map((s) => {
+                const active = selected === s.iso;
+                return (
+                  <button
+                    key={s.iso}
+                    type="button"
+                    onClick={() => setSelected(s.iso)}
+                    className={[
+                      "rounded-xl border px-2 py-2 text-sm font-medium transition",
+                      active
+                        ? "border-transparent text-white shadow-sm"
+                        : "border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+                    ].join(" ")}
+                    style={active ? { background: primaryColor } : undefined}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-sm font-medium text-slate-700">Pick a time</p>
-        {loading ? (
-          <p className="text-sm text-slate-400">Loading available times…</p>
-        ) : days.length === 0 ? (
-          <p className="text-sm text-slate-500">No times available right now — please get in touch.</p>
-        ) : (
-          <>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {days.map((d, i) => (
-                <button
-                  key={d.date}
-                  type="button"
-                  onClick={() => { setActiveDay(i); setSelected(""); }}
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${i === activeDay ? "border-transparent text-white" : "border-slate-200 text-slate-700"}`}
-                  style={i === activeDay ? { background: primaryColor } : undefined}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {day?.items.map((s) => (
-                <button
-                  key={s.iso}
-                  type="button"
-                  onClick={() => setSelected(s.iso)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${selected === s.iso ? "border-transparent text-white" : "border-slate-200 text-slate-700 hover:border-slate-300"}`}
-                  style={selected === s.iso ? { background: primaryColor } : undefined}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+      {/* Your details */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold text-slate-800">Your details</p>
+        <input name="name" placeholder="Your name" className={inputBase} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <input name="email" type="email" placeholder="Email" className={inputBase} />
+          <input name="phone" placeholder="Phone" className={inputBase} />
+        </div>
       </div>
+
+      {selected ? (
+        <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
+          Selected: <span className="font-semibold text-slate-900">{dayLabel(selectedDate)}</span> at{" "}
+          <span className="font-semibold text-slate-900">{times.find((t) => t.iso === selected)?.label}</span>
+        </p>
+      ) : null}
 
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+
       <button
-        className="rounded-lg px-5 py-2.5 font-semibold text-white disabled:opacity-40"
+        className="w-full rounded-xl px-5 py-3 font-semibold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
         style={{ background: primaryColor }}
         disabled={!selected}
       >
