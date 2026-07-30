@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PageHeader, Badge } from "@/components/ui";
+import { PageHeader, Badge, SegTabs } from "@/components/ui";
 import { NewOrderButton } from "@/components/new-order";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
@@ -43,24 +43,19 @@ export default async function OrdersPage({
 
   const base = `/dashboard/l/${locationId}/orders`;
   const open = orders.filter((o) => !["COMPLETED", "CANCELLED"].includes(o.status)).length;
-  const Tab = ({ v, label }: { v?: string; label: string }) => (
-    <Link
-      href={v ? `${base}?type=${v}` : base}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${(!filter && !v) || filter === v ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-    >
-      {label}
-    </Link>
-  );
 
   return (
     <div>
       <PageHeader title="Orders" subtitle={`${open} open`} action={<NewOrderButton locationId={locationId} />} />
 
-      <div className="mb-4 flex gap-1">
-        <Tab label="All" />
-        <Tab v="PRODUCT" label="Products" />
-        <Tab v="DELIVERY" label="Deliveries" />
-      </div>
+      <SegTabs
+        active={filter ?? "all"}
+        items={[
+          { key: "all", label: "All", href: base },
+          { key: "PRODUCT", label: "Products", href: `${base}?type=PRODUCT` },
+          { key: "DELIVERY", label: "Deliveries", href: `${base}?type=DELIVERY` },
+        ]}
+      />
 
       {orders.length === 0 ? (
         <div className="card p-10 text-center">
@@ -68,18 +63,21 @@ export default async function OrdersPage({
           <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Create a product order or a delivery job to get started.</p>
         </div>
       ) : (
-        <div className="card divide-y divide-slate-100">
+        <div className="card p-1.5">
           {orders.map((o) => (
-            <Link key={o.id} href={`${base}/${o.id}`} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50">
-              <span className="w-14 font-mono text-sm text-slate-500">#{o.number}</span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-slate-800">{o.customerName || "Walk-in"}</div>
-                <div className="text-xs text-slate-500">
-                  {o.type === "DELIVERY" ? "🚚 Delivery" : "📦 Product"} · {formatDateTime(o.createdAt)}
-                </div>
-              </div>
-              <Badge color={STATUS_COLOR[o.status]}>{statusLabel(o.status)}</Badge>
-              <span className="w-24 text-right text-sm font-semibold text-slate-900">{formatMoney(o.total)}</span>
+            <Link key={o.id} href={`${base}/${o.id}`} className="list-row">
+              <span className="tile bg-brand-50">{o.type === "DELIVERY" ? "🚚" : "📦"}</span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-slate-800">{o.customerName || "Walk-in"}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-slate-400">#{o.number}</span>
+                </span>
+                <span className="mt-0.5 flex items-center gap-2">
+                  <Badge color={STATUS_COLOR[o.status]}>{statusLabel(o.status)}</Badge>
+                  <span className="text-xs text-slate-500">{formatDateTime(o.createdAt)}</span>
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-slate-900">{formatMoney(o.total)}</span>
             </Link>
           ))}
         </div>
