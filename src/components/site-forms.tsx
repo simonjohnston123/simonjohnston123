@@ -86,6 +86,8 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
   );
 }
 
+type Service = { id: string; name: string; price: number | null; durationMinutes: number; description: string | null };
+
 export function BookingForm({
   slug,
   primaryColor,
@@ -95,27 +97,59 @@ export function BookingForm({
 }: {
   slug: string;
   primaryColor: string;
+  /** When set on the block, the widget is locked to this one service. When
+   *  empty, the visitor picks from the business's bookable services. */
   calendarId: string;
   submitLabel: string;
   thankYou: string;
 }) {
+  const locked = calendarId || "";
   const [state, action] = useFormState(bookingRequestAction, INIT);
+  const [services, setServices] = useState<Service[]>([]);
+  const [servicesLoaded, setServicesLoaded] = useState(false);
+  const [serviceId, setServiceId] = useState(locked);
   const [days, setDays] = useState<DaySlots[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(locked)); // loading slots
   const [selectedDate, setSelectedDate] = useState(""); // YYYY-MM-DD
   const [selected, setSelected] = useState(""); // chosen slot ISO
   const [view, setView] = useState<{ y: number; m: number } | null>(null); // month on screen
 
+  // Load the business's bookable services (used for the picker + summary).
   useEffect(() => {
-    if (!calendarId) return;
     let alive = true;
-    fetch(`/api/booking/slots?slug=${encodeURIComponent(slug)}&calendarId=${encodeURIComponent(calendarId)}`)
+    fetch(`/api/booking/services?slug=${encodeURIComponent(slug)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const list: Service[] = Array.isArray(d.services) ? d.services : [];
+        setServices(list);
+        // Auto-select when locked to one, or when there's only a single service.
+        setServiceId((prev) => prev || (list.length === 1 ? list[0].id : ""));
+      })
+      .catch(() => {})
+      .finally(() => alive && setServicesLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
+
+  // Load availability whenever the chosen service changes.
+  useEffect(() => {
+    if (!serviceId) {
+      setDays([]);
+      return;
+    }
+    let alive = true;
+    setLoading(true);
+    setSelectedDate("");
+    setSelected("");
+    setView(null);
+    fetch(`/api/booking/slots?slug=${encodeURIComponent(slug)}&calendarId=${encodeURIComponent(serviceId)}`)
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
         const list: DaySlots[] = Array.isArray(d.slots) ? d.slots : [];
         setDays(list);
-        // Preselect the first available day so times show immediately.
         if (list[0]) {
           setSelectedDate(list[0].date);
           const [y, m] = list[0].date.split("-").map(Number);
@@ -127,16 +161,21 @@ export function BookingForm({
     return () => {
       alive = false;
     };
-  }, [slug, calendarId]);
+  }, [slug, serviceId]);
 
   if (state.ok) {
     return (
       <p className="rounded-xl bg-green-50 px-4 py-3 text-green-800">{thankYou}</p>
     );
   }
-  if (!calendarId) {
+  if (servicesLoaded && services.length === 0 && !locked) {
     return <p className="rounded-xl bg-amber-50 px-4 py-3 text-amber-800">Booking isn&rsquo;t configured yet.</p>;
   }
+
+  const activeService = services.find((s) => s.id === serviceId) || null;
+  const priceLabel = (p: number | null) => (p != null ? `$${p}` : "");
+  // Show the picker when the visitor genuinely has a choice to make.
+  const showPicker = !locked && services.length > 1;
 
   const byDate = new Map(days.map((d) => [d.date, d]));
   const dayLabel = (dateStr: string) => byDate.get(dateStr)?.label ?? "";
@@ -175,9 +214,48 @@ export function BookingForm({
   return (
     <form action={action} className="space-y-6">
       <input type="hidden" name="slug" value={slug} />
-      <input type="hidden" name="calendarId" value={calendarId} />
+      <input type="hidden" name="calendarId" value={serviceId} />
       <input type="hidden" name="when" value={selected} />
 
+      {/* Service picker (shown when the visitor has more than one to choose from) */}
+      {showPicker ? (
+        <div>
+          <p className="mb-2 text-sm font-semibold text-slate-800">Choose a service</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {services.map((svc) => {
+              const active = svc.id === serviceId;
+              return (
+                <button
+                  key={svc.id}
+                  type="button"
+                  onClick={() => setServiceId(svc.id)}
+                  className={[
+                    "rounded-2xl border bg-white p-4 text-left transition",
+                    active ? "shadow-sm" : "border-slate-200 hover:border-slate-300",
+                  ].join(" ")}
+                  style={active ? { borderColor: primaryColor, borderWidth: 2 } : undefined}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold text-slate-900">{svc.name}</span>
+                    {svc.price != null ? (
+                      <span className="shrink-0 font-bold" style={{ color: primaryColor }}>{priceLabel(svc.price)}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                    <ClockIcon className="h-3.5 w-3.5" />
+                    <span>{svc.durationMinutes} min</span>
+                  </div>
+                  {svc.description ? (
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-600">{svc.description}</p>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {serviceId ? (
       <div className="grid gap-5 md:grid-cols-2">
         {/* Calendar */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -296,6 +374,11 @@ export function BookingForm({
           )}
         </div>
       </div>
+      ) : (
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+          Choose a service above to see available times.
+        </p>
+      )}
 
       {/* Your details */}
       <div className="space-y-3">
@@ -309,7 +392,13 @@ export function BookingForm({
 
       {selected ? (
         <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
-          Selected: <span className="font-semibold text-slate-900">{dayLabel(selectedDate)}</span> at{" "}
+          {activeService ? (
+            <>
+              <span className="font-semibold text-slate-900">{activeService.name}</span>
+              {activeService.price != null ? ` (${priceLabel(activeService.price)})` : ""} —{" "}
+            </>
+          ) : null}
+          <span className="font-semibold text-slate-900">{dayLabel(selectedDate)}</span> at{" "}
           <span className="font-semibold text-slate-900">{times.find((t) => t.iso === selected)?.label}</span>
         </p>
       ) : null}

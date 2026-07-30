@@ -184,7 +184,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     fields: [
       { k: "heading", label: "Heading", kind: "text" },
       { k: "body", label: "Intro text", kind: "textarea" },
-      { k: "calendarId", label: "Calendar", kind: "calendar" },
+      { k: "calendarId", label: "Service", kind: "calendar" },
       { k: "submitLabel", label: "Submit button", kind: "text" },
       { k: "thankYou", label: "Thank-you message", kind: "text" },
     ],

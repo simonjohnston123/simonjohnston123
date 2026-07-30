@@ -180,7 +180,7 @@ export function SiteBlocks({
           case "booking":
             return (
               <section key={i} id="booking" className="bg-slate-50 px-6 py-16">
-                <div className="mx-auto max-w-xl">
+                <div className="mx-auto max-w-3xl">
                   <h2 className="text-2xl font-bold text-slate-900">{s("heading") || "Book a time"}</h2>
                   {block.body ? <p className="mt-2 text-slate-600">{s("body")}</p> : null}
                   <div className="mt-6">

@@ -44,10 +44,14 @@ export function FieldEditor({
       <div>
         <label className="label">{field.label}</label>
         <select className="input" value={String(value ?? "")} onChange={(e) => onChange({ [field.k]: e.target.value })}>
-          <option value="">— Select a calendar —</option>
+          <option value="">Let visitors choose (all services)</option>
           {calendars.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        {calendars.length === 0 ? <p className="mt-1 text-xs text-amber-600">No calendars yet — create one in the Calendar tab.</p> : null}
+        {calendars.length === 0 ? (
+          <p className="mt-1 text-xs text-amber-600">No calendars yet — create one in the Calendar tab.</p>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">Leave as “Let visitors choose” to show a service picker, or lock the widget to one service.</p>
+        )}
       </div>
     );
   }
