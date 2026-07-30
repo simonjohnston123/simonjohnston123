@@ -1,0 +1,5 @@
+# Shell scripts must stay LF — CRLF corrupts the shebang inside Linux
+# containers ("exec ./docker-entrypoint.sh: no such file or directory").
+# This overrides core.autocrlf, including on `git archive` exports used to deploy.
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
