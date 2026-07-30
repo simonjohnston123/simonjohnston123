@@ -24,6 +24,16 @@ type OAuthConfig = {
   /** Square configures the redirect URL in its app dashboard and rejects it as
    *  a consent-URL param — omit it there. */
   omitRedirectInAuth?: boolean;
+  /** Send client id/secret as HTTP Basic auth on the token request instead of in
+   *  the body (eBay). */
+  authHeaderBasic?: boolean;
+  /** Use this env value as the redirect_uri instead of our callback URL — eBay
+   *  uses a "RuName" that maps to the real callback in its dev portal. */
+  redirectUriEnv?: string;
+  /** Fully custom flow for platforms that don't do standard OAuth2 (TikTok Shop). */
+  flavor?: "tiktok";
+  /** TikTok Shop service id (env name) used on its authorize URL. */
+  serviceIdEnv?: string;
   /** Fetch a human label (page/account name/email) for display, given the token. */
   fetchLabel?: (accessToken: string) => Promise<string | null>;
 };
@@ -152,6 +162,30 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     tokenStyle: "post",
     fetchLabel: stripeLabel,
   },
+  EBAY: {
+    // eBay OAuth: Basic-auth token exchange, and redirect_uri is a "RuName"
+    // (configured in the eBay dev portal → mapped to our callback URL).
+    clientIdEnv: "EBAY_CLIENT_ID",
+    clientSecretEnv: "EBAY_CLIENT_SECRET",
+    authUrl: "https://auth.ebay.com/oauth2/authorize",
+    tokenUrl: "https://api.ebay.com/identity/v1/oauth2/token",
+    scope:
+      "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+    tokenStyle: "post",
+    authHeaderBasic: true,
+    redirectUriEnv: "EBAY_RUNAME",
+  },
+  TIKTOK: {
+    // TikTok Shop uses app_key/app_secret + a service_id on authorize, and a
+    // non-standard token endpoint — handled by the "tiktok" flavor below.
+    clientIdEnv: "TIKTOK_APP_KEY",
+    clientSecretEnv: "TIKTOK_APP_SECRET",
+    authUrl: "https://services.tiktokshop.com/open/authorize",
+    tokenUrl: "https://auth.tiktok-shops.com/api/v2/token/get",
+    scope: "",
+    flavor: "tiktok",
+    serviceIdEnv: "TIKTOK_SERVICE_ID",
+  },
 };
 
 export function oauthConfig(provider: string): OAuthConfig | undefined {
@@ -204,6 +238,13 @@ export function verifyState(state: string): Record<string, string> | null {
 export function buildAuthUrl(provider: string, state: string): string | null {
   const c = OAUTH[provider as ProviderKey];
   if (!c) return null;
+
+  // TikTok Shop: authorize takes just the service_id (+ our state for CSRF).
+  if (c.flavor === "tiktok") {
+    const p = new URLSearchParams({ service_id: process.env[c.serviceIdEnv ?? ""] ?? "", state });
+    return `${c.authUrl}?${p.toString()}`;
+  }
+
   const params = new URLSearchParams({
     client_id: process.env[c.clientIdEnv] ?? "",
     scope: c.scope,
@@ -211,7 +252,9 @@ export function buildAuthUrl(provider: string, state: string): string | null {
     state,
     ...(c.authParams ?? {}),
   });
-  if (!c.omitRedirectInAuth) params.set("redirect_uri", redirectUri(provider));
+  // eBay sends its RuName as the redirect_uri value; Square omits it entirely.
+  const redirect = c.redirectUriEnv ? process.env[c.redirectUriEnv] : c.omitRedirectInAuth ? undefined : redirectUri(provider);
+  if (redirect) params.set("redirect_uri", redirect);
   return `${c.authUrl}?${params.toString()}`;
 }
 
@@ -235,33 +278,74 @@ export type TokenSet = {
   raw: unknown;
 };
 
+function basicAuth(c: OAuthConfig): string {
+  return "Basic " + Buffer.from(`${process.env[c.clientIdEnv] ?? ""}:${process.env[c.clientSecretEnv] ?? ""}`).toString("base64");
+}
+
+/** TikTok Shop returns tokens nested under `data`, with epoch-second expiries. */
+function tiktokTokenSet(json: unknown): TokenSet | null {
+  const d = ((json as { data?: Record<string, unknown> })?.data ?? {}) as Record<string, unknown>;
+  const access = typeof d.access_token === "string" ? d.access_token : "";
+  if (!access) return null;
+  const exp = Number(d.access_token_expire_in);
+  return {
+    accessToken: access,
+    refreshToken: typeof d.refresh_token === "string" ? d.refresh_token : undefined,
+    expiresAt: Number.isFinite(exp) && exp > 0 ? exp * 1000 : undefined,
+    raw: json,
+  };
+}
+
+/** Redirect_uri value for a provider (RuName env for eBay, else our callback). */
+function redirectValue(provider: string, c: OAuthConfig): string | undefined {
+  if (c.redirectUriEnv) return process.env[c.redirectUriEnv];
+  return c.omitRedirectInAuth ? undefined : redirectUri(provider);
+}
+
 /** Exchange an auth code for a token set (access + optional refresh/expiry). */
 export async function exchangeCode(provider: string, code: string): Promise<TokenSet | null> {
   const c = OAUTH[provider as ProviderKey];
   if (!c) return null;
-  const fields: Record<string, string> = {
-    client_id: process.env[c.clientIdEnv] ?? "",
-    client_secret: process.env[c.clientSecretEnv] ?? "",
-    code,
-    grant_type: "authorization_code",
-  };
-  if (!c.omitRedirectInAuth) fields.redirect_uri = redirectUri(provider);
+
+  // TikTok Shop: GET token endpoint with app_key/app_secret/auth_code.
+  if (c.flavor === "tiktok") {
+    const p = new URLSearchParams({
+      app_key: process.env[c.clientIdEnv] ?? "",
+      app_secret: process.env[c.clientSecretEnv] ?? "",
+      auth_code: code,
+      grant_type: "authorized_code",
+    });
+    const res = await fetch(`${c.tokenUrl}?${p.toString()}`);
+    if (!res.ok) return null;
+    return tiktokTokenSet(await res.json());
+  }
+
+  const fields: Record<string, string> = { code, grant_type: "authorization_code" };
+  const redirect = redirectValue(provider, c);
+  if (redirect) fields.redirect_uri = redirect;
+  const extraHeaders: Record<string, string> = {};
+  if (c.authHeaderBasic) {
+    extraHeaders.Authorization = basicAuth(c);
+  } else {
+    fields.client_id = process.env[c.clientIdEnv] ?? "";
+    fields.client_secret = process.env[c.clientSecretEnv] ?? "";
+  }
 
   let res: Response;
   if (c.tokenStyle === "json") {
     res = await fetch(c.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(c.tokenHeaders ?? {}) },
+      headers: { "Content-Type": "application/json", ...(c.tokenHeaders ?? {}), ...extraHeaders },
       body: JSON.stringify(fields),
     });
   } else if (c.tokenStyle === "post") {
     res = await fetch(c.tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...extraHeaders },
       body: new URLSearchParams(fields).toString(),
     });
   } else {
-    res = await fetch(`${c.tokenUrl}?${new URLSearchParams(fields).toString()}`);
+    res = await fetch(`${c.tokenUrl}?${new URLSearchParams(fields).toString()}`, { headers: extraHeaders });
   }
   if (!res.ok) return null;
   return toTokenSet((await res.json()) as RawToken);
@@ -271,22 +355,41 @@ export async function exchangeCode(provider: string, code: string): Promise<Toke
 export async function refreshToken(provider: string, refresh: string): Promise<TokenSet | null> {
   const c = OAUTH[provider as ProviderKey];
   if (!c) return null;
-  const fields: Record<string, string> = {
-    client_id: process.env[c.clientIdEnv] ?? "",
-    client_secret: process.env[c.clientSecretEnv] ?? "",
-    refresh_token: refresh,
-    grant_type: "refresh_token",
-  };
+
+  // TikTok Shop: GET refresh endpoint with app_key/app_secret.
+  if (c.flavor === "tiktok") {
+    const p = new URLSearchParams({
+      app_key: process.env[c.clientIdEnv] ?? "",
+      app_secret: process.env[c.clientSecretEnv] ?? "",
+      refresh_token: refresh,
+      grant_type: "refresh_token",
+    });
+    const res = await fetch(`${c.tokenUrl}?${p.toString()}`);
+    if (!res.ok) return null;
+    const set = tiktokTokenSet(await res.json());
+    return set ? { ...set, refreshToken: set.refreshToken ?? refresh } : null;
+  }
+
+  const fields: Record<string, string> = { refresh_token: refresh, grant_type: "refresh_token" };
+  const extraHeaders: Record<string, string> = {};
+  if (c.authHeaderBasic) {
+    extraHeaders.Authorization = basicAuth(c);
+    if (c.scope) fields.scope = c.scope; // eBay requires scope on refresh
+  } else {
+    fields.client_id = process.env[c.clientIdEnv] ?? "";
+    fields.client_secret = process.env[c.clientSecretEnv] ?? "";
+  }
+
   const res =
     c.tokenStyle === "json"
       ? await fetch(c.tokenUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(c.tokenHeaders ?? {}) },
+          headers: { "Content-Type": "application/json", ...(c.tokenHeaders ?? {}), ...extraHeaders },
           body: JSON.stringify(fields),
         })
       : await fetch(c.tokenUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: { "Content-Type": "application/x-www-form-urlencoded", ...extraHeaders },
           body: new URLSearchParams(fields).toString(),
         });
   if (!res.ok) return null;
