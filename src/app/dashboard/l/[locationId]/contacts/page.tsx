@@ -54,7 +54,7 @@ export default async function ContactsPage({
   return (
     <div>
       <PageHeader
-        title="Customers"
+        title="Contacts"
         subtitle={`${contacts.length} contact${contacts.length === 1 ? "" : "s"}`}
         action={
           <div className="flex items-center gap-2">

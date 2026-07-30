@@ -110,34 +110,37 @@ function Section({
       {items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">{empty}</p>
       ) : (
-        <div className="card divide-y divide-slate-100">
+        <div className="card divide-y divide-slate-100 p-1.5">
           {items.map((a) => (
-            <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-800">{a.title}</span>
-                  <Badge color={statusColor[a.status]}>{a.status}</Badge>
-                </div>
-                <div className="text-xs text-slate-500">
-                  {formatDateTime(a.startAt)} · {a.calendar.name}
-                  {a.contact ? (
-                    <>
-                      {" · "}
-                      <Link href={`${base}/contacts/${a.contact.id}`} className="text-brand-600 hover:underline">
-                        {contactName(a.contact)}
-                      </Link>
-                    </>
-                  ) : null}
+            <div key={a.id} className="flex flex-col gap-2 px-2.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="tile bg-brand-50">📅</span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-slate-800">{a.title}</span>
+                    <Badge color={statusColor[a.status]}>{a.status}</Badge>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {formatDateTime(a.startAt)} · {a.calendar.name}
+                    {a.contact ? (
+                      <>
+                        {" · "}
+                        <Link href={`${base}/contacts/${a.contact.id}`} className="text-brand-600 hover:underline">
+                          {contactName(a.contact)}
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1 pl-[52px] sm:pl-0">
                 <StatusForm locationId={locationId} appointmentId={a.id} status="COMPLETED" label="Complete" />
                 <StatusForm locationId={locationId} appointmentId={a.id} status="NO_SHOW" label="No-show" />
                 <StatusForm locationId={locationId} appointmentId={a.id} status="CANCELLED" label="Cancel" />
                 <form action={deleteAppointmentAction}>
                   <input type="hidden" name="locationId" value={locationId} />
                   <input type="hidden" name="appointmentId" value={a.id} />
-                  <button className="rounded px-2 py-0.5 text-xs text-slate-400 hover:text-red-600">Delete</button>
+                  <button className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:text-red-600">Delete</button>
                 </form>
               </div>
             </div>

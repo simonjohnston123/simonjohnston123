@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PageHeader, EmptyState, Badge } from "@/components/ui";
+import { PageHeader, EmptyState, Badge, SegTabs } from "@/components/ui";
 import { NewTaskButton } from "@/components/new-task";
 import { toggleTaskAction, deleteTaskAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
@@ -27,6 +27,7 @@ export default async function TasksPage({ params }: { params: { locationId: stri
   const open = tasks.filter((t) => !t.completed);
   const done = tasks.filter((t) => t.completed);
   const now = new Date();
+  const base = `/dashboard/l/${params.locationId}`;
 
   return (
     <div>
@@ -34,6 +35,15 @@ export default async function TasksPage({ params }: { params: { locationId: stri
         title="Tasks"
         subtitle={`${open.length} open`}
         action={<NewTaskButton locationId={params.locationId} contacts={contactOptions} members={memberOptions} />}
+      />
+
+      <SegTabs
+        active="tasks"
+        items={[
+          { key: "contacts", label: "Contacts", href: `${base}/contacts` },
+          { key: "pipelines", label: "Deals", href: `${base}/pipelines` },
+          { key: "tasks", label: "Tasks", href: `${base}/tasks` },
+        ]}
       />
 
       {tasks.length === 0 ? (
@@ -84,14 +94,14 @@ function TaskList({
           {tasks.map((t) => {
             const overdue = !t.completed && t.dueAt && new Date(t.dueAt) < now;
             return (
-              <div key={t.id} className="flex items-start gap-3 px-4 py-3">
-                <form action={toggleTaskAction} className="pt-0.5">
+              <div key={t.id} className="flex items-start gap-3 px-3 py-3.5">
+                <form action={toggleTaskAction} className="shrink-0">
                   <input type="hidden" name="locationId" value={locationId} />
                   <input type="hidden" name="taskId" value={t.id} />
                   <input type="hidden" name="completed" value={String(t.completed)} />
                   <button
                     className={
-                      "flex h-5 w-5 items-center justify-center rounded border " +
+                      "grid h-6 w-6 place-items-center rounded-lg border text-sm transition " +
                       (t.completed ? "border-green-500 bg-green-500 text-white" : "border-slate-300 hover:border-brand-500")
                     }
                     aria-label={t.completed ? "Mark incomplete" : "Mark complete"}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PageHeader, EmptyState, Badge } from "@/components/ui";
+import { PageHeader, EmptyState, Badge, SegTabs } from "@/components/ui";
 import { NewOpportunityButton } from "@/components/new-opportunity";
 import { NewPipelineButton, StageEditor } from "@/components/pipeline-manager";
 import { StageSelect } from "@/components/stage-select";
@@ -82,6 +82,15 @@ export default async function PipelinesPage({
         }
       />
 
+      <SegTabs
+        active="pipelines"
+        items={[
+          { key: "contacts", label: "Contacts", href: `${base}/contacts` },
+          { key: "pipelines", label: "Deals", href: `${base}/pipelines` },
+          { key: "tasks", label: "Tasks", href: `${base}/tasks` },
+        ]}
+      />
+
       {pipelines.length > 1 ? (
         <div className="mb-4 flex gap-2">
           {pipelines.map((p) => (
@@ -96,12 +105,13 @@ export default async function PipelinesPage({
         </div>
       ) : null}
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {/* Stacks vertically on mobile (no horizontal scroll); kanban board on desktop. */}
+      <div className="flex flex-col gap-4 pb-4 lg:flex-row lg:overflow-x-auto">
         {active.stages.map((stage) => {
           const items = opportunities.filter((o) => o.stageId === stage.id);
           const stageValue = items.reduce((s, o) => s + o.value, 0);
           return (
-            <div key={stage.id} className="w-72 shrink-0">
+            <div key={stage.id} className="w-full shrink-0 lg:w-72">
               <div className="mb-2 flex items-center justify-between px-1">
                 <h3 className="text-sm font-semibold text-slate-700">{stage.name}</h3>
                 <span className="text-xs text-slate-400">{items.length} · {formatMoney(stageValue)}</span>
