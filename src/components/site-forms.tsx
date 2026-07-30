@@ -86,7 +86,18 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
   );
 }
 
-type Service = { id: string; name: string; price: number | null; durationMinutes: number; description: string | null };
+type IntakeField = { key: string; label: string; type: string; required?: boolean; options?: string[]; placeholder?: string };
+type Service = {
+  id: string;
+  name: string;
+  price: number | null;
+  durationMinutes: number;
+  description: string | null;
+  intakeFields?: IntakeField[];
+};
+
+// Contact basics are already collected in "Your details" — don't ask twice.
+const CONTACT_KEYS = new Set(["name", "your_name", "full_name", "first_name", "email", "email_address", "phone", "phone_number", "mobile", "contact_number"]);
 
 export function BookingForm({
   slug,
@@ -173,6 +184,9 @@ export function BookingForm({
   }
 
   const activeService = services.find((s) => s.id === serviceId) || null;
+  // Service-specific booking questions (e.g. rego, make/model) — skip contact
+  // basics already asked in "Your details".
+  const intake: IntakeField[] = (activeService?.intakeFields ?? []).filter((f) => f && f.key && !CONTACT_KEYS.has(f.key));
   const priceLabel = (p: number | null) => (p != null ? `$${p}` : "");
   // Show the picker when the visitor genuinely has a choice to make.
   const showPicker = !locked && services.length > 1;
@@ -389,6 +403,40 @@ export function BookingForm({
           <input name="phone" placeholder="Phone" className={inputBase} />
         </div>
       </div>
+
+      {/* Service-specific questions (e.g. rego, make/model, address) */}
+      {serviceId && intake.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-slate-800">
+            {activeService ? `About your ${activeService.name.toLowerCase().includes("roadworthy") || activeService.name.toLowerCase().includes("safety") ? "vehicle" : "booking"}` : "A few more details"}
+          </p>
+          {intake.map((f) => {
+            const nm = `intake:${f.key}`;
+            const ph = f.placeholder || f.label;
+            if (f.type === "textarea") {
+              return <textarea key={f.key} name={nm} required={f.required} rows={3} placeholder={ph} className={inputBase} />;
+            }
+            if (f.type === "select") {
+              return (
+                <select key={f.key} name={nm} required={f.required} defaultValue="" className={inputBase}>
+                  <option value="" disabled>{f.label}</option>
+                  {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              );
+            }
+            if (f.type === "checkbox") {
+              return (
+                <label key={f.key} className="flex items-center gap-2 text-slate-700">
+                  <input type="checkbox" name={nm} value="Yes" className="h-4 w-4" />
+                  <span>{f.label}{f.required ? " *" : ""}</span>
+                </label>
+              );
+            }
+            const htmlType = f.type === "phone" ? "tel" : f.type === "number" ? "number" : f.type === "date" ? "date" : f.type === "email" ? "email" : "text";
+            return <input key={f.key} name={nm} type={htmlType} required={f.required} placeholder={ph} className={inputBase} />;
+          })}
+        </div>
+      ) : null}
 
       {selected ? (
         <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-600">

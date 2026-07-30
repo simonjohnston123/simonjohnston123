@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   const services = await prisma.calendar.findMany({
     where: { locationId: location.id, active: true },
-    select: { id: true, name: true, price: true, durationMinutes: true, description: true },
+    select: { id: true, name: true, price: true, durationMinutes: true, description: true, intakeFields: true },
     orderBy: { createdAt: "asc" },
   });
 

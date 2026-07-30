@@ -175,6 +175,24 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
   if (Number.isNaN(startAt.getTime())) return { error: "That time doesn't look right." };
   const endAt = new Date(startAt.getTime() + calendar.durationMinutes * 60 * 1000);
 
+  // Service-specific answers (rego, make/model, address, …) posted as intake:<key>.
+  const intakeDefs = (Array.isArray(calendar.intakeFields) ? calendar.intakeFields : []) as Array<Record<string, unknown>>;
+  const labelFor = (key: string) => {
+    const d = intakeDefs.find((f) => String(f.key) === key);
+    return d ? String(d.label ?? key) : key.replace(/_/g, " ");
+  };
+  for (const f of intakeDefs) {
+    if (f.required && !String(formData.get(`intake:${String(f.key)}`) ?? "").trim()) {
+      return { error: `Please complete: ${String(f.label ?? f.key)}` };
+    }
+  }
+  const intakeLines: string[] = [];
+  for (const [k, v] of Array.from(formData.entries())) {
+    if (k.startsWith("intake:") && typeof v === "string" && v.trim()) {
+      intakeLines.push(`${labelFor(k.slice(7))}: ${v.trim()}`);
+    }
+  }
+
   // Prevent double-booking: reject if it clashes with an existing appointment
   // OR with a busy block synced in from the operator's Google Calendar.
   const clash = await prisma.appointment.findFirst({
@@ -209,7 +227,7 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
       startAt,
       endAt,
       status: "CONFIRMED",
-      notes: "Requested via website booking block",
+      notes: ["Requested via website booking", ...intakeLines].join("\n"),
     },
   });
   // Push to the operator's Google Calendar so it lands on their phone (fail-soft).
@@ -218,7 +236,9 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
   await logToInbox(
     location.id,
     contact.id,
-    `📅 Booking request\n${name || email || phone}\nPreferred time: ${startAt.toLocaleString("en-AU")}`,
+    `📅 Booking request\n${name || email || phone}\nPreferred time: ${startAt.toLocaleString("en-AU")}${
+      intakeLines.length ? `\n${intakeLines.join("\n")}` : ""
+    }`,
   );
 
   await fireTrigger(location.id, "FORM_SUBMITTED", { contactId: contact.id, triggerLabel: "Website booking" });
