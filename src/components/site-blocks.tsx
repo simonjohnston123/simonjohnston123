@@ -124,6 +124,37 @@ export function SiteBlocks({
               </section>
             );
           }
+          case "testimonials": {
+            const items = Array.isArray(block.items) ? (block.items as Record<string, unknown>[]) : [];
+            return (
+              <section key={i} className="bg-slate-50 px-6 py-16">
+                <div className="mx-auto max-w-5xl">
+                  {block.heading ? <h2 className="mb-8 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {items.map((it, j) => {
+                      const stars = Math.min(Math.max(parseInt(String(it.rating ?? "5"), 10) || 5, 1), 5);
+                      return (
+                        <figure key={j} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                          <div className="mb-3 flex gap-0.5" aria-label={`${stars} out of 5 stars`}>
+                            {Array.from({ length: 5 }).map((_, k) => (
+                              <span key={k} style={{ color: k < stars ? primaryColor : "#e2e8f0" }}>★</span>
+                            ))}
+                          </div>
+                          {it.quote ? <blockquote className="flex-1 text-slate-700">{`“${String(it.quote)}”`}</blockquote> : null}
+                          {(it.author || it.detail) ? (
+                            <figcaption className="mt-4 text-sm">
+                              {it.author ? <span className="font-semibold text-slate-900">{String(it.author)}</span> : null}
+                              {it.detail ? <span className="text-slate-500">{it.author ? " · " : ""}{String(it.detail)}</span> : null}
+                            </figcaption>
+                          ) : null}
+                        </figure>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            );
+          }
           case "cta":
             return (
               <section key={i} className="px-6 py-16 text-center text-white" style={{ background: primaryColor }}>

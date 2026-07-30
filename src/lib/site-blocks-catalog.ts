@@ -115,6 +115,30 @@ export const BLOCK_DEFS: BlockDef[] = [
     default: { heading: "Frequently asked questions", items: [{ q: "A question?", a: "An answer." }] },
   },
   {
+    type: "testimonials",
+    label: "Testimonials",
+    icon: "★",
+    category: "Content",
+    fields: [
+      { k: "heading", label: "Heading", kind: "text" },
+      {
+        k: "items",
+        label: "Reviews",
+        kind: "items",
+        itemFields: [
+          { k: "quote", label: "Quote", kind: "textarea" },
+          { k: "author", label: "Name", kind: "text" },
+          { k: "detail", label: "Detail (location / vehicle)", kind: "text" },
+          { k: "rating", label: "Stars (1–5)", kind: "text" },
+        ],
+      },
+    ],
+    default: {
+      heading: "What our customers say",
+      items: [{ quote: "Add a real customer review here.", author: "Customer name", detail: "Lockyer Valley", rating: "5" }],
+    },
+  },
+  {
     type: "image",
     label: "Image",
     icon: "▣",
