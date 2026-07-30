@@ -99,6 +99,60 @@ export async function submitLeadAction(_prev: unknown, formData: FormData): Prom
   return { ok: true, error: "" };
 }
 
+/** Standalone form/survey submission (shared /f/[id] link) → contact + inbox. */
+export async function submitFormAction(_prev: unknown, formData: FormData): Promise<Result> {
+  const formId = String(formData.get("formId") ?? "");
+  if (!formId) return { error: "Something went wrong." };
+
+  const form = await prisma.form.findUnique({ where: { id: formId } });
+  if (!form) return { error: "This form is no longer available." };
+
+  const fields = (Array.isArray(form.fields) ? form.fields : []) as Array<Record<string, unknown>>;
+  const data: Record<string, string> = {};
+  for (const f of fields) {
+    const key = String(f.key ?? "");
+    if (!key) continue;
+    const val = String(formData.get(key) ?? "").trim();
+    if (f.required && !val) return { error: `Please complete: ${String(f.label ?? key)}` };
+    if (val) data[key] = val;
+  }
+
+  const pick = (...keys: string[]) => {
+    for (const k of keys) if (data[k]) return data[k];
+    return "";
+  };
+  const name = pick("name", "your_name", "full_name", "first_name");
+  const email = pick("email", "email_address");
+  const phone = pick("phone", "phone_number", "mobile", "contact_number");
+
+  const isSurvey = form.type === "SURVEY";
+  const contact = await upsertLeadContact(form.locationId, {
+    name,
+    email,
+    phone,
+    source: isSurvey ? "Survey" : "Form",
+    note: `${isSurvey ? "Survey" : "Form"}: ${form.name}`,
+  });
+
+  await prisma.formSubmission.create({
+    data: { formId: form.id, locationId: form.locationId, contactId: contact.id, data },
+  });
+
+  const summary = [
+    `${isSurvey ? "📋 Survey" : "📝 Form"}: ${form.name}`,
+    ...fields.map((f) => {
+      const v = data[String(f.key ?? "")];
+      return v ? `${String(f.label ?? f.key)}: ${v}` : null;
+    }),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  await logToInbox(form.locationId, contact.id, summary);
+
+  await fireTrigger(form.locationId, "FORM_SUBMITTED", { contactId: contact.id, triggerLabel: form.name });
+  return { ok: true, error: "" };
+}
+
 /** Public website booking request → contact + appointment + fires automations. */
 export async function bookingRequestAction(_prev: unknown, formData: FormData): Promise<Result> {
   const slug = String(formData.get("slug") ?? "");

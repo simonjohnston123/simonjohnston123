@@ -90,6 +90,7 @@ model Location {
   homesteadBookings HomesteadBooking[]
   homesteadSettings HomesteadSettings?
   externalBusy      ExternalBusy[]
+  forms             Form[]
 
   @@index([agencyId])
 }
@@ -354,6 +355,9 @@ model Calendar {
   // Weekly availability: { "1": [["09:00","17:00"]], ... } keyed by weekday 0=Sun..6=Sat.
   availability     Json    @default("{}")
   bookingWindowDays Int    @default(14)
+  // Per-service booking questions asked at booking time (rego, make/model, …).
+  // Same shape as Form.fields: [{ key, label, type, required, options?, placeholder? }]
+  intakeFields Json         @default("[]")
   createdAt  DateTime      @default(now())
   appointments Appointment[]
 
@@ -405,6 +409,46 @@ model ExternalBusy {
 
   @@unique([locationId, provider, externalId])
   @@index([locationId, startAt])
+}
+
+// ---------------------------------------------------------------------------
+// Forms & Surveys — standalone, shareable, submissions feed Contacts + inbox.
+// ---------------------------------------------------------------------------
+
+enum FormType {
+  FORM
+  SURVEY
+}
+
+model Form {
+  id          String   @id @default(cuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name        String
+  type        FormType @default(FORM)
+  description String?  @db.Text // what it's for — also seeds AI generation
+  // Field list: [{ key, label, type, required, options?, placeholder? }]
+  fields      Json     @default("[]")
+  submitLabel String   @default("Submit")
+  thankYou    String   @default("Thanks — we'll be in touch shortly.") @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  submissions FormSubmission[]
+
+  @@index([locationId])
+}
+
+model FormSubmission {
+  id         String   @id @default(cuid())
+  formId     String
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  locationId String
+  contactId  String?
+  data       Json     // { fieldKey: value, ... }
+  createdAt  DateTime @default(now())
+
+  @@index([formId])
+  @@index([locationId])
 }
 
 // ---------------------------------------------------------------------------

@@ -49,6 +49,34 @@ export default async function WebsitePage({ params }: { params: { locationId: st
         {site.customDomain ? <> · custom domain <code className="font-mono">{site.customDomain}</code></> : null}
       </div>
 
+      {/* Website hub: everything a business builds, each with an AI assist. */}
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href={`/dashboard/l/${params.locationId}/setup`} className="card border-brand-200 bg-brand-50/40 p-5 transition hover:border-brand-300">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✨</span>
+            <h3 className="font-semibold text-slate-900">AI setup</h3>
+            <Badge color="blue">Start here</Badge>
+          </div>
+          <p className="mt-2 text-sm text-slate-600">Answer a few questions and AI builds your services, booking questions and forms — live.</p>
+        </Link>
+
+        <Link href={`/dashboard/l/${params.locationId}/forms`} className="card p-5 transition hover:border-slate-300">
+          <div className="flex items-center gap-2"><span className="text-xl">📝</span><h3 className="font-semibold text-slate-900">Forms &amp; Surveys</h3></div>
+          <p className="mt-2 text-sm text-slate-600">Describe a form or survey and AI builds the fields. Share a link; responses land in Contacts.</p>
+        </Link>
+
+        <Link href={`/dashboard/l/${params.locationId}/calendar`} className="card p-5 transition hover:border-slate-300">
+          <div className="flex items-center gap-2"><span className="text-xl">📅</span><h3 className="font-semibold text-slate-900">Calendars &amp; Services</h3></div>
+          <p className="mt-2 text-sm text-slate-600">Your bookable services — prices, durations, availability and booking questions.</p>
+        </Link>
+
+        <Link href={`/build/${params.locationId}`} className="card p-5 transition hover:border-slate-300">
+          <div className="flex items-center gap-2"><span className="text-xl">🛍️</span><h3 className="font-semibold text-slate-900">Products</h3></div>
+          <p className="mt-2 text-sm text-slate-600">Add product blocks to your pages in the builder. Dedicated manager coming next.</p>
+        </Link>
+      </div>
+
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Pages</h2>
       <WebsiteWorkspace
         locationId={params.locationId}
         siteSlug={location.slug}
