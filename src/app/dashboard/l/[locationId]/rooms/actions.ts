@@ -44,6 +44,20 @@ export async function deleteRoomAction(formData: FormData) {
   revalidatePath(`/dashboard/l/${locationId}/rooms`);
 }
 
+export async function addClientAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  if (!firstName && !lastName && !email && !phone) return;
+  await prisma.contact.create({
+    data: { locationId, firstName: firstName || null, lastName: lastName || null, email: email || null, phone: phone || null, source: "Rooms" },
+  });
+  revalidatePath(`/dashboard/l/${locationId}/rooms`);
+}
+
 export async function saveHomesteadSettingsAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
   await requireLocationAccess(locationId);
