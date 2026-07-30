@@ -33,6 +33,14 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
 
   const label = (await oauthConfig(provider)?.fetchLabel?.(tok.accessToken)) ?? null;
 
+  // Store the whole token set so refresh-token flows (Google) keep working after
+  // the short-lived access token expires.
+  const secret = encryptJson({
+    accessToken: tok.accessToken,
+    refreshToken: tok.refreshToken,
+    expiresAt: tok.expiresAt,
+  });
+
   await prisma.connection.upsert({
     where: { locationId_provider: { locationId, provider: provider as ConnectionProvider } },
     create: {
@@ -40,12 +48,12 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
       provider: provider as ConnectionProvider,
       status: "CONNECTED",
       accountLabel: label,
-      secretCipher: encryptJson({ accessToken: tok.accessToken }),
+      secretCipher: secret,
     },
     update: {
       status: "CONNECTED",
       accountLabel: label,
-      secretCipher: encryptJson({ accessToken: tok.accessToken }),
+      secretCipher: secret,
     },
   });
 

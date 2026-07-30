@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
+import { pushAppointment, deleteAppointmentEvent } from "@/lib/google-calendar";
 
 const schema = z.object({
   title: z.string().min(1, "Enter a title."),
@@ -37,7 +38,7 @@ export async function createAppointmentAction(_prev: unknown, formData: FormData
   if (Number.isNaN(start.getTime())) return { error: "Invalid start time." };
   const end = new Date(start.getTime() + parsed.data.durationMinutes * 60000);
 
-  await prisma.appointment.create({
+  const created = await prisma.appointment.create({
     data: {
       locationId,
       calendarId: parsed.data.calendarId,
@@ -48,6 +49,8 @@ export async function createAppointmentAction(_prev: unknown, formData: FormData
       notes: parsed.data.notes || null,
     },
   });
+  // Mirror to the operator's Google Calendar if connected (fail-soft).
+  await pushAppointment(locationId, created);
   revalidatePath(`/dashboard/l/${locationId}/calendar`);
   return { error: "", ok: true };
 }
@@ -57,7 +60,11 @@ export async function setAppointmentStatusAction(formData: FormData) {
   const appointmentId = String(formData.get("appointmentId") ?? "");
   const status = String(formData.get("status") ?? "CONFIRMED") as "CONFIRMED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
   await requireLocationAccess(locationId);
-  await prisma.appointment.update({ where: { id: appointmentId, locationId }, data: { status } });
+  const appt = await prisma.appointment.update({ where: { id: appointmentId, locationId }, data: { status } });
+  // A cancelled/no-show slot frees up — remove its Google event too.
+  if ((status === "CANCELLED" || status === "NO_SHOW") && appt.externalEventId) {
+    await deleteAppointmentEvent(locationId, appt.externalEventId);
+  }
   revalidatePath(`/dashboard/l/${locationId}/calendar`);
 }
 
@@ -65,7 +72,9 @@ export async function deleteAppointmentAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
   const appointmentId = String(formData.get("appointmentId") ?? "");
   await requireLocationAccess(locationId);
+  const appt = await prisma.appointment.findFirst({ where: { id: appointmentId, locationId } });
   await prisma.appointment.delete({ where: { id: appointmentId, locationId } });
+  if (appt?.externalEventId) await deleteAppointmentEvent(locationId, appt.externalEventId);
   revalidatePath(`/dashboard/l/${locationId}/calendar`);
 }
 

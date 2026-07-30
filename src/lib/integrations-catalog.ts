@@ -129,7 +129,7 @@ export const PROVIDERS: ProviderDef[] = [
     name: "Google Calendar",
     icon: "📅",
     category: "Calendar",
-    blurb: "Sync bookings with your Google Calendar.",
+    blurb: "Two-way sync: bookings appear in your Google Calendar, and your Google events block out booking slots.",
     connectType: "oauth",
     ready: false,
   },

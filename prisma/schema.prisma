@@ -89,6 +89,7 @@ model Location {
   homesteadRooms    HomesteadRoom[]
   homesteadBookings HomesteadBooking[]
   homesteadSettings HomesteadSettings?
+  externalBusy      ExternalBusy[]
 
   @@index([agencyId])
 }
@@ -380,9 +381,29 @@ model Appointment {
   endAt      DateTime
   status     AppointmentStatus @default(CONFIRMED)
   notes      String?           @db.Text
+  // Google Calendar event id when this appointment has been pushed out (2-way sync).
+  externalEventId String?
   createdAt  DateTime          @default(now())
 
   @@index([locationId])
+  @@index([locationId, startAt])
+}
+
+// Busy blocks pulled IN from an external calendar (e.g. the operator's Google
+// Calendar). These aren't Placid bookings — they exist only to stop the slot
+// engine from offering times the operator is already committed elsewhere.
+model ExternalBusy {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  provider   ConnectionProvider @default(GOOGLE_CALENDAR)
+  externalId String   // event id in the source calendar
+  startAt    DateTime
+  endAt      DateTime
+  summary    String?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([locationId, provider, externalId])
   @@index([locationId, startAt])
 }
 

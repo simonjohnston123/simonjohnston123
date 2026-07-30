@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { fireTrigger } from "@/lib/automations";
+import { pushAppointment, externalBusyForCalendar } from "@/lib/google-calendar";
 
 type Result = { ok?: boolean; error: string };
 
@@ -120,7 +121,8 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
   if (Number.isNaN(startAt.getTime())) return { error: "That time doesn't look right." };
   const endAt = new Date(startAt.getTime() + calendar.durationMinutes * 60 * 1000);
 
-  // Prevent double-booking: reject if it clashes with an existing appointment.
+  // Prevent double-booking: reject if it clashes with an existing appointment
+  // OR with a busy block synced in from the operator's Google Calendar.
   const clash = await prisma.appointment.findFirst({
     where: {
       calendarId: calendar.id,
@@ -131,6 +133,11 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
   });
   if (clash) return { error: "Sorry, that time was just taken — please pick another." };
 
+  const externalClash = (await externalBusyForCalendar(location.id, startAt, endAt)).some(
+    (b) => b.startAt < endAt && b.endAt > startAt,
+  );
+  if (externalClash) return { error: "Sorry, that time was just taken — please pick another." };
+
   const contact = await upsertLeadContact(location.id, {
     name,
     email,
@@ -139,7 +146,7 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
     note: "Requested a booking via the website",
   });
 
-  await prisma.appointment.create({
+  const appt = await prisma.appointment.create({
     data: {
       locationId: location.id,
       calendarId: calendar.id,
@@ -151,6 +158,8 @@ export async function bookingRequestAction(_prev: unknown, formData: FormData): 
       notes: "Requested via website booking block",
     },
   });
+  // Push to the operator's Google Calendar so it lands on their phone (fail-soft).
+  await pushAppointment(location.id, appt);
 
   await logToInbox(
     location.id,

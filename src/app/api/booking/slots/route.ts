@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAvailableSlots } from "@/lib/booking";
+import { syncBusy, externalBusyForCalendar } from "@/lib/google-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +17,24 @@ export async function GET(req: NextRequest) {
   const calendar = await prisma.calendar.findFirst({ where: { id: calendarId, locationId: location.id } });
   if (!calendar) return NextResponse.json({ slots: [] });
 
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + Math.min(Math.max(calendar.bookingWindowDays || 14, 1), 60) * 86400000);
+
   const appointments = await prisma.appointment.findMany({
-    where: { calendarId: calendar.id, status: "CONFIRMED", endAt: { gte: new Date() } },
+    where: { calendarId: calendar.id, status: "CONFIRMED", endAt: { gte: now } },
     select: { startAt: true, endAt: true },
   });
 
+  // Refresh the operator's Google Calendar busy blocks (throttled, fail-soft),
+  // then fold them into the clash set so we never offer a time they're booked.
+  await syncBusy(location.id);
+  const externalBusy = await externalBusyForCalendar(location.id, now, windowEnd);
+
   const slots = getAvailableSlots(
     { durationMinutes: calendar.durationMinutes, availability: calendar.availability, bookingWindowDays: calendar.bookingWindowDays },
-    appointments,
+    [...appointments, ...externalBusy],
     location.timezone || "Australia/Brisbane",
-    new Date(),
+    now,
   );
 
   return NextResponse.json({ slots });

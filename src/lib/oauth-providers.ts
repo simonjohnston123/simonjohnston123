@@ -14,7 +14,12 @@ type OAuthConfig = {
   authUrl: string;
   tokenUrl: string;
   scope: string;
-  /** Fetch a human label (page/account name) for display, given the token. */
+  /** How the token endpoint is called: Meta takes query params on a GET-style
+   *  URL; Google (and most OAuth2 servers) take a POST form body. */
+  tokenStyle?: "query" | "post";
+  /** Extra params appended to the consent URL (e.g. Google's offline access). */
+  authParams?: Record<string, string>;
+  /** Fetch a human label (page/account name/email) for display, given the token. */
   fetchLabel?: (accessToken: string) => Promise<string | null>;
 };
 
@@ -29,6 +34,27 @@ async function metaLabel(token: string): Promise<string | null> {
   }
 }
 
+async function googleEmail(token: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { email?: string };
+    return json.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
+// Gmail, Google Calendar and Google Business all share ONE Google Cloud app
+// (same client id/secret) — only the requested scopes differ.
+const GOOGLE_ID_ENV = "GOOGLE_CLIENT_ID";
+const GOOGLE_SECRET_ENV = "GOOGLE_CLIENT_SECRET";
+const GOOGLE_OFFLINE = { access_type: "offline", prompt: "consent", include_granted_scopes: "true" };
+
 // Facebook + Instagram share ONE Meta app (same App ID/Secret, different scopes).
 export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
   FACEBOOK: {
@@ -37,6 +63,7 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     authUrl: "https://www.facebook.com/v21.0/dialog/oauth",
     tokenUrl: `${GRAPH}/oauth/access_token`,
     scope: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,business_management",
+    tokenStyle: "query",
     fetchLabel: metaLabel,
   },
   INSTAGRAM: {
@@ -45,7 +72,18 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     authUrl: "https://www.facebook.com/v21.0/dialog/oauth",
     tokenUrl: `${GRAPH}/oauth/access_token`,
     scope: "instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata,business_management",
+    tokenStyle: "query",
     fetchLabel: metaLabel,
+  },
+  GOOGLE_CALENDAR: {
+    clientIdEnv: GOOGLE_ID_ENV,
+    clientSecretEnv: GOOGLE_SECRET_ENV,
+    authUrl: GOOGLE_AUTH,
+    tokenUrl: GOOGLE_TOKEN,
+    scope: "https://www.googleapis.com/auth/calendar.events openid email",
+    tokenStyle: "post",
+    authParams: GOOGLE_OFFLINE,
+    fetchLabel: googleEmail,
   },
 };
 
@@ -105,12 +143,21 @@ export function buildAuthUrl(provider: string, state: string): string | null {
     scope: c.scope,
     response_type: "code",
     state,
+    ...(c.authParams ?? {}),
   });
   return `${c.authUrl}?${params.toString()}`;
 }
 
-/** Exchange an auth code for an access token. */
-export async function exchangeCode(provider: string, code: string): Promise<{ accessToken: string; raw: unknown } | null> {
+export type TokenSet = {
+  accessToken: string;
+  refreshToken?: string;
+  /** Absolute expiry time (ms since epoch), when the provider tells us. */
+  expiresAt?: number;
+  raw: unknown;
+};
+
+/** Exchange an auth code for a token set (access + optional refresh/expiry). */
+export async function exchangeCode(provider: string, code: string): Promise<TokenSet | null> {
   const c = OAUTH[provider as ProviderKey];
   if (!c) return null;
   const params = new URLSearchParams({
@@ -118,12 +165,51 @@ export async function exchangeCode(provider: string, code: string): Promise<{ ac
     client_secret: process.env[c.clientSecretEnv] ?? "",
     redirect_uri: redirectUri(provider),
     code,
+    grant_type: "authorization_code",
   });
-  const res = await fetch(`${c.tokenUrl}?${params.toString()}`);
+  const res =
+    c.tokenStyle === "post"
+      ? await fetch(c.tokenUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        })
+      : await fetch(`${c.tokenUrl}?${params.toString()}`);
   if (!res.ok) return null;
-  const json = (await res.json()) as { access_token?: string };
+  const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
   if (!json.access_token) return null;
-  return { accessToken: json.access_token, raw: json };
+  return {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token,
+    expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+    raw: json,
+  };
+}
+
+/** Trade a refresh token for a fresh access token (Google-style POST). */
+export async function refreshToken(provider: string, refresh: string): Promise<TokenSet | null> {
+  const c = OAUTH[provider as ProviderKey];
+  if (!c) return null;
+  const params = new URLSearchParams({
+    client_id: process.env[c.clientIdEnv] ?? "",
+    client_secret: process.env[c.clientSecretEnv] ?? "",
+    refresh_token: refresh,
+    grant_type: "refresh_token",
+  });
+  const res = await fetch(c.tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!json.access_token) return null;
+  return {
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token ?? refresh, // Google usually omits it on refresh
+    expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+    raw: json,
+  };
 }
 
 /** Parse Meta's signed_request (used by data-deletion & deauthorize callbacks). */
