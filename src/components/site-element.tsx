@@ -1,7 +1,33 @@
 // Pure, hook-free renderers shared by the builder canvas AND the public site,
 // so the preview matches the live page exactly. No client interactivity here.
+import type { CSSProperties } from "react";
 
 export type Element = { type: string; [k: string]: unknown };
+
+// Per-element style overrides set in the builder's Style tab (element.style).
+function styleObj(st?: Record<string, unknown>): CSSProperties {
+  if (!st) return {};
+  const o: CSSProperties = {};
+  const num = (v: unknown) => (v == null || v === "" ? undefined : Number(v));
+  if (st.bg) o.background = String(st.bg);
+  if (st.color) o.color = String(st.color);
+  if (st.align) o.textAlign = st.align as CSSProperties["textAlign"];
+  if (num(st.padTop) != null) o.paddingTop = num(st.padTop);
+  if (num(st.padRight) != null) o.paddingRight = num(st.padRight);
+  if (num(st.padBottom) != null) o.paddingBottom = num(st.padBottom);
+  if (num(st.padLeft) != null) o.paddingLeft = num(st.padLeft);
+  if (num(st.marginTop) != null) o.marginTop = num(st.marginTop);
+  if (num(st.marginBottom) != null) o.marginBottom = num(st.marginBottom);
+  if (num(st.radius) != null) o.borderRadius = num(st.radius);
+  if (num(st.maxWidth)) { o.maxWidth = num(st.maxWidth); o.marginLeft = "auto"; o.marginRight = "auto"; }
+  return o;
+}
+
+export function SiteElement(props: { element: Element; primaryColor: string }) {
+  const st = styleObj(props.element.style as Record<string, unknown> | undefined);
+  const inner = renderInner(props);
+  return Object.keys(st).length ? <div style={st}>{inner}</div> : inner;
+}
 export type Column = { width?: number; elements?: Element[] };
 export type RowBlock = { type: "row"; columns?: Column[] } & Record<string, unknown>;
 
@@ -14,7 +40,7 @@ const headingSize = (s: unknown) =>
 const roundClass = (r: unknown) =>
   r === "full" ? "rounded-full" : r === "none" ? "rounded-none" : "rounded-xl";
 
-export function SiteElement({ element, primaryColor }: { element: Element; primaryColor: string }) {
+function renderInner({ element, primaryColor }: { element: Element; primaryColor: string }) {
   const s = (k: string) => String(element[k] ?? "");
   switch (element.type) {
     case "heading":

@@ -82,6 +82,11 @@ export function BuilderShell({
   const delCol = (b: number, c: number) => setBlocks((bs) => bs.map((blk, bi) => (bi !== b ? blk : { ...blk, columns: (blk.columns ?? []).filter((_, k) => k !== c) })));
 
   const dropOnCol = (b: number, c: number) => { const d = drag.current; drag.current = null; setOver(null); if (d?.kind === "el" && d.type) addEl(b, c, d.type); };
+  const setElStyle = (k: string, v: unknown) => {
+    if (!sel || sel.c == null || sel.e == null) return;
+    const cur = ((blocks[sel.b]?.columns?.[sel.c]?.elements?.[sel.e]?.style) as Record<string, unknown>) ?? {};
+    updateEl(sel.b, sel.c, sel.e, { style: { ...cur, [k]: v } });
+  };
 
   // Autosave — 2s debounce after any change to blocks/title/SEO.
   const firstRun = useRef(true);
@@ -295,12 +300,18 @@ export function BuilderShell({
         <div className="pb-insp-scroll">
           {selEl ? (
             <div className="pb-block">
-              <h3>Content</h3>
-              <div style={{ display: "grid", gap: 10 }}>
-                {(elementDef(selEl.type)?.fields ?? []).map((f) => (
-                  <FieldEditor key={f.k} field={f} block={selEl} calendars={calendars} onChange={(patch) => updateEl(sel!.b, sel!.c!, sel!.e!, patch)} />
-                ))}
-              </div>
+              {tab === "style" ? (
+                <StyleControls st={(selEl.style as Record<string, unknown>) ?? {}} set={setElStyle} />
+              ) : (
+                <>
+                  <h3>Content</h3>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {(elementDef(selEl.type)?.fields ?? []).map((f) => (
+                      <FieldEditor key={f.k} field={f} block={selEl} calendars={calendars} onChange={(patch) => updateEl(sel!.b, sel!.c!, sel!.e!, patch)} />
+                    ))}
+                  </div>
+                </>
+              )}
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button type="button" className="btn-secondary" style={{ flex: 1, fontSize: 12 }} onClick={() => dupEl(sel!.b, sel!.c!, sel!.e!)}>Duplicate</button>
                 <button type="button" style={{ flex: 1, fontSize: 12, background: "rgba(255,107,107,.15)", color: "#FF9B9B", borderRadius: 6, padding: "7px" }} onClick={() => delEl(sel!.b, sel!.c!, sel!.e!)}>Delete</button>
@@ -355,5 +366,52 @@ export function BuilderShell({
         </div>
       </footer>
     </form>
+  );
+}
+
+function StyleControls({ st, set }: { st: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
+  const v = (k: string) => (st[k] == null ? "" : String(st[k]));
+  const pad = (k: string, label: string) => (
+    <div key={k}><label className="pb-unit" style={{ display: "block", marginBottom: 2 }}>{label}</label><input type="number" value={v(k)} onChange={(e) => set(k, e.target.value)} className="pb-control" style={{ padding: "5px 7px" }} /></div>
+  );
+  return (
+    <>
+      <h3>Style</h3>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div className="pb-field"><label>Align</label>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["left", "center", "right"] as const).map((a) => (
+              <button key={a} type="button" onClick={() => set("align", a)} className="pb-bp-chip" aria-pressed={st.align === a} style={{ textTransform: "capitalize" }}>{a}</button>
+            ))}
+          </div>
+        </div>
+        <div className="pb-field"><label>Background</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="color" value={v("bg") || "#ffffff"} onChange={(e) => set("bg", e.target.value)} style={{ width: 30, height: 26, padding: 0, border: "none", background: "none", cursor: "pointer" }} />
+            <button type="button" className="pb-unit" onClick={() => set("bg", "")}>clear</button>
+          </div>
+        </div>
+        <div className="pb-field"><label>Text colour</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="color" value={v("color") || "#12161C"} onChange={(e) => set("color", e.target.value)} style={{ width: 30, height: 26, padding: 0, border: "none", background: "none", cursor: "pointer" }} />
+            <button type="button" className="pb-unit" onClick={() => set("color", "")}>clear</button>
+          </div>
+        </div>
+        <div className="pb-field"><label>Radius</label><div className="pb-stepper"><input type="number" value={v("radius")} onChange={(e) => set("radius", e.target.value)} /><span>PX</span></div></div>
+        <div className="pb-field"><label>Max width</label><div className="pb-stepper"><input type="number" value={v("maxWidth")} placeholder="full" onChange={(e) => set("maxWidth", e.target.value)} /><span>PX</span></div></div>
+      </div>
+
+      <h3 style={{ marginTop: 16 }}>Spacing <span className="pb-unit">px</span></h3>
+      <div className="pb-box">
+        <div className="pb-bm-tag" style={{ marginBottom: 6 }}>PADDING</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+          {pad("padTop", "Top")}{pad("padRight", "Right")}{pad("padBottom", "Bottom")}{pad("padLeft", "Left")}
+        </div>
+        <div className="pb-bm-tag" style={{ margin: "10px 0 6px" }}>MARGIN</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {pad("marginTop", "Top")}{pad("marginBottom", "Bottom")}
+        </div>
+      </div>
+    </>
   );
 }
