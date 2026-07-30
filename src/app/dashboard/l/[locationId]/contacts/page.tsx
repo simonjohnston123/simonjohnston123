@@ -1,12 +1,23 @@
 import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PageHeader, EmptyState, Badge } from "@/components/ui";
+import { PageHeader, EmptyState, Badge, SegTabs } from "@/components/ui";
 import { NewContactButton } from "@/components/contact-form";
 import { ImportContactsButton } from "@/components/import-contacts";
 import { contactName, formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+function initials(name: string): string {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
 
 export default async function ContactsPage({
   params,
@@ -43,7 +54,7 @@ export default async function ContactsPage({
   return (
     <div>
       <PageHeader
-        title="Contacts"
+        title="Customers"
         subtitle={`${contacts.length} contact${contacts.length === 1 ? "" : "s"}`}
         action={
           <div className="flex items-center gap-2">
@@ -53,13 +64,17 @@ export default async function ContactsPage({
         }
       />
 
+      <SegTabs
+        active="contacts"
+        items={[
+          { key: "contacts", label: "Contacts", href: `${base}/contacts` },
+          { key: "pipelines", label: "Deals", href: `${base}/pipelines` },
+          { key: "tasks", label: "Tasks", href: `${base}/tasks` },
+        ]}
+      />
+
       <form className="mb-4" action={`${base}/contacts`}>
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Search by name, email, phone or company…"
-          className="input max-w-md"
-        />
+        <input name="q" defaultValue={q} placeholder="Search name, email, phone or company…" className="input" />
       </form>
 
       {contacts.length === 0 ? (
@@ -69,40 +84,28 @@ export default async function ContactsPage({
           action={<NewContactButton locationId={params.locationId} />}
         />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="hidden px-4 py-3 sm:table-cell">Tags</th>
-                <th className="hidden px-4 py-3 lg:table-cell">Added</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {contacts.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Link href={`${base}/contacts/${c.id}`} className="font-medium text-slate-800 hover:text-brand-700">
-                      {contactName(c)}
-                    </Link>
-                    {c.companyName ? <div className="text-xs text-slate-400">{c.companyName}</div> : null}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{c.email || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{c.phone || "—"}</td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <div className="flex flex-wrap gap-1">
-                      {c.tags.slice(0, 3).map((t) => (
-                        <Badge key={t.tagId} color="blue">{t.tag.name}</Badge>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="hidden px-4 py-3 text-slate-500 lg:table-cell">{formatDate(c.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="card overflow-hidden p-1.5">
+          {contacts.map((c) => {
+            const name = contactName(c);
+            return (
+              <Link key={c.id} href={`${base}/contacts/${c.id}`} className="list-row">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-semibold text-white">
+                  {initials(name)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-slate-800">{name}</span>
+                    {c.tags[0] ? <Badge color="blue">{c.tags[0].tag.name}</Badge> : null}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">
+                    {c.email || c.phone || c.companyName || "No contact details"}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 text-xs text-slate-400 sm:block">{formatDate(c.createdAt)}</span>
+                <span className="shrink-0 text-slate-300">›</span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

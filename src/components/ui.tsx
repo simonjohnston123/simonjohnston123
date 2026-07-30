@@ -1,4 +1,28 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+/** Segmented control used to switch between a hub's sub-views. */
+export function SegTabs({
+  items,
+  active,
+}: {
+  items: { key: string; label: string; href: string }[];
+  active: string;
+}) {
+  return (
+    <div className="seg mb-4 flex w-full sm:inline-flex sm:w-auto">
+      {items.map((it) => (
+        <Link
+          key={it.key}
+          href={it.href}
+          className={cn("seg-item flex-1 text-center sm:flex-none", it.key === active && "seg-item-active")}
+        >
+          {it.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 export function PageHeader({
   title,
