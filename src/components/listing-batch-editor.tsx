@@ -26,20 +26,17 @@ type BatchData = { id: string; name: string; marketplace: string; status: string
 export function ListingBatchEditor({ locationId, batch, items }: { locationId: string; batch: BatchData; items: ItemData[] }) {
   const rb = rulebook(batch.marketplace);
   const [msg, setMsg] = useState("");
+  const [confirm, setConfirm] = useState<null | "publish" | "delete">(null);
   const [pending, start] = useTransition();
 
   if (!rb) return <p className="text-sm text-rose-600">Unknown marketplace.</p>;
 
   const publish = () => {
-    if (!rb.available) { setMsg(`Publishing to ${rb.label} is coming soon — you can still draft and optimise here.`); return; }
-    if (!window.confirm(`Publish ${items.length} listing(s) to ${rb.label} now?`)) return;
+    setConfirm(null);
     start(async () => setMsg((await publishBatchAction(locationId, batch.id)).message));
   };
   const optimiseAll = () => start(async () => setMsg((await optimiseItemAction()).message));
-  const del = () => {
-    if (!window.confirm("Delete this whole batch? The drafts are removed (published listings stay live).")) return;
-    start(async () => { await deleteBatchAction(locationId, batch.id); });
-  };
+  const del = () => start(async () => { await deleteBatchAction(locationId, batch.id); });
 
   return (
     <div className="space-y-4">
@@ -48,13 +45,33 @@ export function ListingBatchEditor({ locationId, batch, items }: { locationId: s
           <div className="font-semibold text-slate-900">{batch.name}</div>
           <div className="text-xs text-brand-600">{rb.label} · {items.length} item{items.length === 1 ? "" : "s"}</div>
         </div>
-        <button onClick={optimiseAll} disabled={pending} className="btn-secondary text-sm disabled:opacity-50" title="AI optimisation (Phase 3)">
-          ✨ Optimise all
-        </button>
-        <button onClick={publish} disabled={pending} className="btn-primary text-sm disabled:opacity-50">
-          {pending ? "Working…" : rb.available ? `⬆ Publish to ${rb.label}` : "Publish (soon)"}
-        </button>
-        <button onClick={del} disabled={pending} className="text-sm text-slate-400 hover:text-rose-600" title="Delete batch">🗑</button>
+        {confirm === "publish" ? (
+          <>
+            <span className="text-sm text-slate-600">Publish {items.length} to {rb.label}?</span>
+            <button onClick={publish} disabled={pending} className="btn-primary text-sm disabled:opacity-50">{pending ? "Publishing…" : "Confirm"}</button>
+            <button onClick={() => setConfirm(null)} disabled={pending} className="btn-secondary text-sm">Cancel</button>
+          </>
+        ) : confirm === "delete" ? (
+          <>
+            <span className="text-sm text-slate-600">Delete this batch?</span>
+            <button onClick={del} disabled={pending} className="rounded-lg bg-rose-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-50">{pending ? "…" : "Delete"}</button>
+            <button onClick={() => setConfirm(null)} disabled={pending} className="btn-secondary text-sm">Cancel</button>
+          </>
+        ) : (
+          <>
+            <button onClick={optimiseAll} disabled={pending} className="btn-secondary text-sm disabled:opacity-50" title="AI optimisation (Phase 3)">
+              ✨ Optimise all
+            </button>
+            <button
+              onClick={() => (rb.available ? setConfirm("publish") : setMsg(`Publishing to ${rb.label} is coming soon — you can still draft and optimise here.`))}
+              disabled={pending}
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              {rb.available ? `⬆ Publish to ${rb.label}` : "Publish (soon)"}
+            </button>
+            <button onClick={() => setConfirm("delete")} disabled={pending} className="text-sm text-slate-400 hover:text-rose-600" title="Delete batch">🗑</button>
+          </>
+        )}
       </div>
 
       {msg ? <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{msg}</p> : null}
