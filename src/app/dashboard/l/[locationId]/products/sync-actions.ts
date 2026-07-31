@@ -4,14 +4,13 @@ import { revalidatePath } from "next/cache";
 import { requireLocationAccess } from "@/lib/auth";
 import { importShopifyProducts } from "@/lib/shopify-products";
 
-export async function importShopifyProductsAction(locationId: string): Promise<{ ok: boolean; message: string }> {
+export type ImportBatch = { ok: boolean; message: string; imported: number; updated: number; lastId: number | null; done: boolean };
+
+/** Import one batch of Shopify products; the client loops passing back `lastId`. */
+export async function importShopifyProductsAction(locationId: string, sinceId = 0): Promise<ImportBatch> {
   await requireLocationAccess(locationId);
-  const r = await importShopifyProducts(locationId);
-  revalidatePath(`/dashboard/l/${locationId}/products`);
-  if (!r.ok) return { ok: false, message: r.reason || "Import failed." };
-  if (r.imported === 0 && r.updated === 0) return { ok: true, message: "No products found to import." };
-  const bits: string[] = [];
-  if (r.imported) bits.push(`${r.imported} new`);
-  if (r.updated) bits.push(`${r.updated} updated`);
-  return { ok: true, message: `Imported ${r.fetched} Shopify products — ${bits.join(", ")}.` };
+  const r = await importShopifyProducts(locationId, sinceId);
+  if (r.done) revalidatePath(`/dashboard/l/${locationId}/products`);
+  if (!r.ok) return { ok: false, message: r.reason || "Import failed.", imported: 0, updated: 0, lastId: null, done: true };
+  return { ok: true, message: "", imported: r.imported, updated: r.updated, lastId: r.lastId, done: r.done };
 }
