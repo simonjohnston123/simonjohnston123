@@ -5,15 +5,22 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 // ---------------------------------------------------------------------------
-// Inbound email webhook. Resend (or any inbound-email provider) POSTs incoming
-// mail here; we route it to the right sub-account and drop it into that
-// business's Conversations as an INBOUND message — the CRM's shared inbox.
+// Inbound email webhook. Incoming mail is dropped into the right sub-account's
+// Conversations as an INBOUND message — the CRM's shared inbox.
 //
-// Activation (once placid.group is verified in Resend):
-//   1. Add an MX record on inbox.placid.group pointing to Resend inbound.
-//   2. Point Resend's inbound webhook at https://placidcrm.com/api/inbound/email
-//   3. Set RESEND_WEBHOOK_SECRET (whsec_...) so signatures are verified.
-// Until then this endpoint is live but simply receives nothing.
+// Three delivery shapes are accepted, so any mail stack can feed it:
+//   • Mailcow / Postfix / Dovecot — pipe the RAW rfc822 message, or run a small
+//     bridge that POSTs JSON. Auth with ?token=INBOUND_TOKEN.
+//   • SendGrid Inbound Parse — multipart form post (?token=INBOUND_TOKEN).
+//   • Resend — Svix-signed JSON (RESEND_WEBHOOK_SECRET).
+//
+// Routing: the recipient local-part is matched to a Location slug
+// (support@… or safety-cert-seq@…). With a single business, everything lands
+// there. Until mail is pointed here the endpoint is live but receives nothing.
+//
+// Mailcow bridge (simplest — a Sieve/procmail pipe of the raw message):
+//   curl -s -X POST -H "Content-Type: message/rfc822" --data-binary @- \
+//     "https://placidcrm.com/api/inbound/email?token=$INBOUND_TOKEN"
 // ---------------------------------------------------------------------------
 
 /** Verify a Svix-style signed webhook (Resend uses Svix). */
@@ -66,15 +73,109 @@ const INBOUND_DOMAIN = process.env.INBOUND_DOMAIN || "inbox.placid.group";
 
 type Parsed = { from: string; fromRaw: unknown; to: string; subject: string; text: string };
 
+// --- Raw RFC822 parsing (for a Mailcow/Postfix pipe of the raw message) -------
+
+function decodeBody(s: string, enc?: string): string {
+  const e = (enc || "").toLowerCase();
+  if (e === "base64") {
+    try {
+      return Buffer.from(s.replace(/\s+/g, ""), "base64").toString("utf8");
+    } catch {
+      return s;
+    }
+  }
+  if (e === "quoted-printable") {
+    // Collect raw bytes then decode as UTF-8 so multi-byte chars (–, £, é…) survive.
+    const src = s.replace(/=\r?\n/g, "");
+    const bytes: number[] = [];
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === "=" && /^[0-9A-Fa-f]{2}$/.test(src.substr(i + 1, 2))) {
+        bytes.push(parseInt(src.substr(i + 1, 2), 16));
+        i += 2;
+      } else {
+        for (const b of Buffer.from(ch, "utf8")) bytes.push(b);
+      }
+    }
+    return Buffer.from(bytes).toString("utf8");
+  }
+  return s;
+}
+
+// Decode MIME "encoded-words" in a header (=?utf-8?B?…?= / =?utf-8?Q?…?=).
+function decodeMimeWords(s: string): string {
+  return s.replace(/=\?[^?]+\?([bBqQ])\?([^?]*)\?=/g, (_, enc, data) => {
+    try {
+      if (enc.toLowerCase() === "b") return Buffer.from(data, "base64").toString("utf8");
+      return decodeBody(data.replace(/_/g, " "), "quoted-printable");
+    } catch {
+      return data;
+    }
+  });
+}
+
+function parseRfc822(raw: string): Parsed {
+  const sepIdx = raw.search(/\r?\n\r?\n/);
+  const headerBlock = sepIdx >= 0 ? raw.slice(0, sepIdx) : raw;
+  let body = sepIdx >= 0 ? raw.slice(sepIdx).replace(/^\r?\n\r?\n/, "") : "";
+
+  // Unfold folded header lines, then index the first occurrence of each header.
+  const unfolded = headerBlock.replace(/\r?\n[ \t]+/g, " ");
+  const headers: Record<string, string> = {};
+  for (const line of unfolded.split(/\r?\n/)) {
+    const i = line.indexOf(":");
+    if (i > 0) {
+      const k = line.slice(0, i).trim().toLowerCase();
+      if (!(k in headers)) headers[k] = line.slice(i + 1).trim();
+    }
+  }
+
+  const ctype = headers["content-type"] || "";
+  const boundary = ctype.match(/boundary="?([^";]+)"?/i)?.[1];
+  if (/multipart\//i.test(ctype) && boundary) {
+    const marker = `--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`;
+    let plain = "";
+    let html = "";
+    for (const part of body.split(new RegExp(marker))) {
+      const ps = part.search(/\r?\n\r?\n/);
+      if (ps < 0) continue;
+      const ph = part.slice(0, ps).toLowerCase();
+      const pb = part.slice(ps).replace(/^\r?\n\r?\n/, "");
+      const penc = ph.match(/content-transfer-encoding:\s*([^\r\n;]+)/)?.[1]?.trim();
+      if (ph.includes("text/plain") && !plain) plain = decodeBody(pb, penc);
+      else if (ph.includes("text/html") && !html) html = stripHtml(decodeBody(pb, penc));
+    }
+    body = plain || html || "";
+  } else {
+    body = decodeBody(body, headers["content-transfer-encoding"]);
+    if (/text\/html/i.test(ctype)) body = stripHtml(body);
+  }
+
+  return {
+    from: addressOf(headers["from"]),
+    fromRaw: decodeMimeWords(headers["from"] || ""),
+    to: addressOf((headers["to"] || "").split(",")[0]),
+    subject: decodeMimeWords(headers["subject"] || "").trim(),
+    text: body.trim().slice(0, 20000),
+  };
+}
+
 export async function POST(req: NextRequest) {
   const ct = (req.headers.get("content-type") || "").toLowerCase();
+  const token = process.env.INBOUND_TOKEN;
+  const tokenOk = Boolean(token) && req.nextUrl.searchParams.get("token") === token;
   let parsed: Parsed;
 
-  if (ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded")) {
+  if (ct.includes("message/rfc822") || ct.includes("text/plain")) {
+    // Raw email piped from a mail server (Mailcow/Postfix/Dovecot/procmail).
+    if (token && !tokenOk) {
+      return NextResponse.json({ error: "invalid token" }, { status: 401 });
+    }
+    parsed = parseRfc822(await req.text());
+  } else if (ct.includes("multipart/form-data") || ct.includes("application/x-www-form-urlencoded")) {
     // SendGrid Inbound Parse (or any form-post provider). Secure with a shared
     // token in the webhook URL: /api/inbound/email?token=INBOUND_TOKEN
-    const token = process.env.INBOUND_TOKEN;
-    if (token && req.nextUrl.searchParams.get("token") !== token) {
+    if (token && !tokenOk) {
       return NextResponse.json({ error: "invalid token" }, { status: 401 });
     }
     const form = await req.formData();
@@ -87,11 +188,18 @@ export async function POST(req: NextRequest) {
       text: (String(form.get("text") ?? "").trim() || stripHtml(form.get("html"))).slice(0, 20000),
     };
   } else {
-    // Resend inbound (Svix-signed JSON).
+    // JSON: a token-authenticated bridge ({from,to,subject,text}) or Resend
+    // (Svix-signed). Accept if the token matches, else require a valid signature.
     const raw = await req.text();
     const secret = process.env.RESEND_WEBHOOK_SECRET;
-    if (secret && !verifySignature(secret, req, raw)) {
-      return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+    if (!tokenOk) {
+      if (secret) {
+        if (!verifySignature(secret, req, raw)) {
+          return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+        }
+      } else if (token) {
+        return NextResponse.json({ error: "invalid token" }, { status: 401 });
+      }
     }
     let evt: Record<string, unknown>;
     try {
