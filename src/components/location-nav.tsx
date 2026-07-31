@@ -42,7 +42,7 @@ export function LocationNav({
         { key: "cctv", label: "CCTV", icon: "📹" },
         ...items.slice(1),
       ]
-    : /homestead|accommodation|homested/i.test(name)
+    : /home\s*stead|accommodation/i.test(name)
     ? [...items.slice(0, 1), { key: "rooms", label: "Rooms", icon: "🛏" }, ...items.slice(1)]
     : items;
 
