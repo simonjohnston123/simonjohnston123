@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { getSetting, SETTING_KEYS } from "@/lib/platform-settings";
 
 // ---------------------------------------------------------------------------
 // Embedded Stripe Connect — "Placid Connect payments".
@@ -17,25 +18,33 @@ import { prisma } from "@/lib/db";
 
 const API = "https://api.stripe.com/v1";
 
-/** Both keys present → the embedded payments experience is live. */
-export function stripeConnectConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
+// Keys/fee come from the admin settings store first (set via /admin/payments),
+// falling back to server env. So the super-admin can go live from the UI.
+export async function stripeSecretKey(): Promise<string | null> {
+  return (await getSetting(SETTING_KEYS.stripeSecretKey)) || process.env.STRIPE_SECRET_KEY || null;
 }
 
 /** Publishable key is safe to expose to the browser (needed by connect-js). */
-export function stripePublishableKey(): string | null {
-  return process.env.STRIPE_PUBLISHABLE_KEY || null;
+export async function stripePublishableKey(): Promise<string | null> {
+  return (await getSetting(SETTING_KEYS.stripePublishableKey)) || process.env.STRIPE_PUBLISHABLE_KEY || null;
+}
+
+/** Both keys present → the embedded payments experience is live. */
+export async function stripeConnectConfigured(): Promise<boolean> {
+  const [sk, pk] = await Promise.all([stripeSecretKey(), stripePublishableKey()]);
+  return Boolean(sk && pk);
 }
 
 /** The % Placid Connect adds on top of each charge. Defaults to 2%. */
-export function platformFeePercent(): number {
-  const v = Number(process.env.PLATFORM_FEE_PERCENT);
+export async function platformFeePercent(): Promise<number> {
+  const raw = (await getSetting(SETTING_KEYS.platformFeePercent)) || process.env.PLATFORM_FEE_PERCENT;
+  const v = Number(raw);
   return Number.isFinite(v) && v >= 0 ? v : 2;
 }
 
-function secret(): string {
-  const k = process.env.STRIPE_SECRET_KEY;
-  if (!k) throw new Error("STRIPE_SECRET_KEY is not set.");
+async function secret(): Promise<string> {
+  const k = await stripeSecretKey();
+  if (!k) throw new Error("Stripe secret key is not set.");
   return k;
 }
 
@@ -60,7 +69,7 @@ async function call(
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${secret()}`,
+      Authorization: `Bearer ${await secret()}`,
       ...(params ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
     },
     body: params ? params.toString() : undefined,
@@ -154,6 +163,6 @@ export async function refreshAccountStatus(locationId: string): Promise<AccountS
  * `amountMinor`, using PLATFORM_FEE_PERCENT. Used when creating PaymentIntents
  * on the connected account for invoices/bookings.
  */
-export function applicationFeeMinor(amountMinor: number): number {
-  return Math.round((amountMinor * platformFeePercent()) / 100);
+export async function applicationFeeMinor(amountMinor: number): Promise<number> {
+  return Math.round((amountMinor * (await platformFeePercent())) / 100);
 }

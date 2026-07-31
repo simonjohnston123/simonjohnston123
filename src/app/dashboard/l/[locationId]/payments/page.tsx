@@ -29,8 +29,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
   const location = await prisma.location.findUnique({ where: { id: params.locationId } });
 
   // Branded embedded payments ("Placid Connect payments").
-  const paymentsLive = stripeConnectConfigured();
-  const pubKey = stripePublishableKey();
+  const [paymentsLive, pubKey] = await Promise.all([stripeConnectConfigured(), stripePublishableKey()]);
   let chargesEnabled = location?.stripeChargesEnabled ?? false;
   let detailsSubmitted = location?.stripeDetailsSubmitted ?? false;
   // If a connected account exists, refresh its live status (best-effort).
@@ -43,7 +42,7 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
       /* keep cached flags */
     }
   }
-  const feePct = platformFeePercent();
+  const feePct = await platformFeePercent();
 
   // Square still connects via the business's own Square login (kept as an option).
   const squareConn = await prisma.connection.findUnique({

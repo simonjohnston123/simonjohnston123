@@ -647,6 +647,14 @@ enum ConnectionStatus {
   PENDING
 }
 
+// Platform-wide settings (encrypted). Lets the super-admin set secrets like the
+// platform Stripe keys from the admin UI instead of the server .env.
+model Setting {
+  key         String   @id
+  valueCipher String?  @db.Text
+  updatedAt   DateTime @updatedAt
+}
+
 model Connection {
   id           String             @id @default(cuid())
   locationId   String
