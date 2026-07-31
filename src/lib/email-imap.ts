@@ -23,6 +23,9 @@ const EMAIL_PROVIDERS = ["SMTP"] as const;
 
 const MAX_FIRST_IMPORT = 200; // cap the very first sync of a large mailbox
 const MAX_BODY = 20000;
+// Folders to pull in. Junk is included so the spam filter can't silently hide
+// real business email — dedup by Message-ID keeps it from double-importing.
+const SYNC_FOLDERS = ["INBOX", "Junk"];
 
 export type ImapCreds = {
   host: string;
@@ -34,7 +37,16 @@ export type ImapCreds = {
   meta: Record<string, unknown>;
 };
 
-type ImapState = { uidValidity?: string; lastUid?: number; uidNext?: number; lastSyncedAt?: string; lastError?: string | null };
+type FolderCursor = { uidValidity?: string; uidNext?: number; lastUid?: number };
+type ImapState = {
+  folders?: Record<string, FolderCursor>;
+  // legacy flat INBOX cursor (pre multi-folder) — migrated on next sync
+  uidValidity?: string;
+  lastUid?: number;
+  uidNext?: number;
+  lastSyncedAt?: string;
+  lastError?: string | null;
+};
 
 export type SyncResult = {
   ok: boolean;
@@ -224,63 +236,78 @@ export async function syncLocationEmail(locationId: string): Promise<SyncResult>
   let fetched = 0;
   let imported = 0;
   let skipped = 0;
-  let lastUid = prevState.lastUid || 0;
+
+  // Per-folder UID cursors, migrating any legacy flat INBOX cursor.
+  const folders: Record<string, FolderCursor> = { ...(prevState.folders || {}) };
+  if (!folders.INBOX && (prevState.lastUid || prevState.uidValidity)) {
+    folders.INBOX = { uidValidity: prevState.uidValidity, uidNext: prevState.uidNext, lastUid: prevState.lastUid };
+  }
 
   try {
     await client.connect();
   } catch (e) {
     await saveState(creds.connectionId, creds.meta, { ...prevState, lastError: `connect: ${errMsg(e)}` }, "ERROR");
-    return { ok: false, reason: `connect failed: ${errMsg(e)}`, fetched, imported, skipped, lastUid };
+    return { ok: false, reason: `connect failed: ${errMsg(e)}`, fetched, imported, skipped, lastUid: folders.INBOX?.lastUid || 0 };
   }
 
-  const lock = await client.getMailboxLock("INBOX");
   try {
-    const mailbox = client.mailbox;
-    const uidValidity = mailbox && typeof mailbox !== "boolean" ? String(mailbox.uidValidity) : undefined;
-    const uidNext = mailbox && typeof mailbox !== "boolean" ? Number(mailbox.uidNext) : undefined;
-
-    // uidValidity changed → the server renumbered; reset the cursor.
-    if (prevState.uidValidity && uidValidity && prevState.uidValidity !== uidValidity) lastUid = 0;
-
-    let startUid = lastUid > 0 ? lastUid + 1 : 1;
-    // First sync of a big mailbox: only take the most recent MAX_FIRST_IMPORT.
-    if (lastUid === 0 && uidNext && uidNext - 1 > MAX_FIRST_IMPORT) {
-      startUid = uidNext - MAX_FIRST_IMPORT;
-    }
-
-    const range = `${startUid}:*`;
-    for await (const msg of client.fetch(range, { uid: true, source: true, internalDate: true }, { uid: true })) {
-      // `N:*` always yields the highest UID even when N is beyond it — guard.
-      if (msg.uid < startUid) continue;
-      fetched++;
-      if (msg.uid > lastUid) lastUid = msg.uid;
+    for (const folderName of SYNC_FOLDERS) {
+      let lock;
       try {
-        const parsed = await simpleParser(msg.source as Buffer);
-        const internal = msg.internalDate ? new Date(msg.internalDate) : undefined;
-        const outcome = await importMessage(locationId, parsed, internal);
-        if (outcome === "imported") imported++;
-        else skipped++;
-      } catch (e) {
-        skipped++;
-        // Keep going; one bad message shouldn't stall the mailbox.
-        console.error(`[email-imap] parse/import failed uid=${msg.uid}: ${errMsg(e)}`);
+        lock = await client.getMailboxLock(folderName);
+      } catch {
+        continue; // folder doesn't exist on this server — skip it
+      }
+      try {
+        const mailbox = client.mailbox;
+        const uidValidity = mailbox && typeof mailbox !== "boolean" ? String(mailbox.uidValidity) : undefined;
+        const uidNext = mailbox && typeof mailbox !== "boolean" ? Number(mailbox.uidNext) : undefined;
+
+        const cursor = folders[folderName] || {};
+        let lastUid = cursor.lastUid || 0;
+        // uidValidity changed → the server renumbered; reset this folder's cursor.
+        if (cursor.uidValidity && uidValidity && cursor.uidValidity !== uidValidity) lastUid = 0;
+
+        let startUid = lastUid > 0 ? lastUid + 1 : 1;
+        if (lastUid === 0 && uidNext && uidNext - 1 > MAX_FIRST_IMPORT) startUid = uidNext - MAX_FIRST_IMPORT;
+
+        const range = `${startUid}:*`;
+        for await (const msg of client.fetch(range, { uid: true, source: true, internalDate: true }, { uid: true })) {
+          if (msg.uid < startUid) continue; // `N:*` always yields the highest UID — guard
+          fetched++;
+          if (msg.uid > lastUid) lastUid = msg.uid;
+          try {
+            const parsed = await simpleParser(msg.source as Buffer);
+            const internal = msg.internalDate ? new Date(msg.internalDate) : undefined;
+            const outcome = await importMessage(locationId, parsed, internal);
+            if (outcome === "imported") imported++;
+            else skipped++;
+          } catch (e) {
+            skipped++;
+            console.error(`[email-imap] parse/import failed ${folderName} uid=${msg.uid}: ${errMsg(e)}`);
+          }
+        }
+        folders[folderName] = { uidValidity, uidNext, lastUid };
+      } finally {
+        lock.release();
       }
     }
 
     await saveState(
       creds.connectionId,
       creds.meta,
-      { uidValidity, uidNext, lastUid, lastSyncedAt: new Date().toISOString(), lastError: null },
+      { folders, lastSyncedAt: new Date().toISOString(), lastError: null },
       "CONNECTED",
     );
   } finally {
-    lock.release();
     try {
       await client.logout();
     } catch {
       /* ignore */
     }
   }
+
+  const lastUid = folders.INBOX?.lastUid || 0;
 
   return { ok: true, fetched, imported, skipped, lastUid };
 }
