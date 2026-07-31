@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { encryptJson } from "@/lib/crypto";
-import { verifyState, exchangeCode, oauthConfig, connectionMeta } from "@/lib/oauth-providers";
+import { verifyState, exchangeCode, oauthConfig, connectionMeta, appUrl } from "@/lib/oauth-providers";
 import type { ConnectionProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +17,13 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
   const parsed = state ? verifyState(state) : null;
   const locationId = parsed?.locationId ?? "";
   if (!parsed || parsed.provider !== provider || !locationId) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(`${appUrl()}/dashboard`);
   }
 
+  // Redirect against the public origin, not req.url — behind the reverse proxy
+  // req.url resolves to the internal container host (e.g. cbceac649ee5:3000).
   const back = (q: string) =>
-    NextResponse.redirect(new URL(`/dashboard/l/${locationId}/integrations?${q}`, req.url));
+    NextResponse.redirect(`${appUrl()}/dashboard/l/${locationId}/integrations?${q}`);
 
   await requireLocationAccess(locationId);
 
