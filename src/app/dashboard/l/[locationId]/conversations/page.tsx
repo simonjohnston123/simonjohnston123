@@ -5,6 +5,7 @@ import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
 import { EmailSyncButton } from "@/components/email-sync-button";
 import { DeleteConversationButton } from "@/components/delete-conversation-button";
+import { locationSendStatus } from "@/lib/comms-location";
 import { sendMessageAction, deleteConversationAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,7 @@ export default async function ConversationsPage({
   searchParams,
 }: {
   params: { locationId: string };
-  searchParams: { c?: string };
+  searchParams: { c?: string; sendfail?: string };
 }) {
   await requireLocationAccess(params.locationId);
 
@@ -82,6 +83,12 @@ export default async function ConversationsPage({
         include: { contact: true, messages: { orderBy: { createdAt: "asc" } } },
       })
     : null;
+
+  // Which channels can actually deliver — so we can warn before/after sending.
+  const sendStatus = await locationSendStatus(params.locationId);
+  const activeSend =
+    active && (active.channel === "EMAIL" || active.channel === "SMS") ? sendStatus[active.channel] : null;
+  const sendFail = searchParams.sendfail;
 
   if (conversations.length === 0) {
     return (
@@ -191,6 +198,21 @@ export default async function ConversationsPage({
                 )}
               </div>
 
+              {sendFail ? (
+                <div className="mx-3 mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  ⚠ Last message was saved but <span className="font-medium">not delivered</span>: {sendFail}
+                </div>
+              ) : null}
+              {activeSend && !activeSend.canSend ? (
+                <div className="mx-3 mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {active.channel === "SMS"
+                    ? "📵 No SMS provider connected — texts you send won't be delivered. "
+                    : "✉️ No email account connected — messages you send won't be delivered. "}
+                  <a href={`${base}/integrations`} className="font-medium underline">
+                    Connect it in Integrations
+                  </a>
+                </div>
+              ) : null}
               <form action={sendMessageAction} className="flex items-center gap-2 border-t border-slate-100 p-3">
                 <input type="hidden" name="locationId" value={params.locationId} />
                 <input type="hidden" name="conversationId" value={active.id} />

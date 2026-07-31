@@ -4,39 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
-import { sendEmail, sendSms } from "@/lib/comms";
+import { deliverForLocation } from "@/lib/comms-location";
 
 type ChannelValue = "SMS" | "EMAIL" | "WHATSAPP" | "WEBCHAT" | "NOTE";
 
-/**
- * Actually deliver an outbound message on its channel (email via Resend, SMS via
- * Twilio). Never throws — delivery problems are swallowed so the message still
- * logs in the thread.
- */
-async function deliver(opts: {
-  channel: ChannelValue;
-  body: string;
-  subject?: string | null;
-  contact: { email: string | null; phone: string | null } | null;
-  fromName?: string | null;
-  replyTo?: string | null;
-}): Promise<void> {
-  try {
-    if (!opts.contact) return;
-    if (opts.channel === "EMAIL" && opts.contact.email) {
-      await sendEmail({
-        to: opts.contact.email,
-        subject: opts.subject?.trim() || `Message from ${opts.fromName ?? "us"}`,
-        text: opts.body,
-        fromName: opts.fromName ?? undefined,
-        replyTo: opts.replyTo ?? undefined,
-      });
-    } else if (opts.channel === "SMS" && opts.contact.phone) {
-      await sendSms({ to: opts.contact.phone, body: opts.body });
-    }
-  } catch {
-    /* keep the message logged even if the provider send failed */
-  }
+/** Append a delivery-failure notice to the thread URL so the UI can show it. */
+function threadUrl(locationId: string, conversationId: string, failDetail?: string): string {
+  const base = `/dashboard/l/${locationId}/conversations?c=${conversationId}`;
+  return failDetail ? `${base}&sendfail=${encodeURIComponent(failDetail)}` : base;
 }
 
 export async function startConversationAction(formData: FormData) {
@@ -64,8 +39,9 @@ export async function startConversationAction(formData: FormData) {
     },
   });
 
+  let sendResult = { sent: true, detail: "" };
   if (body) {
-    await deliver({
+    sendResult = await deliverForLocation(locationId, {
       channel,
       body,
       subject,
@@ -76,7 +52,7 @@ export async function startConversationAction(formData: FormData) {
   }
 
   revalidatePath(`/dashboard/l/${locationId}/conversations`);
-  redirect(`/dashboard/l/${locationId}/conversations?c=${conversation.id}`);
+  redirect(threadUrl(locationId, conversation.id, sendResult.sent ? undefined : sendResult.detail));
 }
 
 export async function sendMessageAction(formData: FormData) {
@@ -101,8 +77,9 @@ export async function sendMessageAction(formData: FormData) {
     data: { lastMessageAt: new Date(), unread: direction === "INBOUND" },
   });
 
+  let sendResult = { sent: true, detail: "" };
   if (direction === "OUTBOUND") {
-    await deliver({
+    sendResult = await deliverForLocation(locationId, {
       channel: convo.channel as ChannelValue,
       body,
       subject: convo.subject,
@@ -113,7 +90,7 @@ export async function sendMessageAction(formData: FormData) {
   }
 
   revalidatePath(`/dashboard/l/${locationId}/conversations`);
-  redirect(`/dashboard/l/${locationId}/conversations?c=${conversationId}`);
+  redirect(threadUrl(locationId, conversationId, sendResult.sent ? undefined : sendResult.detail));
 }
 
 /** Delete a whole conversation (and its messages) from the Inbox. */
