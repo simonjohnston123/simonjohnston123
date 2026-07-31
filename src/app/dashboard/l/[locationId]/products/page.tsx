@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { NewProduct } from "@/components/new-product";
 import { ProductImportButton } from "@/components/product-import-button";
+import { ProductListingTable } from "@/components/product-listing-table";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +17,6 @@ const SORTS: Record<string, Prisma.ProductOrderByWithRelationInput> = {
   price_desc: { priceCents: "desc" },
   stock_desc: { inventory: "desc" },
 };
-
-const CHANNEL_LABEL: Record<string, string> = { shopify: "Shopify", ebay: "eBay", placid_connect: "Placid Connect" };
-
-function money(cents: number | null, dollars: number | null): string {
-  if (cents != null) return `$${(cents / 100).toFixed(2)}`;
-  if (dollars != null) return `$${dollars}`;
-  return "—";
-}
 
 export default async function ProductsPage({
   params,
@@ -182,61 +175,25 @@ export default async function ProductsPage({
         </div>
       ) : (
         <>
-          <div className="card overflow-x-auto p-0">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                  <th className="px-3 py-2 font-medium">Product</th>
-                  <th className="px-3 py-2 font-medium">Category</th>
-                  <th className="px-3 py-2 font-medium">Ships from</th>
-                  <th className="px-3 py-2 font-medium">Price</th>
-                  <th className="px-3 py-2 font-medium">Stock</th>
-                  <th className="px-3 py-2 font-medium">Channels</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => {
-                  const channels = Array.isArray(p.channels) ? (p.channels as string[]) : [];
-                  return (
-                    <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                      <td className="px-3 py-2">
-                        <Link href={`${base}/${p.id}`} className="flex items-center gap-3">
-                          {p.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                          ) : (
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-xs text-slate-400">—</span>
-                          )}
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium text-slate-800">{p.name}</span>
-                            {p.sku ? <span className="block truncate font-mono text-[11px] text-slate-400">{p.sku}</span> : null}
-                          </span>
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-slate-600">{p.category || <span className="text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2">
-                        {p.warehouse ? (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">{p.warehouse}</span>
-                            {p.supplier ? <span className="truncate text-[11px] text-slate-400">{p.supplier}</span> : null}
-                          </span>
-                        ) : <span className="text-slate-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{money(p.priceCents, p.price)}</td>
-                      <td className="px-3 py-2 text-slate-600">{p.inventory ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className="flex flex-wrap gap-1">
-                          {channels.length === 0 ? <span className="text-xs text-slate-300">none</span> : channels.map((ch) => (
-                            <span key={ch} className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">{CHANNEL_LABEL[ch] ?? ch}</span>
-                          ))}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ProductListingTable
+            locationId={locationId}
+            base={base}
+            filter={{ q, category, source, warehouse, supplier }}
+            count={count}
+            products={products.map((p) => ({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              imageUrl: p.imageUrl,
+              category: p.category,
+              warehouse: p.warehouse,
+              supplier: p.supplier,
+              priceCents: p.priceCents,
+              price: p.price,
+              inventory: p.inventory,
+              channels: Array.isArray(p.channels) ? (p.channels as string[]) : [],
+            }))}
+          />
 
           <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
             <span>Showing {startRow}–{endRow} of {count}</span>
