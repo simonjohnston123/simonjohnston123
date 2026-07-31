@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
 import { EmailSyncButton } from "@/components/email-sync-button";
-import { sendMessageAction } from "./actions";
+import { DeleteConversationButton } from "@/components/delete-conversation-button";
+import { sendMessageAction, deleteConversationAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,30 @@ function initials(name: string): string {
       .slice(0, 2)
       .map((w) => w[0]?.toUpperCase() ?? "")
       .join("") || "?"
+  );
+}
+
+// How each channel is labelled in the Inbox — icon + name so it's obvious
+// whether a conversation is email, SMS, a Facebook message, etc.
+const CHANNEL_META: Record<string, { icon: string; label: string }> = {
+  EMAIL: { icon: "✉️", label: "Email" },
+  SMS: { icon: "💬", label: "SMS" },
+  WHATSAPP: { icon: "🟢", label: "WhatsApp" },
+  FACEBOOK: { icon: "📘", label: "Facebook" },
+  INSTAGRAM: { icon: "📷", label: "Instagram" },
+  WEBCHAT: { icon: "💻", label: "Web chat" },
+  NOTE: { icon: "📝", label: "Note" },
+};
+function channelMeta(channel: string) {
+  return CHANNEL_META[channel] ?? { icon: "💬", label: channel };
+}
+function ChannelChip({ channel }: { channel: string }) {
+  const m = channelMeta(channel);
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+      <span aria-hidden>{m.icon}</span>
+      {m.label}
+    </span>
   );
 }
 
@@ -112,6 +137,7 @@ export default async function ConversationsPage({
                     <span className="shrink-0 text-[11px] text-slate-400">{c.lastMessageAt ? formatDateTime(c.lastMessageAt) : ""}</span>
                   </span>
                   <span className="mt-0.5 flex items-center gap-2">
+                    <ChannelChip channel={c.channel} />
                     <span className="truncate text-xs text-slate-500">{c.messages[0]?.body ?? "No messages yet"}</span>
                   </span>
                 </span>
@@ -131,10 +157,20 @@ export default async function ConversationsPage({
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
                 <Link href={`${base}/conversations`} className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden" aria-label="Back">‹</Link>
                 {avatar(active.contact ? contactName(active.contact) : "Unknown")}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-slate-900">{active.contact ? contactName(active.contact) : "Unknown"}</div>
-                  <Badge color="blue">{active.channel}</Badge>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <ChannelChip channel={active.channel} />
+                    {active.contact?.email && active.channel === "EMAIL" ? (
+                      <span className="truncate text-xs text-slate-400">{active.contact.email}</span>
+                    ) : null}
+                  </div>
                 </div>
+                <form action={deleteConversationAction}>
+                  <input type="hidden" name="locationId" value={params.locationId} />
+                  <input type="hidden" name="conversationId" value={active.id} />
+                  <DeleteConversationButton />
+                </form>
               </div>
 
               <div className="flex-1 space-y-2.5 overflow-y-auto px-4 py-4">

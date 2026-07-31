@@ -115,3 +115,16 @@ export async function sendMessageAction(formData: FormData) {
   revalidatePath(`/dashboard/l/${locationId}/conversations`);
   redirect(`/dashboard/l/${locationId}/conversations?c=${conversationId}`);
 }
+
+/** Delete a whole conversation (and its messages) from the Inbox. */
+export async function deleteConversationAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const conversationId = String(formData.get("conversationId") ?? "");
+  await requireLocationAccess(locationId);
+
+  // Scope the delete to this location so one tenant can't touch another's inbox.
+  await prisma.conversation.deleteMany({ where: { id: conversationId, locationId } });
+
+  revalidatePath(`/dashboard/l/${locationId}/conversations`);
+  redirect(`/dashboard/l/${locationId}/conversations`);
+}
