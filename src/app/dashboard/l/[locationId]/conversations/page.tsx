@@ -5,9 +5,10 @@ import { PageHeader, EmptyState } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
 import { EmailSyncButton } from "@/components/email-sync-button";
 import { DeleteConversationButton } from "@/components/delete-conversation-button";
+import { SelectionProvider, RowCheckbox, SelectAllCheckbox, BulkActionBar } from "@/components/inbox-selection";
 import { locationSendStatus } from "@/lib/comms-location";
 import { Linkify } from "@/components/linkify";
-import { sendMessageAction, deleteConversationAction, toggleStarAction, sendToTrackAction } from "./actions";
+import { sendMessageAction, deleteConversationAction, toggleStarAction, sendToTrackAction, bulkDeleteConversations } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -219,6 +220,7 @@ export default async function ConversationsPage({
       >
         {/* Conversation list */}
         <div className={cn("flex flex-col", active ? "hidden lg:flex" : "flex")}>
+          <SelectionProvider allIds={conversations.map((c) => c.id)}>
           {/* Filter tabs + search */}
           <div className="mb-2 space-y-2">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
@@ -298,6 +300,13 @@ export default async function ConversationsPage({
             </div>
           </div>
 
+          {conversations.length > 0 ? (
+            <div className="mb-1.5 flex items-center justify-between px-1">
+              <SelectAllCheckbox />
+              <span className="text-[11px] text-slate-400">Tick rows to delete in bulk</span>
+            </div>
+          ) : null}
+
           <div className="card overflow-hidden p-1.5">
             {conversations.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-slate-400">
@@ -312,6 +321,7 @@ export default async function ConversationsPage({
                     key={c.id}
                     className={cn("group flex items-center rounded-xl", isActive && "bg-brand-50")}
                   >
+                    <RowCheckbox id={c.id} />
                     <Link
                       href={withParams({ c: c.id })}
                       className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-slate-50"
@@ -359,6 +369,8 @@ export default async function ConversationsPage({
               })
             )}
           </div>
+          <BulkActionBar locationId={locationId} action={bulkDeleteConversations} />
+          </SelectionProvider>
         </div>
 
         {/* Thread */}

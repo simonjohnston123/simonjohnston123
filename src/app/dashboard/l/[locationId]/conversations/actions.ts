@@ -148,6 +148,19 @@ export async function setUnreadAction(formData: FormData) {
   revalidatePath(`/dashboard/l/${locationId}/conversations`);
 }
 
+/**
+ * Bulk-delete conversations (and their messages) from the Inbox. Called
+ * directly from the client (not via FormData) with the selected ids. Scoped to
+ * the location so one tenant can't touch another's inbox.
+ */
+export async function bulkDeleteConversations(locationId: string, ids: string[]) {
+  await requireLocationAccess(locationId);
+  const clean = Array.from(new Set(ids.filter(Boolean)));
+  if (clean.length === 0) return;
+  await prisma.conversation.deleteMany({ where: { id: { in: clean }, locationId } });
+  revalidatePath(`/dashboard/l/${locationId}/conversations`);
+}
+
 /** Delete a whole conversation (and its messages) from the Inbox. */
 export async function deleteConversationAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
