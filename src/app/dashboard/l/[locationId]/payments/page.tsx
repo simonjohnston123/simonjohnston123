@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
 import { ConnectOnboarding } from "@/components/connect-onboarding";
+import { TakePayment } from "@/components/take-payment";
 import { isConfigured } from "@/lib/oauth-providers";
 import {
   stripeConnectConfigured,
@@ -78,12 +79,15 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
 
           <div className="p-6">
             {chargesEnabled ? (
-              <div className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
-                <p className="font-medium">✓ Your payments are switched on.</p>
-                <p className="mt-1">
-                  Invoices and paid bookings are charged securely and paid out to your bank. A{" "}
-                  <span className="font-semibold">{feePct}%</span> Placid Connect fee applies to each payment.
-                </p>
+              <div className="space-y-4">
+                <div className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
+                  <p className="font-medium">✓ Your payments are switched on.</p>
+                  <p className="mt-1">
+                    Invoices and paid bookings are charged securely and paid out to your bank. A{" "}
+                    <span className="font-semibold">{feePct}%</span> Placid Connect fee applies to each payment.
+                  </p>
+                </div>
+                <TakePayment locationId={params.locationId} feePercent={feePct} />
               </div>
             ) : !paymentsLive ? (
               <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">

@@ -65,11 +65,14 @@ async function call(
   method: "GET" | "POST",
   path: string,
   params?: URLSearchParams,
+  accountId?: string,
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`${API}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${await secret()}`,
+      // Acting on behalf of a connected account (direct charge on their account).
+      ...(accountId ? { "Stripe-Account": accountId } : {}),
       ...(params ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
     },
     body: params ? params.toString() : undefined,
@@ -165,4 +168,45 @@ export async function refreshAccountStatus(locationId: string): Promise<AccountS
  */
 export async function applicationFeeMinor(amountMinor: number): Promise<number> {
   return Math.round((amountMinor * (await platformFeePercent())) / 100);
+}
+
+function appUrl(): string {
+  return process.env.APP_URL || "https://placidcrm.com";
+}
+
+/**
+ * Create a shareable Stripe Checkout link that charges a customer on the
+ * business's connected account, skimming the platform application fee to Placid
+ * Connect. Returns the URL to send/copy. Throws if the business hasn't finished
+ * payments onboarding.
+ */
+export async function createDirectCheckout(
+  locationId: string,
+  opts: { amountMinor: number; description: string; currency?: string; customerEmail?: string },
+): Promise<{ url: string; feeMinor: number }> {
+  const loc = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!loc?.stripeAccountId) throw new Error("This business hasn't set up payments yet.");
+  const status = await refreshAccountStatus(locationId);
+  if (!status.charges) throw new Error("Payments setup isn't finished for this business yet.");
+  if (!Number.isFinite(opts.amountMinor) || opts.amountMinor < 50) {
+    throw new Error("Enter an amount of at least $0.50.");
+  }
+
+  const currency = (opts.currency || "aud").toLowerCase();
+  const feeMinor = await applicationFeeMinor(opts.amountMinor);
+  const p = new URLSearchParams();
+  p.set("mode", "payment");
+  p.set("success_url", `${appUrl()}/pay/success`);
+  p.set("cancel_url", `${appUrl()}/pay/cancelled`);
+  p.set("line_items[0][quantity]", "1");
+  p.set("line_items[0][price_data][currency]", currency);
+  p.set("line_items[0][price_data][product_data][name]", opts.description || "Payment");
+  p.set("line_items[0][price_data][unit_amount]", String(Math.round(opts.amountMinor)));
+  if (feeMinor > 0) p.set("payment_intent_data[application_fee_amount]", String(feeMinor));
+  if (opts.customerEmail) p.set("customer_email", opts.customerEmail);
+  p.set("metadata[locationId]", locationId);
+
+  // Direct charge on the connected account (Stripe-Account header).
+  const session = await call("POST", "/checkout/sessions", p, loc.stripeAccountId);
+  return { url: String(session.url), feeMinor };
 }
