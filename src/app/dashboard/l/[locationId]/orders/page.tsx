@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge, SegTabs } from "@/components/ui";
 import { NewOrderButton } from "@/components/new-order";
+import { ShopifySyncButton } from "@/components/shopify-sync-button";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 
@@ -44,9 +45,23 @@ export default async function OrdersPage({
   const base = `/dashboard/l/${locationId}/orders`;
   const open = orders.filter((o) => !["COMPLETED", "CANCELLED"].includes(o.status)).length;
 
+  const shopifyConn = await prisma.connection.findFirst({
+    where: { locationId, provider: "SHOPIFY", status: "CONNECTED" },
+    select: { id: true },
+  });
+
   return (
     <div>
-      <PageHeader title="Orders" subtitle={`${open} open`} action={<NewOrderButton locationId={locationId} />} />
+      <PageHeader
+        title="Orders"
+        subtitle={`${open} open`}
+        action={
+          <div className="flex items-center gap-2">
+            {shopifyConn ? <ShopifySyncButton locationId={locationId} /> : null}
+            <NewOrderButton locationId={locationId} />
+          </div>
+        }
+      />
 
       <SegTabs
         active={filter ?? "all"}
