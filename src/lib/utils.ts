@@ -10,10 +10,16 @@ export function formatMoney(value: number, currency = "AUD"): string {
   }).format(value || 0);
 }
 
+// Placid businesses operate in Queensland (AEST, UTC+10, no daylight saving).
+// Pin all display formatting to this zone so timestamps render correctly
+// regardless of the server/container timezone (which is UTC).
+export const APP_TIME_ZONE = "Australia/Brisbane";
+
 export function formatDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-AU", {
     dateStyle: "medium",
+    timeZone: APP_TIME_ZONE,
   }).format(d);
 }
 
@@ -22,6 +28,7 @@ export function formatDateTime(date: Date | string): string {
   return new Intl.DateTimeFormat("en-AU", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: APP_TIME_ZONE,
   }).format(d);
 }
 
