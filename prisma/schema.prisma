@@ -91,6 +91,7 @@ model Location {
   homesteadSettings HomesteadSettings?
   homesteadOpsTasks HomesteadOpsTask[]
   homesteadPayments HomesteadPayment[]
+  homesteadDocuments HomesteadDocument[]
 
   @@index([agencyId])
 }
@@ -952,6 +953,7 @@ model HomesteadRoom {
   createdAt     DateTime           @default(now())
   bookings      HomesteadBooking[]
   opsTasks      HomesteadOpsTask[]
+  documents     HomesteadDocument[]
 
   @@index([locationId])
 }
@@ -980,6 +982,7 @@ model HomesteadBooking {
   createdAt        DateTime               @default(now())
   opsTasks         HomesteadOpsTask[]
   payments         HomesteadPayment[]
+  documents        HomesteadDocument[]
 
   @@index([locationId])
   @@index([locationId, status])
@@ -996,6 +999,46 @@ model HomesteadSettings {
   contractText     String?  @db.Text
   bookingWindowDays Int     @default(21) // can book up to N days ahead
   depositWeeks     Int      @default(1)  // weeks charged upfront
+}
+
+// ===== Homestead documents — paperwork, with expiry ========================
+
+enum DocumentCategory {
+  AGREEMENT // residency or tenancy agreement
+  IDENTITY // guest ID on file
+  BOND // bond lodgement or receipt
+  CONDITION_REPORT // entry and exit condition
+  COMPLIANCE // smoke alarms, electrical, gas, pool safety
+  INSURANCE
+  REGISTRATION // council or rooming-house registration
+  OTHER
+}
+
+// Documents hang off the property, a room, or a particular stay — a smoke alarm
+// certificate covers the building, a condition report covers one room, an ID
+// belongs to one guest. The field that earns its keep is expiresAt: paperwork
+// lapsing quietly is the risk this module exists to catch.
+model HomesteadDocument {
+  id         String            @id @default(cuid())
+  locationId String
+  location   Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  roomId     String?
+  room       HomesteadRoom?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  bookingId  String?
+  booking    HomesteadBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  category   DocumentCategory  @default(OTHER)
+  title      String
+  fileUrl    String? // link for now; direct upload comes with file storage
+  issuedAt   DateTime?
+  expiresAt  DateTime?
+  reference  String?
+  notes      String?           @db.Text
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, category])
+  @@index([locationId, expiresAt])
 }
 
 // ===== Homestead money — payments received against a stay ==================

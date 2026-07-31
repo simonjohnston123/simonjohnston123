@@ -177,7 +177,55 @@ async function main() {
     });
   }
 
-  console.log(`\nSeeded 3 demo rooms, 5 bookings and ${paymentRows.length} payments into "${location.name}".`);
+  // Paperwork, spread deliberately across the expiry states so the checklist
+  // shows something to act on: one lapsed, one closing in, two fine, and three
+  // never filed at all.
+  await prisma.homesteadDocument.deleteMany({
+    where: { locationId: location.id, title: { startsWith: DEMO } },
+  });
+
+  await prisma.homesteadDocument.createMany({
+    data: [
+      {
+        locationId: location.id, category: "COMPLIANCE",
+        title: `${DEMO}Smoke alarm compliance certificate`,
+        issuedAt: addDays(today, -165), expiresAt: addDays(today, 200),
+        reference: "SA-2026-0417",
+      },
+      {
+        locationId: location.id, category: "COMPLIANCE",
+        title: `${DEMO}Electrical safety check`,
+        issuedAt: addDays(today, -377), expiresAt: addDays(today, -12),
+        reference: "EL-2025-1189",
+      },
+      {
+        locationId: location.id, category: "INSURANCE",
+        title: `${DEMO}Public liability insurance`,
+        issuedAt: addDays(today, -347), expiresAt: addDays(today, 18),
+        reference: "PL-889231",
+      },
+      {
+        locationId: location.id, category: "INSURANCE",
+        title: `${DEMO}Building insurance`,
+        issuedAt: addDays(today, -65), expiresAt: addDays(today, 300),
+        reference: "BLD-114906",
+      },
+      ...(marcus
+        ? [{
+            locationId: location.id, bookingId: marcus, category: "AGREEMENT" as const,
+            title: `${DEMO}Residency agreement — Marcus Webb`,
+            issuedAt: addDays(today, -21), expiresAt: null,
+          }]
+        : []),
+      {
+        locationId: location.id, roomId: weeklyOnly.id, category: "CONDITION_REPORT",
+        title: `${DEMO}Entry condition report — Room 1`,
+        issuedAt: addDays(today, -21), expiresAt: null,
+      },
+    ],
+  });
+
+  console.log(`\nSeeded 3 demo rooms, 5 bookings, ${paymentRows.length} payments and 6 documents into "${location.name}".`);
   console.log(failed === 0 ? "All interval checks passed.\n" : `${failed} interval check(s) FAILED.\n`);
   if (failed > 0) process.exitCode = 1;
 }
