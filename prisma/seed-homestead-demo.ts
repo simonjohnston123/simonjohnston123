@@ -62,6 +62,17 @@ async function main() {
   });
   const oldIds = old.map((r) => r.id);
   if (oldIds.length) {
+    // Payments cascade from their booking, but ops tasks only null out their
+    // roomId — clear those explicitly so re-running doesn't leave orphans.
+    const oldBookings = await prisma.homesteadBooking.findMany({
+      where: { roomId: { in: oldIds } },
+      select: { id: true },
+    });
+    const oldBookingIds = oldBookings.map((b) => b.id);
+    if (oldBookingIds.length) {
+      await prisma.homesteadOpsTask.deleteMany({ where: { bookingId: { in: oldBookingIds } } });
+    }
+    await prisma.homesteadOpsTask.deleteMany({ where: { roomId: { in: oldIds } } });
     await prisma.homesteadBooking.deleteMany({ where: { roomId: { in: oldIds } } });
     await prisma.homesteadRoom.deleteMany({ where: { id: { in: oldIds } } });
   }
@@ -132,7 +143,41 @@ async function main() {
     ],
   });
 
-  console.log(`\nSeeded 3 demo rooms and 5 bookings into "${location.name}".`);
+  // Payment history, so Finance shows a realistic spread rather than every
+  // stay unpaid: one resident up to date, one deliberately behind, one guest
+  // paid in full, the rest outstanding.
+  const seeded = await prisma.homesteadBooking.findMany({
+    where: { locationId: location.id, guestName: { in: ["Marcus Webb", "Aleisha Nguyen", "Priya Raman"] } },
+    select: { id: true, guestName: true },
+  });
+  const byName = new Map(seeded.map((b) => [b.guestName, b.id]));
+
+  const marcus = byName.get("Marcus Webb");
+  const aleisha = byName.get("Aleisha Nguyen");
+  const priya = byName.get("Priya Raman");
+
+  const paymentRows = [
+    // Marcus: 3 weeks elapsed + 1 in advance at $260 = $1,040. Fully paid.
+    ...(marcus
+      ? [
+          { bookingId: marcus, amount: 520, paidAt: addDays(today, -21), method: "BANK_TRANSFER" as const, reference: "Move-in + bond week" },
+          { bookingId: marcus, amount: 260, paidAt: addDays(today, -14), method: "BANK_TRANSFER" as const, reference: null },
+          { bookingId: marcus, amount: 260, paidAt: addDays(today, -7), method: "BANK_TRANSFER" as const, reference: null },
+        ]
+      : []),
+    // Aleisha: owes $680, has paid one week — leaves her a week behind.
+    ...(aleisha ? [{ bookingId: aleisha, amount: 340, paidAt: addDays(today, -7), method: "CASH" as const, reference: null }] : []),
+    // Priya: nightly stay settled up front.
+    ...(priya ? [{ bookingId: priya, amount: 440, paidAt: addDays(today, -1), method: "CARD" as const, reference: "Card ending 4242" }] : []),
+  ];
+
+  if (paymentRows.length) {
+    await prisma.homesteadPayment.createMany({
+      data: paymentRows.map((p) => ({ ...p, locationId: location.id })),
+    });
+  }
+
+  console.log(`\nSeeded 3 demo rooms, 5 bookings and ${paymentRows.length} payments into "${location.name}".`);
   console.log(failed === 0 ? "All interval checks passed.\n" : `${failed} interval check(s) FAILED.\n`);
   if (failed > 0) process.exitCode = 1;
 }

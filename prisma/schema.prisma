@@ -90,6 +90,7 @@ model Location {
   homesteadBookings HomesteadBooking[]
   homesteadSettings HomesteadSettings?
   homesteadOpsTasks HomesteadOpsTask[]
+  homesteadPayments HomesteadPayment[]
 
   @@index([agencyId])
 }
@@ -978,6 +979,7 @@ model HomesteadBooking {
   stripeSubId      String?
   createdAt        DateTime               @default(now())
   opsTasks         HomesteadOpsTask[]
+  payments         HomesteadPayment[]
 
   @@index([locationId])
   @@index([locationId, status])
@@ -994,6 +996,37 @@ model HomesteadSettings {
   contractText     String?  @db.Text
   bookingWindowDays Int     @default(21) // can book up to N days ahead
   depositWeeks     Int      @default(1)  // weeks charged upfront
+}
+
+// ===== Homestead money — payments received against a stay ==================
+
+enum HomesteadPaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  STRIPE
+  OTHER
+}
+
+// Only money *received* is stored. What's owed is derived from the booking —
+// a resident's rent accrues weekly from their move-in date, a guest's total is
+// fixed at booking — so there's no schedule to keep in sync, and arrears is
+// simply expected-to-date minus the sum of these rows.
+model HomesteadPayment {
+  id         String                 @id @default(cuid())
+  locationId String
+  location   Location               @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  bookingId  String
+  booking    HomesteadBooking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount     Int // AUD
+  method     HomesteadPaymentMethod @default(BANK_TRANSFER)
+  paidAt     DateTime
+  reference  String?
+  notes      String?                @db.Text
+  createdAt  DateTime               @default(now())
+
+  @@index([locationId])
+  @@index([bookingId])
 }
 
 // ===== Homestead operations — cleaning, inspections, maintenance ============
