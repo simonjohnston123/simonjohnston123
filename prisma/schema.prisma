@@ -89,6 +89,7 @@ model Location {
   homesteadRooms    HomesteadRoom[]
   homesteadBookings HomesteadBooking[]
   homesteadSettings HomesteadSettings?
+  homesteadOpsTasks HomesteadOpsTask[]
 
   @@index([agencyId])
 }
@@ -105,6 +106,7 @@ model User {
   updatedAt    DateTime     @updatedAt
   memberships  Membership[]
   assignedTasks Task[]
+  homesteadOpsTasks HomesteadOpsTask[]
 
   @@index([agencyId])
 }
@@ -913,7 +915,19 @@ model ConnectFriend {
   @@unique([followerId, followingId])
 }
 
-// ===== Placid Homestead — short-term accommodation (rooms, weekly rental) =====
+// ===== Placid Homestead — accommodation (rooms let weekly and/or nightly) =====
+
+// Homestead runs mixed inventory: long-stay residents on a rolling weekly
+// agreement, and short-stay guests booked for a fixed set of nights. A room can
+// offer either mode, or both. Everything below defaults to weekly-only so rooms
+// and bookings created before this existed keep behaving exactly as they did.
+enum StayType {
+  WEEKLY // resident — rolling weekly agreement, open-ended
+  NIGHTLY // guest — fixed arrival and departure dates
+}
+
+// Shared by both stay types; the UI relabels per type (a WEEKLY booking reads
+// "Moved in / Moved out", a NIGHTLY one reads "Checked in / Checked out").
 enum HomesteadBookingStatus {
   PENDING
   ACTIVE
@@ -922,16 +936,21 @@ enum HomesteadBookingStatus {
 }
 
 model HomesteadRoom {
-  id          String            @id @default(cuid())
-  locationId  String
-  location    Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  name        String
-  description String?           @db.Text
-  weeklyPrice Int               @default(0) // AUD/week
-  imageUrl    String?
-  active      Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  bookings    HomesteadBooking[]
+  id            String             @id @default(cuid())
+  locationId    String
+  location      Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?            @db.Text
+  weeklyPrice   Int                @default(0) // AUD/week, for WEEKLY stays
+  nightlyPrice  Int                @default(0) // AUD/night, for NIGHTLY stays
+  allowsWeekly  Boolean            @default(true)
+  allowsNightly Boolean            @default(false)
+  minNights     Int                @default(1) // shortest NIGHTLY stay accepted
+  imageUrl      String?
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  bookings      HomesteadBooking[]
+  opsTasks      HomesteadOpsTask[]
 
   @@index([locationId])
 }
@@ -942,19 +961,28 @@ model HomesteadBooking {
   location         Location               @relation(fields: [locationId], references: [id], onDelete: Cascade)
   roomId           String?
   room             HomesteadRoom?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  stayType         StayType               @default(WEEKLY)
   guestName        String
   guestEmail       String
   guestPhone       String?
   startDate        DateTime
-  weeklyPrice      Int                    @default(0)
+  // WEEKLY: null while the resident is in place, set when they move out.
+  // NIGHTLY: always set at booking — the departure date, exclusive.
+  endDate          DateTime?
+  weeklyPrice      Int                    @default(0) // rate for WEEKLY stays
+  nightlyPrice     Int                    @default(0) // rate for NIGHTLY stays
+  totalPrice       Int?                   // NIGHTLY: nights × nightlyPrice at booking time
   status           HomesteadBookingStatus @default(PENDING)
   contractAccepted Boolean                @default(false)
   signature        String?
   stripeSubId      String?
   createdAt        DateTime               @default(now())
+  opsTasks         HomesteadOpsTask[]
 
   @@index([locationId])
   @@index([locationId, status])
+  // Availability scans are always "this room, overlapping this window".
+  @@index([roomId, startDate, endDate])
 }
 
 model HomesteadSettings {
@@ -966,4 +994,63 @@ model HomesteadSettings {
   contractText     String?  @db.Text
   bookingWindowDays Int     @default(21) // can book up to N days ahead
   depositWeeks     Int      @default(1)  // weeks charged upfront
+}
+
+// ===== Homestead operations — cleaning, inspections, maintenance ============
+
+// Mixed inventory produces two different kinds of clean. A nightly guest leaves
+// and the room must be ready for the next arrival — sometimes the same day. A
+// resident moving out leaves a room needing a deeper reset. Residents also need
+// periodic inspections, which nightly guests never do.
+enum OpsTaskType {
+  TURNOVER // clean between nightly guests
+  CHANGEOVER // deeper clean after a resident moves out
+  INSPECTION // periodic room check while a resident is in place
+  MAINTENANCE // repair or work order
+}
+
+enum OpsTaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum OpsPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model HomesteadOpsTask {
+  id          String            @id @default(cuid())
+  locationId  String
+  location    Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  roomId      String?
+  room        HomesteadRoom?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  // The departure that triggered this clean, when one did.
+  bookingId   String?
+  booking     HomesteadBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  type        OpsTaskType
+  status      OpsTaskStatus     @default(TODO)
+  priority    OpsPriority       @default(NORMAL)
+  title       String
+  notes       String?           @db.Text
+  dueAt       DateTime?
+  assigneeId  String?
+  assignee    User?             @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  cost        Int? // AUD, for maintenance
+  photos      Json              @default("[]")
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, status])
+  @@index([roomId])
+  // One auto-generated task per departure per type, so regenerating is safe to
+  // re-run. Manual tasks carry a null bookingId, which Postgres leaves
+  // unconstrained — many manual tasks per room are fine.
+  @@unique([bookingId, type])
 }

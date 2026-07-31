@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
+import { nightsBetween } from "@/lib/homestead-dates";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Booking confirmed" };
@@ -17,8 +18,23 @@ export default async function Welcome({ params }: { params: { slug: string; book
       <header className="bg-brand-gradient px-6 py-8 text-white"><div className="mx-auto max-w-2xl"><h1 className="text-2xl font-bold">You&rsquo;re booked in 🎉</h1><p className="text-white/85">{location.name}</p></div></header>
       <main className="mx-auto max-w-2xl space-y-4 px-6 py-8">
         <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-600">Thanks {booking.guestName.split(" ")[0]} — your request for <b>{booking.room?.name}</b> from <b>{formatDate(booking.startDate)}</b> is in.</p>
-          <p className="mt-2 text-sm text-slate-600">The host will confirm shortly and set up your <b>${booking.weeklyPrice.toLocaleString()}/week</b> payment. We&rsquo;ve emailed a copy to {booking.guestEmail}.</p>
+          {/* A nightly stay has dates and a total; a residency has a weekly rate
+              and no end date. Reading the weekly figure for both printed "$0/week". */}
+          {booking.stayType === "NIGHTLY" && booking.endDate ? (
+            <>
+              <p className="text-sm text-slate-600">
+                Thanks {booking.guestName.split(" ")[0]} — your request for <b>{booking.room?.name}</b>, <b>{formatDate(booking.startDate)}</b> to <b>{formatDate(booking.endDate)}</b> ({nightsBetween(booking.startDate, booking.endDate)} night{nightsBetween(booking.startDate, booking.endDate) === 1 ? "" : "s"}), is in.
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                The host will confirm shortly. Total <b>${(booking.totalPrice ?? 0).toLocaleString()}</b> at ${booking.nightlyPrice.toLocaleString()}/night. We&rsquo;ve emailed a copy to {booking.guestEmail}.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">Thanks {booking.guestName.split(" ")[0]} — your request for <b>{booking.room?.name}</b> from <b>{formatDate(booking.startDate)}</b> is in.</p>
+              <p className="mt-2 text-sm text-slate-600">The host will confirm shortly and set up your <b>${booking.weeklyPrice.toLocaleString()}/week</b> payment. We&rsquo;ve emailed a copy to {booking.guestEmail}.</p>
+            </>
+          )}
         </div>
         {settings?.welcomeInfo ? (
           <div className="rounded-2xl bg-white p-6 shadow-sm"><h2 className="mb-2 font-semibold text-slate-900">Getting there &amp; settling in</h2><p className="whitespace-pre-line text-sm text-slate-600">{settings.welcomeInfo}</p></div>
