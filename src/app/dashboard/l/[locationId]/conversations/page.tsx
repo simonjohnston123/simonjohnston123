@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { PageHeader, EmptyState, Badge } from "@/components/ui";
+import { PageHeader, EmptyState } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
 import { EmailSyncButton } from "@/components/email-sync-button";
 import { DeleteConversationButton } from "@/components/delete-conversation-button";
 import { locationSendStatus } from "@/lib/comms-location";
 import { Linkify } from "@/components/linkify";
-import { sendMessageAction, deleteConversationAction } from "./actions";
+import { sendMessageAction, deleteConversationAction, toggleStarAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +24,6 @@ function initials(name: string): string {
   );
 }
 
-// How each channel is labelled in the Inbox — icon + name so it's obvious
-// whether a conversation is email, SMS, a Facebook message, etc.
 const CHANNEL_META: Record<string, { icon: string; label: string }> = {
   EMAIL: { icon: "✉️", label: "Email" },
   SMS: { icon: "💬", label: "SMS" },
@@ -53,45 +51,102 @@ export default async function ConversationsPage({
   searchParams,
 }: {
   params: { locationId: string };
-  searchParams: { c?: string; sendfail?: string };
+  searchParams: { c?: string; sendfail?: string; filter?: string; q?: string };
 }) {
   await requireLocationAccess(params.locationId);
 
-  const [conversations, contacts] = await Promise.all([
+  const locationId = params.locationId;
+  const base = `/dashboard/l/${locationId}`;
+  const activeId = searchParams.c;
+  const filter = searchParams.filter === "unread" || searchParams.filter === "starred" ? searchParams.filter : "all";
+  const q = (searchParams.q || "").trim();
+
+  // Build the filtered list query (filter tab + search).
+  const listWhere: Record<string, unknown> = { locationId };
+  if (filter === "unread") listWhere.unread = true;
+  if (filter === "starred") listWhere.starred = true;
+  if (q) {
+    listWhere.contact = {
+      OR: [
+        { firstName: { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { companyName: { contains: q, mode: "insensitive" } },
+      ],
+    };
+  }
+
+  const [conversations, contacts, unreadCount, starredCount, allCount, emailConn] = await Promise.all([
     prisma.conversation.findMany({
-      where: { locationId: params.locationId },
+      where: listWhere,
       include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
       orderBy: { lastMessageAt: "desc" },
       take: 100,
     }),
-    prisma.contact.findMany({ where: { locationId: params.locationId }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.contact.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.conversation.count({ where: { locationId, unread: true } }),
+    prisma.conversation.count({ where: { locationId, starred: true } }),
+    prisma.conversation.count({ where: { locationId } }),
+    prisma.connection.findFirst({ where: { locationId, provider: "SMTP", status: "CONNECTED" }, select: { id: true } }),
   ]);
 
   const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c) }));
-  const base = `/dashboard/l/${params.locationId}`;
-  const activeId = searchParams.c;
-
-  // Show "Sync email" only when this location has a mailbox connected.
-  const emailConn = await prisma.connection.findFirst({
-    where: { locationId: params.locationId, provider: "SMTP", status: "CONNECTED" },
-    select: { id: true },
-  });
   const hasEmail = Boolean(emailConn);
 
   const active = activeId
     ? await prisma.conversation.findFirst({
-        where: { id: activeId, locationId: params.locationId },
-        include: { contact: true, messages: { orderBy: { createdAt: "asc" } } },
+        where: { id: activeId, locationId },
+        include: {
+          contact: { include: { tags: { include: { tag: true } } } },
+          messages: { orderBy: { createdAt: "asc" } },
+        },
       })
     : null;
 
-  // Which channels can actually deliver — so we can warn before/after sending.
-  const sendStatus = await locationSendStatus(params.locationId);
+  // Opening a conversation marks it read.
+  if (active?.unread) {
+    await prisma.conversation.update({ where: { id: active.id }, data: { unread: false } });
+    active.unread = false;
+  }
+
+  const sendStatus = await locationSendStatus(locationId);
   const activeSend =
     active && (active.channel === "EMAIL" || active.channel === "SMS") ? sendStatus[active.channel] : null;
   const sendFail = searchParams.sendfail;
 
-  if (conversations.length === 0) {
+  const withParams = (extra: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    if (filter !== "all") p.set("filter", filter);
+    if (q) p.set("q", q);
+    for (const [k, v] of Object.entries(extra)) {
+      if (v === undefined) p.delete(k);
+      else p.set(k, v);
+    }
+    const qs = p.toString();
+    return `${base}/conversations${qs ? `?${qs}` : ""}`;
+  };
+  const tabHref = (f: string) => {
+    const p = new URLSearchParams();
+    if (f !== "all") p.set("filter", f);
+    if (q) p.set("q", q);
+    if (activeId) p.set("c", activeId);
+    const qs = p.toString();
+    return `${base}/conversations${qs ? `?${qs}` : ""}`;
+  };
+
+  const avatar = (name: string, size = "h-11 w-11 text-sm") => (
+    <span className={cn("grid shrink-0 place-items-center rounded-full bg-brand-gradient font-semibold text-white", size)}>
+      {initials(name)}
+    </span>
+  );
+
+  const tabs: { key: string; label: string; count?: number }[] = [
+    { key: "all", label: "All", count: allCount },
+    { key: "unread", label: "Unread", count: unreadCount },
+    { key: "starred", label: "Starred", count: starredCount },
+  ];
+
+  if (allCount === 0) {
     return (
       <div>
         <PageHeader title="Inbox" subtitle="Every message in one place" />
@@ -100,8 +155,8 @@ export default async function ConversationsPage({
           body="Messages from SMS, email and web chat land here automatically — or start one."
           action={
             <div className="flex items-center gap-2">
-              {hasEmail ? <EmailSyncButton locationId={params.locationId} /> : null}
-              <NewConversationButton locationId={params.locationId} contacts={contactOptions} />
+              {hasEmail ? <EmailSyncButton locationId={locationId} /> : null}
+              <NewConversationButton locationId={locationId} contacts={contactOptions} />
             </div>
           }
         />
@@ -109,53 +164,140 @@ export default async function ConversationsPage({
     );
   }
 
-  const avatar = (name: string) => (
-    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-semibold text-white">
-      {initials(name)}
-    </span>
-  );
-
   return (
     <div>
-      {/* Page header — hidden on mobile while viewing a thread (native feel). */}
+      {/* Header — hidden on mobile while viewing a thread. */}
       <div className={cn(active ? "hidden lg:block" : "")}>
         <PageHeader
           title="Inbox"
           subtitle="Every message in one place"
           action={
             <div className="flex items-center gap-2">
-              {hasEmail ? <EmailSyncButton locationId={params.locationId} /> : null}
-              <NewConversationButton locationId={params.locationId} contacts={contactOptions} />
+              {hasEmail ? <EmailSyncButton locationId={locationId} /> : null}
+              <NewConversationButton locationId={locationId} contacts={contactOptions} />
             </div>
           }
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-        {/* Conversation list — hidden on mobile when a thread is open. */}
-        <div className={cn("card overflow-hidden p-1.5", active ? "hidden lg:block" : "block")}>
-          {conversations.map((c) => {
-            const name = c.contact ? contactName(c.contact) : "Unknown";
-            return (
-              <Link key={c.id} href={`${base}/conversations?c=${c.id}`} className={cn("list-row", c.id === activeId && "bg-brand-50")}>
-                {avatar(name)}
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-800">{name}</span>
-                    <span className="shrink-0 text-[11px] text-slate-400">{c.lastMessageAt ? formatDateTime(c.lastMessageAt) : ""}</span>
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-2">
-                    <ChannelChip channel={c.channel} />
-                    <span className="truncate text-xs text-slate-500">{c.messages[0]?.body ?? "No messages yet"}</span>
-                  </span>
-                </span>
-              </Link>
-            );
-          })}
+      <div
+        className={cn(
+          "grid gap-4",
+          active ? "lg:grid-cols-[300px_minmax(0,1fr)_290px]" : "lg:grid-cols-[340px_1fr]",
+        )}
+      >
+        {/* Conversation list */}
+        <div className={cn("flex flex-col", active ? "hidden lg:flex" : "flex")}>
+          {/* Filter tabs + search */}
+          <div className="mb-2 space-y-2">
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+              {tabs.map((t) => {
+                const activeTab = filter === t.key;
+                return (
+                  <Link
+                    key={t.key}
+                    href={tabHref(t.key)}
+                    className={cn(
+                      "flex-1 rounded-lg px-2 py-1.5 text-center text-xs font-medium transition",
+                      activeTab ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
+                    )}
+                  >
+                    {t.label}
+                    {typeof t.count === "number" && t.count > 0 ? (
+                      <span
+                        className={cn(
+                          "ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                          t.key === "unread" ? "bg-brand-500 text-white" : "bg-slate-200 text-slate-600",
+                        )}
+                      >
+                        {t.count}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+            <form action={`${base}/conversations`} method="get" className="flex items-center gap-1">
+              {filter !== "all" ? <input type="hidden" name="filter" value={filter} /> : null}
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Search name or email…"
+                className="input h-9 flex-1 text-sm"
+              />
+              {q ? (
+                <Link href={withParams({ q: undefined })} className="btn-secondary h-9 px-2 text-xs">
+                  Clear
+                </Link>
+              ) : null}
+            </form>
+          </div>
+
+          <div className="card overflow-hidden p-1.5">
+            {conversations.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-slate-400">
+                {q ? "No conversations match your search." : "Nothing here yet."}
+              </p>
+            ) : (
+              conversations.map((c) => {
+                const name = c.contact ? contactName(c.contact) : "Unknown";
+                const isActive = c.id === activeId;
+                return (
+                  <div
+                    key={c.id}
+                    className={cn("group flex items-center rounded-xl", isActive && "bg-brand-50")}
+                  >
+                    <Link
+                      href={withParams({ c: c.id })}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-slate-50"
+                    >
+                      <span className="relative">
+                        {avatar(name)}
+                        {c.unread ? (
+                          <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-brand-500" />
+                        ) : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className={cn("truncate text-sm text-slate-800", c.unread ? "font-bold" : "font-semibold")}>
+                            {name}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-slate-400">
+                            {c.lastMessageAt ? formatDateTime(c.lastMessageAt) : ""}
+                          </span>
+                        </span>
+                        <span className="mt-0.5 flex items-center gap-2">
+                          <ChannelChip channel={c.channel} />
+                          <span className={cn("truncate text-xs", c.unread ? "font-medium text-slate-700" : "text-slate-500")}>
+                            {c.messages[0]?.body ?? "No messages yet"}
+                          </span>
+                        </span>
+                      </span>
+                    </Link>
+                    <form action={toggleStarAction} className="pr-1.5">
+                      <input type="hidden" name="locationId" value={locationId} />
+                      <input type="hidden" name="conversationId" value={c.id} />
+                      <input type="hidden" name="starred" value={String(c.starred)} />
+                      <button
+                        type="submit"
+                        aria-label={c.starred ? "Unstar" : "Star"}
+                        className={cn(
+                          "grid h-7 w-7 place-items-center rounded-lg text-base hover:bg-slate-100",
+                          c.starred ? "text-amber-400" : "text-slate-300",
+                        )}
+                      >
+                        {c.starred ? "★" : "☆"}
+                      </button>
+                    </form>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
-        {/* Thread — full-screen on mobile when active; empty prompt on desktop. */}
-        <div className={cn("card flex min-h-[65vh] min-w-0 flex-col overflow-hidden lg:min-h-[520px]", active ? "flex" : "hidden lg:flex")}>
+        {/* Thread */}
+        <div className={cn("card flex min-h-[65vh] min-w-0 flex-col overflow-hidden lg:min-h-[560px]", active ? "flex" : "hidden lg:flex")}>
           {!active ? (
             <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
               Select a conversation to read and reply.
@@ -163,7 +305,7 @@ export default async function ConversationsPage({
           ) : (
             <>
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                <Link href={`${base}/conversations`} className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden" aria-label="Back">‹</Link>
+                <Link href={withParams({ c: undefined })} className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 lg:hidden" aria-label="Back">‹</Link>
                 {avatar(active.contact ? contactName(active.contact) : "Unknown")}
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-slate-900">{active.contact ? contactName(active.contact) : "Unknown"}</div>
@@ -174,8 +316,20 @@ export default async function ConversationsPage({
                     ) : null}
                   </div>
                 </div>
+                <form action={toggleStarAction}>
+                  <input type="hidden" name="locationId" value={locationId} />
+                  <input type="hidden" name="conversationId" value={active.id} />
+                  <input type="hidden" name="starred" value={String(active.starred)} />
+                  <button
+                    type="submit"
+                    aria-label={active.starred ? "Unstar" : "Star"}
+                    className={cn("grid h-9 w-9 place-items-center rounded-xl text-lg hover:bg-slate-100", active.starred ? "text-amber-400" : "text-slate-300")}
+                  >
+                    {active.starred ? "★" : "☆"}
+                  </button>
+                </form>
                 <form action={deleteConversationAction}>
-                  <input type="hidden" name="locationId" value={params.locationId} />
+                  <input type="hidden" name="locationId" value={locationId} />
                   <input type="hidden" name="conversationId" value={active.id} />
                   <DeleteConversationButton />
                 </form>
@@ -215,7 +369,7 @@ export default async function ConversationsPage({
                 </div>
               ) : null}
               <form action={sendMessageAction} className="flex items-center gap-2 border-t border-slate-100 p-3">
-                <input type="hidden" name="locationId" value={params.locationId} />
+                <input type="hidden" name="locationId" value={locationId} />
                 <input type="hidden" name="conversationId" value={active.id} />
                 <input type="hidden" name="direction" value="OUTBOUND" />
                 <input name="body" placeholder="Type a message…" className="input flex-1" autoComplete="off" required />
@@ -224,6 +378,83 @@ export default async function ConversationsPage({
             </>
           )}
         </div>
+
+        {/* Contact detail panel — desktop, when a thread is open */}
+        {active ? (
+          <aside className="hidden lg:block">
+            <div className="card p-4">
+              {active.contact ? (
+                <>
+                  <div className="flex flex-col items-center text-center">
+                    {avatar(contactName(active.contact), "h-14 w-14 text-base")}
+                    <div className="mt-2 font-semibold text-slate-900">{contactName(active.contact)}</div>
+                    {active.contact.companyName ? (
+                      <div className="text-xs text-slate-500">{active.contact.companyName}</div>
+                    ) : null}
+                  </div>
+
+                  <dl className="mt-4 space-y-2.5 text-sm">
+                    {active.contact.email ? (
+                      <div>
+                        <dt className="text-[11px] uppercase tracking-wide text-slate-400">Email</dt>
+                        <dd className="break-all text-slate-700">
+                          <a href={`mailto:${active.contact.email}`} className="text-brand-600 hover:underline">
+                            {active.contact.email}
+                          </a>
+                        </dd>
+                      </div>
+                    ) : null}
+                    {active.contact.phone ? (
+                      <div>
+                        <dt className="text-[11px] uppercase tracking-wide text-slate-400">Phone</dt>
+                        <dd className="text-slate-700">
+                          <a href={`tel:${active.contact.phone}`} className="text-brand-600 hover:underline">
+                            {active.contact.phone}
+                          </a>
+                        </dd>
+                      </div>
+                    ) : null}
+                    {active.contact.source ? (
+                      <div>
+                        <dt className="text-[11px] uppercase tracking-wide text-slate-400">Source</dt>
+                        <dd className="text-slate-700">{active.contact.source}</dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-wide text-slate-400">Added</dt>
+                      <dd className="text-slate-700">{formatDateTime(active.contact.createdAt)}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-4">
+                    <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Tags</div>
+                    {active.contact.tags.length === 0 ? (
+                      <p className="text-xs text-slate-400">No tags yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {active.contact.tags.map((ct) => (
+                          <span
+                            key={ct.tagId}
+                            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                            style={{ backgroundColor: ct.tag.color }}
+                          >
+                            {ct.tag.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Link href={`${base}/contacts`} className="btn-secondary mt-4 block w-full text-center text-sm">
+                    Open in Contacts
+                  </Link>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">No contact linked to this conversation.</p>
+              )}
+            </div>
+          </aside>
+        ) : null}
       </div>
     </div>
   );

@@ -93,6 +93,26 @@ export async function sendMessageAction(formData: FormData) {
   redirect(threadUrl(locationId, conversationId, sendResult.sent ? undefined : sendResult.detail));
 }
 
+/** Toggle the star flag on a conversation. */
+export async function toggleStarAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const starred = String(formData.get("starred") ?? "") === "true";
+  await requireLocationAccess(locationId);
+  await prisma.conversation.updateMany({ where: { id: conversationId, locationId }, data: { starred: !starred } });
+  revalidatePath(`/dashboard/l/${locationId}/conversations`);
+}
+
+/** Mark a conversation read/unread. */
+export async function setUnreadAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const unread = String(formData.get("unread") ?? "") === "true";
+  await requireLocationAccess(locationId);
+  await prisma.conversation.updateMany({ where: { id: conversationId, locationId }, data: { unread } });
+  revalidatePath(`/dashboard/l/${locationId}/conversations`);
+}
+
 /** Delete a whole conversation (and its messages) from the Inbox. */
 export async function deleteConversationAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");

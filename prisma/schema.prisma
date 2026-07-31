@@ -329,6 +329,7 @@ model Conversation {
   subject    String?
   lastMessageAt DateTime @default(now())
   unread     Boolean   @default(false)
+  starred    Boolean   @default(false)
   createdAt  DateTime  @default(now())
   messages   Message[]
 
