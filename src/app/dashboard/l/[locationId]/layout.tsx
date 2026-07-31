@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { LocationNav } from "@/components/location-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { LocationSwitcher } from "@/components/location-switcher";
+import { AssistantPanel } from "@/components/assistant-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function LocationLayout({
       </div>
 
       <MobileNav locationId={location.id} locationName={location.name} />
+      <AssistantPanel locationId={location.id} />
     </div>
   );
 }

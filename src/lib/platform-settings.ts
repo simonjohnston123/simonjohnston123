@@ -10,6 +10,7 @@ export const SETTING_KEYS = {
   stripeSecretKey: "stripe_secret_key",
   stripePublishableKey: "stripe_publishable_key",
   platformFeePercent: "platform_fee_percent",
+  anthropicApiKey: "anthropic_api_key",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {
