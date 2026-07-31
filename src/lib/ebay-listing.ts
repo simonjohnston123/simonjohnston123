@@ -124,7 +124,13 @@ export async function pushProductToEbay(locationId: string, p: ListingProductInp
         title: p.name.slice(0, 80),
         description: (p.description || p.name).slice(0, 4000),
         imageUrls: p.imageUrl ? [p.imageUrl] : [],
-        aspects: { Brand: ["Unbranded"] }, // TODO: category-required aspects in live testing
+        // Generic dropship items have no barcode. eBay requires a product
+        // identifier (GTIN) or an explicit exemption: brand + MPN + UPC "Does
+        // not apply" satisfies the GTIN requirement for unbranded goods.
+        brand: "Unbranded",
+        mpn: "Does Not Apply",
+        upc: ["Does not apply"],
+        aspects: { Brand: ["Unbranded"], MPN: ["Does Not Apply"] },
       },
     }),
   });
@@ -155,8 +161,21 @@ export async function pushProductToEbay(locationId: string, p: ListingProductInp
       merchantLocationKey: ctx.merchantLocationKey,
     }),
   });
-  if (!offerRes.ok) return { ok: false, productId: p.id, reason: `offer ${offerRes.status}: ${(await offerRes.text()).slice(0, 160)}` };
-  const offerId = ((await offerRes.json()) as { offerId?: string }).offerId;
+  let offerId: string | undefined;
+  if (offerRes.ok) {
+    offerId = ((await offerRes.json()) as { offerId?: string }).offerId;
+  } else {
+    const errText = await offerRes.text();
+    // Idempotent re-list: an offer for this SKU already exists — reuse it.
+    if (/already exist/i.test(errText)) {
+      const getRes = await fetch(`${API}/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}&marketplace_id=${MARKETPLACE_ID}`, { headers: headers(token), cache: "no-store" });
+      if (getRes.ok) {
+        const existing = (await getRes.json()) as { offers?: Array<{ offerId?: string }> };
+        offerId = existing.offers?.[0]?.offerId;
+      }
+    }
+    if (!offerId) return { ok: false, productId: p.id, reason: `offer ${offerRes.status}: ${errText.slice(0, 160)}` };
+  }
   if (!offerId) return { ok: false, productId: p.id, reason: "no offerId returned" };
 
   // 3) Publish
