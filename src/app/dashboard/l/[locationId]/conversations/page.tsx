@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
+import { EmailSyncButton } from "@/components/email-sync-button";
 import { sendMessageAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,13 @@ export default async function ConversationsPage({
   const base = `/dashboard/l/${params.locationId}`;
   const activeId = searchParams.c;
 
+  // Show "Sync email" only when this location has a mailbox connected.
+  const emailConn = await prisma.connection.findFirst({
+    where: { locationId: params.locationId, provider: "SMTP", status: "CONNECTED" },
+    select: { id: true },
+  });
+  const hasEmail = Boolean(emailConn);
+
   const active = activeId
     ? await prisma.conversation.findFirst({
         where: { id: activeId, locationId: params.locationId },
@@ -57,7 +65,12 @@ export default async function ConversationsPage({
         <EmptyState
           title="No conversations yet"
           body="Messages from SMS, email and web chat land here automatically — or start one."
-          action={<NewConversationButton locationId={params.locationId} contacts={contactOptions} />}
+          action={
+            <div className="flex items-center gap-2">
+              {hasEmail ? <EmailSyncButton locationId={params.locationId} /> : null}
+              <NewConversationButton locationId={params.locationId} contacts={contactOptions} />
+            </div>
+          }
         />
       </div>
     );
@@ -76,7 +89,12 @@ export default async function ConversationsPage({
         <PageHeader
           title="Inbox"
           subtitle="Every message in one place"
-          action={<NewConversationButton locationId={params.locationId} contacts={contactOptions} />}
+          action={
+            <div className="flex items-center gap-2">
+              {hasEmail ? <EmailSyncButton locationId={params.locationId} /> : null}
+              <NewConversationButton locationId={params.locationId} contacts={contactOptions} />
+            </div>
+          }
         />
       </div>
 

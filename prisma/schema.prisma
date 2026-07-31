@@ -343,9 +343,14 @@ model Message {
   direction      MessageDirection @default(OUTBOUND)
   channel        Channel          @default(SMS)
   body           String           @db.Text
+  // Email receive: the RFC822 Message-ID (for dedup/threading) and the original
+  // sent/received timestamp. Null for messages that originate inside the CRM.
+  messageId      String?
+  receivedAt     DateTime?
   createdAt      DateTime         @default(now())
 
   @@index([conversationId])
+  @@index([messageId])
 }
 
 // ---------------------------------------------------------------------------
