@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { decryptJson } from "@/lib/crypto";
+import { getOrderRoute, routeOrderToTrack } from "@/lib/order-routing";
 
 // Pull a business's Shopify orders into the CRM (Orders + Contacts). Uses the
 // admin token the business connected under Integrations → Shopify. Idempotent:
@@ -68,6 +69,8 @@ export async function syncShopifyOrders(locationId: string): Promise<ShopifySync
     return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
   }
 
+  const route = await getOrderRoute(locationId);
+
   let imported = 0;
   let updated = 0;
   for (const o of orders) {
@@ -110,6 +113,11 @@ export async function syncShopifyOrders(locationId: string): Promise<ShopifySync
     } else {
       await prisma.order.create({ data: { locationId, source: "Shopify", externalId, type: "PRODUCT", ...data } });
       imported++;
+      await routeOrderToTrack(locationId, route, {
+        contactId,
+        title: `Shopify #${data.number || externalId}${custName ? ` — ${custName}` : ""}`,
+        value: data.total,
+      });
     }
   }
 

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { encryptJson, decryptJson } from "@/lib/crypto";
 import { refreshToken } from "@/lib/oauth-providers";
+import { getOrderRoute, routeOrderToTrack } from "@/lib/order-routing";
 
 // Pull a business's eBay orders into the CRM (Orders + Contacts) via the Sell
 // Fulfillment API, using the token stored when they connected eBay. eBay masks
@@ -92,6 +93,8 @@ export async function syncEbayOrders(locationId: string): Promise<EbaySyncResult
     return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
   }
 
+  const route = await getOrderRoute(locationId);
+
   let imported = 0;
   let updated = 0;
   for (const o of orders) {
@@ -133,6 +136,11 @@ export async function syncEbayOrders(locationId: string): Promise<EbaySyncResult
     } else {
       await prisma.order.create({ data: { locationId, source: "eBay", externalId, type: "PRODUCT", ...data } });
       imported++;
+      await routeOrderToTrack(locationId, route, {
+        contactId,
+        title: `eBay #${data.number || externalId} — ${name}`,
+        value: data.total,
+      });
     }
   }
 

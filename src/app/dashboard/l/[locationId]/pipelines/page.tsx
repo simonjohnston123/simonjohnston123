@@ -6,6 +6,7 @@ import { NewOpportunityButton } from "@/components/new-opportunity";
 import { NewPipelineButton, StageEditor } from "@/components/pipeline-manager";
 import { StageSelect } from "@/components/stage-select";
 import { StageActionsButton } from "@/components/stage-actions";
+import { OrderRoutingSelect } from "@/components/order-routing";
 import { setOpportunityStatusAction, deleteOpportunityAction } from "./actions";
 import { formatMoney, contactName } from "@/lib/utils";
 
@@ -43,7 +44,11 @@ export default async function PipelinesPage({
 
   const active = pipelines.find((p) => p.id === searchParams.pipeline) ?? pipelines[0];
 
-  const [opportunities, contacts] = await Promise.all([
+  const [location, opportunities, contacts] = await Promise.all([
+    prisma.location.findUnique({
+      where: { id: params.locationId },
+      select: { ordersStageId: true },
+    }),
     prisma.opportunity.findMany({
       where: { locationId: params.locationId, pipelineId: active.id },
       include: { contact: true },
@@ -59,6 +64,11 @@ export default async function PipelinesPage({
   const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c) }));
   const stageOptions = active.stages.map((s) => ({ id: s.id, name: s.name }));
   const base = `/dashboard/l/${params.locationId}`;
+
+  // Every track→stage across all pipelines, for the order-routing picker.
+  const routeOptions = pipelines.flatMap((p) =>
+    p.stages.map((s) => ({ pipelineId: p.id, pipelineName: p.name, stageId: s.id, stageName: s.name })),
+  );
 
   const totalValue = opportunities
     .filter((o) => o.status === "OPEN")
@@ -91,6 +101,14 @@ export default async function PipelinesPage({
           { key: "tasks", label: "Tasks", href: `${base}/tasks` },
         ]}
       />
+
+      <div className="mb-4">
+        <OrderRoutingSelect
+          locationId={params.locationId}
+          options={routeOptions}
+          currentStageId={location?.ordersStageId ?? null}
+        />
+      </div>
 
       {pipelines.length > 1 ? (
         <div className="mb-4 flex gap-2">

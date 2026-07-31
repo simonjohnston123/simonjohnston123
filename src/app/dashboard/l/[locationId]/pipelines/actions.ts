@@ -216,6 +216,33 @@ export async function deleteStageAction(formData: FormData) {
   revalidatePath(`/dashboard/l/${locationId}/pipelines`);
 }
 
+/** Choose which track+stage new eBay/Shopify orders auto-drop into (or clear it).
+ *  The select submits a single "pipelineId:stageId" value, empty = turn off. */
+export async function setOrderRouteAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const raw = String(formData.get("route") ?? "").trim();
+
+  if (!raw) {
+    await prisma.location.update({ where: { id: locationId }, data: { ordersPipelineId: null, ordersStageId: null } });
+    revalidatePath(`/dashboard/l/${locationId}/pipelines`);
+    return;
+  }
+
+  const [pipelineId, stageId] = raw.split(":");
+  // Verify the stage belongs to this location before saving.
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: stageId, pipeline: { id: pipelineId, locationId } },
+  });
+  if (!stage) return;
+
+  await prisma.location.update({
+    where: { id: locationId },
+    data: { ordersPipelineId: pipelineId, ordersStageId: stageId },
+  });
+  revalidatePath(`/dashboard/l/${locationId}/pipelines`);
+}
+
 export async function deletePipelineAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
   const pipelineId = String(formData.get("pipelineId") ?? "");

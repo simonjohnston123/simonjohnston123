@@ -70,6 +70,10 @@ model Location {
   stripeChargesEnabled   Boolean @default(false)
   stripeDetailsSubmitted Boolean @default(false)
   stripePayoutsEnabled   Boolean @default(false)
+  // Auto-route new marketplace orders (eBay/Shopify) into this Success Track stage
+  // when they sync. Null = don't route, orders just land on the Orders page.
+  ordersPipelineId String?
+  ordersStageId    String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
