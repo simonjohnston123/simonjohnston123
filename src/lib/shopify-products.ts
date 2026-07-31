@@ -10,7 +10,7 @@ import { decryptJson } from "@/lib/crypto";
 const API_VERSION = "2024-07";
 const BATCH = 1000; // products imported per action call
 const PAGE = 250; // Shopify max page size
-const FIELDS = "id,title,product_type,vendor,status,image,variants";
+const FIELDS = "id,title,product_type,vendor,status,image,variants,tags";
 
 type ShopifyCreds = { shopDomain: string; adminToken: string };
 
@@ -37,7 +37,14 @@ type ShopifyProduct = {
   status?: string;
   image?: { src?: string } | null;
   variants?: ShopifyVariant[];
+  tags?: string; // comma-separated
 };
+
+// Pull the warehouse code out of a "Warehouse-AU" style tag.
+function warehouseFromTags(tags: string[]): string | null {
+  const t = tags.find((x) => /^warehouse-/i.test(x));
+  return t ? t.replace(/^warehouse-/i, "").trim().toUpperCase() || null : null;
+}
 
 export type ProductSyncResult = {
   ok: boolean;
@@ -90,10 +97,16 @@ export async function importShopifyProducts(locationId: string, sinceId = 0): Pr
     const first = variants[0] ?? {};
     const priceCents = first.price != null ? Math.round(Number(first.price) * 100) : null;
     const inventory = variants.reduce((s, v) => s + (typeof v.inventory_quantity === "number" ? v.inventory_quantity : 0), 0);
+    const tags = (p.tags || "").split(",").map((t) => t.trim()).filter(Boolean);
+    const warehouse = warehouseFromTags(tags);
     const data = {
       name: p.title || "Untitled product",
       category: p.product_type || null,
       vendor: p.vendor || null,
+      supplier: p.vendor || null, // dropshipper/supplier (Dropshipzone/CJ/…)
+      warehouse,
+      shipCountries: warehouse ? [warehouse] : [],
+      tags,
       sku: first.sku || null,
       priceCents,
       price: priceCents != null ? Math.round(priceCents / 100) : null,
@@ -127,6 +140,10 @@ type Prisma_ProductCreate = {
   name: string;
   category: string | null;
   vendor: string | null;
+  supplier: string | null;
+  warehouse: string | null;
+  shipCountries: string[];
+  tags: string[];
   sku: string | null;
   priceCents: number | null;
   price: number | null;

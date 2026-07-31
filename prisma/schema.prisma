@@ -474,14 +474,22 @@ model Product {
   inventory   Int?     // total stock across variants
   source      String?  // where it came from (Shopify/eBay/manual)
   externalId  String?  // provider product id (dedup)
+  // Fulfilment/shipping origin — drives the warehouse & dropshipper filters and
+  // the geo-gate ("only market where it can ship"). From Shopify tags/metafields.
+  supplier    String?  // dropshipper / supplier (e.g. Dropshipzone, CJ Dropshipping)
+  warehouse   String?  // primary warehouse code (e.g. AU, US, CN)
+  shipCountries Json    @default("[]") // ISO country codes this product can ship to
+  tags        Json     @default("[]") // raw Shopify tags (channel eligibility etc.)
   // Which platforms this product should be listed on (keys: "shopify","ebay",
-  // "placid_connect"). Drives the future outbound push + buy-where widget.
+  // "placid_connect","facebook","tiktok"). Drives the outbound push + buy-where widget.
   channels    Json     @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([locationId])
   @@index([locationId, category])
+  @@index([locationId, warehouse])
+  @@index([locationId, supplier])
   @@index([locationId, source, externalId])
 }
 

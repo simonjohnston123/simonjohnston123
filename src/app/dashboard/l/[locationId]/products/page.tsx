@@ -38,6 +38,8 @@ export default async function ProductsPage({
   const q = (searchParams.q || "").trim();
   const category = searchParams.category || undefined;
   const source = searchParams.source || undefined;
+  const warehouse = searchParams.warehouse || undefined;
+  const supplier = searchParams.supplier || undefined;
   const sort = searchParams.sort && searchParams.sort in SORTS ? searchParams.sort : "newest";
   const per = PER_PAGE_OPTIONS.includes(Number(searchParams.per)) ? Number(searchParams.per) : 50;
   const page = Math.max(1, Number(searchParams.page) || 1);
@@ -46,12 +48,16 @@ export default async function ProductsPage({
   if (q) where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }];
   if (category) where.category = category === "__none__" ? null : category;
   if (source) where.source = source === "manual" ? null : source;
+  if (warehouse) where.warehouse = warehouse === "__none__" ? null : warehouse;
+  if (supplier) where.supplier = supplier === "__none__" ? null : supplier;
 
-  const [count, products, cats, sources] = await Promise.all([
+  const [count, products, cats, sources, warehouses, suppliers] = await Promise.all([
     prisma.product.count({ where }),
     prisma.product.findMany({ where, orderBy: SORTS[sort], skip: (page - 1) * per, take: per }),
     prisma.product.groupBy({ by: ["category"], where: { locationId }, _count: { _all: true } }),
     prisma.product.groupBy({ by: ["source"], where: { locationId }, _count: { _all: true } }),
+    prisma.product.groupBy({ by: ["warehouse"], where: { locationId }, _count: { _all: true } }),
+    prisma.product.groupBy({ by: ["supplier"], where: { locationId }, _count: { _all: true } }),
   ]);
 
   const base = `/dashboard/l/${locationId}/products`;
@@ -62,7 +68,7 @@ export default async function ProductsPage({
 
   const qs = (overrides: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams();
-    const merged: Record<string, string | number | undefined> = { q, category, source, sort, per, page, ...overrides };
+    const merged: Record<string, string | number | undefined> = { q, category, source, warehouse, supplier, sort, per, page, ...overrides };
     for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== "" && v !== null) p.set(k, String(v));
     const s = p.toString();
     return s ? `${base}?${s}` : base;
@@ -74,6 +80,9 @@ export default async function ProductsPage({
     .sort((a, b) => b._count._all - a._count._all)
     .map((c) => ({ name: c.category as string, n: c._count._all }));
   const uncategorised = cats.find((c) => c.category === null)?._count._all ?? 0;
+
+  const whChips = warehouses.filter((w) => w.warehouse).sort((a, b) => b._count._all - a._count._all).map((w) => ({ name: w.warehouse as string, n: w._count._all }));
+  const supplierOpts = suppliers.filter((s) => s.supplier).sort((a, b) => b._count._all - a._count._all).map((s) => ({ name: s.supplier as string, n: s._count._all }));
 
   return (
     <div>
@@ -110,9 +119,29 @@ export default async function ProductsPage({
         </div>
       ) : null}
 
+      {/* Shipping: warehouse chips (postage origin) */}
+      {whChips.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-400">📦 Ships from</span>
+          <Link href={qs({ warehouse: undefined, page: undefined })} className={!warehouse ? "btn-primary text-xs" : "btn-secondary text-xs"}>Any warehouse</Link>
+          {whChips.map((w) => (
+            <Link key={w.name} href={qs({ warehouse: w.name, page: undefined })} className={warehouse === w.name ? "btn-primary text-xs" : "btn-secondary text-xs"}>
+              {w.name} ({w.n})
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
       {/* Filter bar */}
       <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-3">
         {category ? <input type="hidden" name="category" value={category} /> : null}
+        {warehouse ? <input type="hidden" name="warehouse" value={warehouse} /> : null}
+        <label className="text-xs text-slate-500">Dropshipper
+          <select name="supplier" defaultValue={supplier ?? ""} className="input mt-1 h-9 w-44 text-sm">
+            <option value="">All suppliers</option>
+            {supplierOpts.map((s) => <option key={s.name} value={s.name}>{s.name} ({s.n})</option>)}
+          </select>
+        </label>
         <label className="text-xs text-slate-500">Search
           <input type="text" name="q" defaultValue={q} placeholder="name or SKU" className="input mt-1 h-9 w-48 text-sm" />
         </label>
@@ -159,6 +188,7 @@ export default async function ProductsPage({
                 <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                   <th className="px-3 py-2 font-medium">Product</th>
                   <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">Ships from</th>
                   <th className="px-3 py-2 font-medium">Price</th>
                   <th className="px-3 py-2 font-medium">Stock</th>
                   <th className="px-3 py-2 font-medium">Channels</th>
@@ -184,6 +214,14 @@ export default async function ProductsPage({
                         </Link>
                       </td>
                       <td className="px-3 py-2 text-slate-600">{p.category || <span className="text-slate-300">—</span>}</td>
+                      <td className="px-3 py-2">
+                        {p.warehouse ? (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">{p.warehouse}</span>
+                            {p.supplier ? <span className="truncate text-[11px] text-slate-400">{p.supplier}</span> : null}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
                       <td className="px-3 py-2 font-semibold text-slate-900">{money(p.priceCents, p.price)}</td>
                       <td className="px-3 py-2 text-slate-600">{p.inventory ?? "—"}</td>
                       <td className="px-3 py-2">
