@@ -92,18 +92,21 @@ export default async function ProductsPage({
         <NewProduct locationId={locationId} />
       </div>
 
-      {/* Category grouping chips */}
+      {/* Category grouping chips — scrollable so a big taxonomy doesn't bury the table. */}
       {catChips.length > 0 || uncategorised > 0 ? (
-        <div className="mb-3 flex flex-wrap gap-2">
-          <Link href={qs({ category: undefined, page: undefined })} className={!category ? "btn-primary text-xs" : "btn-secondary text-xs"}>All ({count})</Link>
-          {catChips.map((c) => (
-            <Link key={c.name} href={qs({ category: c.name, page: undefined })} className={category === c.name ? "btn-primary text-xs" : "btn-secondary text-xs"}>
-              {c.name} ({c.n})
-            </Link>
-          ))}
-          {uncategorised > 0 ? (
-            <Link href={qs({ category: "__none__", page: undefined })} className={category === "__none__" ? "btn-primary text-xs" : "btn-secondary text-xs"}>Uncategorised ({uncategorised})</Link>
-          ) : null}
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-medium text-slate-400">Group by category ({catChips.length})</div>
+          <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/40 p-2">
+            <Link href={qs({ category: undefined, page: undefined })} className={!category ? "btn-primary text-xs" : "btn-secondary text-xs"}>All ({count})</Link>
+            {catChips.map((c) => (
+              <Link key={c.name} href={qs({ category: c.name, page: undefined })} className={category === c.name ? "btn-primary text-xs" : "btn-secondary text-xs"}>
+                {c.name} ({c.n})
+              </Link>
+            ))}
+            {uncategorised > 0 ? (
+              <Link href={qs({ category: "__none__", page: undefined })} className={category === "__none__" ? "btn-primary text-xs" : "btn-secondary text-xs"}>Uncategorised ({uncategorised})</Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
