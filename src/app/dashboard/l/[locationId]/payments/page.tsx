@@ -2,7 +2,14 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
+import { ConnectOnboarding } from "@/components/connect-onboarding";
 import { isConfigured } from "@/lib/oauth-providers";
+import {
+  stripeConnectConfigured,
+  stripePublishableKey,
+  platformFeePercent,
+  refreshAccountStatus,
+} from "@/lib/stripe-connect";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Payments" };
@@ -19,52 +26,99 @@ const modules = [
 export default async function PaymentsPage({ params }: { params: { locationId: string } }) {
   await requireLocationAccess(params.locationId);
 
-  const conns = await prisma.connection.findMany({
-    where: { locationId: params.locationId, provider: { in: ["STRIPE", "SQUARE"] } },
-  });
-  const stripeConn = conns.find((c) => c.provider === "STRIPE");
-  const squareConn = conns.find((c) => c.provider === "SQUARE");
-  const stripeConnected = stripeConn?.status === "CONNECTED";
+  const location = await prisma.location.findUnique({ where: { id: params.locationId } });
+
+  // Branded embedded payments ("Placid Connect payments").
+  const paymentsLive = stripeConnectConfigured();
+  const pubKey = stripePublishableKey();
+  let chargesEnabled = location?.stripeChargesEnabled ?? false;
+  let detailsSubmitted = location?.stripeDetailsSubmitted ?? false;
+  // If a connected account exists, refresh its live status (best-effort).
+  if (paymentsLive && location?.stripeAccountId) {
+    try {
+      const s = await refreshAccountStatus(params.locationId);
+      chargesEnabled = s.charges;
+      detailsSubmitted = s.details;
+    } catch {
+      /* keep cached flags */
+    }
+  }
+  const feePct = platformFeePercent();
+
+  // Square still connects via the business's own Square login (kept as an option).
+  const squareConn = await prisma.connection.findUnique({
+    where: { locationId_provider: { locationId: params.locationId, provider: "SQUARE" } },
+  }).catch(() => null);
   const squareConnected = squareConn?.status === "CONNECTED";
-  const squareOauth = isConfigured("SQUARE"); // one-click when the Square app is set up
-  const stripeOauth = isConfigured("STRIPE"); // one-click when Stripe Connect is set up
+  const squareOauth = isConfigured("SQUARE");
 
   return (
     <div>
-      <PageHeader title="Payments" subtitle="Connect a gateway, then invoice and get paid" />
+      <PageHeader title="Payments" subtitle="Accept card payments and get paid — powered by Placid Connect" />
 
-      {/* Payment gateways — each business connects its OWN account */}
+      {/* Placid Connect payments — branded embedded onboarding */}
       <section className="mb-8">
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">Payment gateways</h2>
-        <p className="mb-3 max-w-2xl text-sm text-slate-500">
-          Connect your own payment account so money from invoices and bookings lands directly in it. Your keys are
-          encrypted and never shared.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Stripe — connectable now */}
-          <div className="card flex flex-col p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-xl">💳</span>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Stripe</h3>
-                  {stripeConnected && stripeConn?.accountLabel ? (
-                    <p className="text-xs text-slate-500">{stripeConn.accountLabel}</p>
-                  ) : null}
-                </div>
+        <div className="card overflow-hidden p-0">
+          <div className="bg-brand-gradient px-6 py-5 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Accept payments with Placid Connect</h2>
+                <p className="mt-0.5 text-sm text-white/80">
+                  Take cards, Apple &amp; Google Pay and pay out to your bank — set up in minutes, no separate accounts.
+                </p>
               </div>
-              {stripeConnected ? <Badge color="green">Connected</Badge> : <Badge color="amber">Not connected</Badge>}
-            </div>
-            <p className="mt-3 flex-1 text-sm text-slate-500">
-              Take card payments, Apple &amp; Google Pay, subscriptions and invoices with your own Stripe account.
-            </p>
-            <div className="mt-4 flex items-center gap-2">
-              <ConnectButton locationId={params.locationId} provider="STRIPE" connected={stripeConnected} oauthReady={stripeOauth} />
-              {stripeConnected ? <DisconnectButton locationId={params.locationId} provider="STRIPE" /> : null}
+              {chargesEnabled ? (
+                <Badge color="green">Active</Badge>
+              ) : detailsSubmitted ? (
+                <Badge color="amber">In review</Badge>
+              ) : (
+                <Badge color="slate">Not set up</Badge>
+              )}
             </div>
           </div>
 
-          {/* Square — connectable now */}
+          <div className="p-6">
+            {chargesEnabled ? (
+              <div className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
+                <p className="font-medium">✓ Your payments are switched on.</p>
+                <p className="mt-1">
+                  Invoices and paid bookings are charged securely and paid out to your bank. A{" "}
+                  <span className="font-semibold">{feePct}%</span> Placid Connect fee applies to each payment.
+                </p>
+              </div>
+            ) : !paymentsLive ? (
+              <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                <p className="font-medium text-slate-800">Payments are being switched on for your account.</p>
+                <p className="mt-1">
+                  We&apos;re finishing the final activation step — you&apos;ll be able to set up payouts here shortly.
+                </p>
+              </div>
+            ) : pubKey ? (
+              <div>
+                <p className="mb-4 max-w-2xl text-sm text-slate-500">
+                  Answer a few quick questions to verify your business and connect your bank. It&apos;s all handled
+                  right here — you never leave Placid Connect.
+                </p>
+                <ConnectOnboarding locationId={params.locationId} publishableKey={pubKey} />
+              </div>
+            ) : null}
+
+            {detailsSubmitted && !chargesEnabled ? (
+              <p className="mt-4 text-xs text-slate-500">
+                Your details are in — verification usually completes within a few minutes. Refresh this page to check.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {/* Square — optional alternative gateway (business's own Square login) */}
+      <section className="mb-8">
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">Already use Square?</h2>
+        <p className="mb-3 max-w-2xl text-sm text-slate-500">
+          Prefer to keep taking payments through your existing Square account? Connect it here instead.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="card flex flex-col p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-3">
@@ -87,16 +141,6 @@ export default async function PaymentsPage({ params }: { params: { locationId: s
             </div>
           </div>
         </div>
-        {stripeConnected ? (
-          <p className="mt-3 text-xs text-green-700">
-            ✓ Stripe connected — invoices and paid bookings from this business will be charged into your Stripe account.
-          </p>
-        ) : (
-          <p className="mt-3 text-xs text-slate-400">
-            Find your keys at <span className="font-mono">dashboard.stripe.com → Developers → API keys</span>. A restricted key
-            (with Checkout, Payments &amp; Invoices write access) is safest.
-          </p>
-        )}
       </section>
 
       {/* Coming-soon payment features */}

@@ -1,0 +1,156 @@
+import "server-only";
+import { prisma } from "@/lib/db";
+
+// ---------------------------------------------------------------------------
+// Embedded Stripe Connect — "Placid Connect payments".
+//
+// The business NEVER sees Stripe branding. Placid Connect creates a connected
+// account for them (controller.stripe_dashboard = none) and drops Stripe's
+// embedded onboarding component inside our own UI, styled with the Placid
+// palette. Stripe still runs all KYC / compliance behind the scenes.
+//
+// Money from invoices & bookings is charged on the connected account with a
+// platform application fee (PLATFORM_FEE_PERCENT) skimmed to Placid Connect.
+//
+// No SDK — plain REST so the Docker image needs no server-side Stripe package.
+// ---------------------------------------------------------------------------
+
+const API = "https://api.stripe.com/v1";
+
+/** Both keys present → the embedded payments experience is live. */
+export function stripeConnectConfigured(): boolean {
+  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
+}
+
+/** Publishable key is safe to expose to the browser (needed by connect-js). */
+export function stripePublishableKey(): string | null {
+  return process.env.STRIPE_PUBLISHABLE_KEY || null;
+}
+
+/** The % Placid Connect adds on top of each charge. Defaults to 2%. */
+export function platformFeePercent(): number {
+  const v = Number(process.env.PLATFORM_FEE_PERCENT);
+  return Number.isFinite(v) && v >= 0 ? v : 2;
+}
+
+function secret(): string {
+  const k = process.env.STRIPE_SECRET_KEY;
+  if (!k) throw new Error("STRIPE_SECRET_KEY is not set.");
+  return k;
+}
+
+// Map a free-text country to an ISO-3166 alpha-2 for Stripe. Falls back to AU.
+function isoCountry(country?: string | null): string {
+  const c = (country || "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    australia: "AU", au: "AU",
+    "new zealand": "NZ", nz: "NZ",
+    "united states": "US", usa: "US", us: "US", america: "US",
+    "united kingdom": "GB", uk: "GB", gb: "GB", england: "GB",
+    canada: "CA", ca: "CA",
+  };
+  return map[c] || "AU";
+}
+
+async function call(
+  method: "GET" | "POST",
+  path: string,
+  params?: URLSearchParams,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${secret()}`,
+      ...(params ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+    },
+    body: params ? params.toString() : undefined,
+    cache: "no-store",
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    const msg = (json.error as { message?: string } | undefined)?.message ?? `Stripe ${res.status}`;
+    throw new Error(msg);
+  }
+  return json;
+}
+
+/**
+ * Return the connected-account id for a location, creating it on first use.
+ * The account is a white-label controller account: no Stripe dashboard, Stripe
+ * collects requirements (so the embedded onboarding component works), and the
+ * platform owns fees + loss liability.
+ */
+export async function ensureConnectedAccount(locationId: string): Promise<string> {
+  const loc = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!loc) throw new Error("Location not found");
+  if (loc.stripeAccountId) return loc.stripeAccountId;
+
+  const p = new URLSearchParams();
+  p.set("country", isoCountry(loc.country));
+  if (loc.email) p.set("email", loc.email);
+  p.set("business_profile[name]", loc.name);
+  if (loc.website) p.set("business_profile[url]", loc.website);
+  // White-label controller config — the business sees only Placid Connect.
+  p.set("controller[stripe_dashboard][type]", "none");
+  p.set("controller[requirement_collection]", "stripe");
+  p.set("controller[fees][payer]", "application");
+  p.set("controller[losses][payments]", "application");
+  p.set("capabilities[card_payments][requested]", "true");
+  p.set("capabilities[transfers][requested]", "true");
+  p.set("metadata[locationId]", loc.id);
+
+  const acct = await call("POST", "/accounts", p);
+  const accountId = String(acct.id);
+  await prisma.location.update({ where: { id: locationId }, data: { stripeAccountId: accountId } });
+  return accountId;
+}
+
+/**
+ * Create an Account Session client secret for the embedded onboarding component.
+ * The browser passes this to connect-js; it expires quickly, so the client
+ * re-fetches on demand.
+ */
+export async function createOnboardingSession(locationId: string): Promise<string> {
+  const accountId = await ensureConnectedAccount(locationId);
+  const p = new URLSearchParams();
+  p.set("account", accountId);
+  p.set("components[account_onboarding][enabled]", "true");
+  const session = await call("POST", "/account_sessions", p);
+  return String(session.client_secret);
+}
+
+export type AccountStatus = {
+  charges: boolean;
+  details: boolean;
+  payouts: boolean;
+};
+
+/** Pull fresh capability flags from Stripe and cache them on the location. */
+export async function refreshAccountStatus(locationId: string): Promise<AccountStatus> {
+  const loc = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!loc?.stripeAccountId) return { charges: false, details: false, payouts: false };
+  const acct = await call("GET", `/accounts/${loc.stripeAccountId}`);
+  const status: AccountStatus = {
+    charges: Boolean(acct.charges_enabled),
+    details: Boolean(acct.details_submitted),
+    payouts: Boolean(acct.payouts_enabled),
+  };
+  await prisma.location.update({
+    where: { id: locationId },
+    data: {
+      stripeChargesEnabled: status.charges,
+      stripeDetailsSubmitted: status.details,
+      stripePayoutsEnabled: status.payouts,
+    },
+  });
+  return status;
+}
+
+/**
+ * The application fee (in the smallest currency unit) for a charge of
+ * `amountMinor`, using PLATFORM_FEE_PERCENT. Used when creating PaymentIntents
+ * on the connected account for invoices/bookings.
+ */
+export function applicationFeeMinor(amountMinor: number): number {
+  return Math.round((amountMinor * platformFeePercent()) / 100);
+}

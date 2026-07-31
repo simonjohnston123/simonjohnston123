@@ -63,6 +63,13 @@ model Location {
   country    String?  @default("Australia")
   taxId         String? // ABN / VAT / EIN / GST (primary, label depends on country)
   companyNumber String? // ACN / Company number / NZBN (secondary)
+  // Embedded Stripe Connect (white-label "Placid Connect payments"). The connected
+  // account is created + onboarded via Stripe embedded components; we only cache
+  // its id + capability flags. Charges route through it with a platform fee.
+  stripeAccountId        String?
+  stripeChargesEnabled   Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
+  stripePayoutsEnabled   Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
