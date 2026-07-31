@@ -147,7 +147,7 @@ export default async function ConversationsPage({
         </div>
 
         {/* Thread — full-screen on mobile when active; empty prompt on desktop. */}
-        <div className={cn("card flex min-h-[65vh] flex-col lg:min-h-[520px]", active ? "flex" : "hidden lg:flex")}>
+        <div className={cn("card flex min-h-[65vh] min-w-0 flex-col overflow-hidden lg:min-h-[520px]", active ? "flex" : "hidden lg:flex")}>
           {!active ? (
             <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
               Select a conversation to read and reply.
@@ -173,16 +173,16 @@ export default async function ConversationsPage({
                 </form>
               </div>
 
-              <div className="flex-1 space-y-2.5 overflow-y-auto px-4 py-4">
+              <div className="min-w-0 flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden px-4 py-4">
                 {active.messages.length === 0 ? (
                   <p className="py-10 text-center text-sm text-slate-400">No messages yet — say hello 👋</p>
                 ) : (
                   active.messages.map((m) => {
                     const out = m.direction === "OUTBOUND";
                     return (
-                      <div key={m.id} className={cn("flex", out ? "justify-end" : "justify-start")}>
-                        <div className={cn("max-w-[80%] rounded-2xl px-4 py-2.5 text-sm", out ? "bg-brand-gradient text-white" : "bg-slate-100 text-slate-800")}>
-                          <div className="whitespace-pre-line">{m.body}</div>
+                      <div key={m.id} className={cn("flex min-w-0", out ? "justify-end" : "justify-start")}>
+                        <div className={cn("min-w-0 max-w-[85%] rounded-2xl px-4 py-2.5 text-sm", out ? "bg-brand-gradient text-white" : "bg-slate-100 text-slate-800")}>
+                          <div className="overflow-hidden whitespace-pre-line break-words [overflow-wrap:anywhere]">{m.body}</div>
                           <div className={cn("mt-1 text-[10px]", out ? "text-white/70" : "text-slate-400")}>{formatDateTime(m.createdAt)}</div>
                         </div>
                       </div>
