@@ -169,8 +169,10 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     clientSecretEnv: "EBAY_CLIENT_SECRET",
     authUrl: "https://auth.ebay.com/oauth2/authorize",
     tokenUrl: "https://api.ebay.com/identity/v1/oauth2/token",
+    // sell.account is required to read business policies (postage/payment/returns)
+    // — without it the Sell API 403s on /sell/account/*, blocking listing publish.
     scope:
-      "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+      "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment",
     tokenStyle: "post",
     authHeaderBasic: true,
     redirectUriEnv: "EBAY_RUNAME",
