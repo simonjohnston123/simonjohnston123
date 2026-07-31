@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
 import { PROVIDERS, type ProviderKey } from "@/lib/integrations-catalog";
-import { isConfigured } from "@/lib/oauth-providers";
+import { isConfiguredAsync } from "@/lib/oauth-providers";
 import { saveWantedIntegrationsAction } from "./actions";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,11 @@ export default async function IntegrationsPage({ params }: { params: { locationI
   const byProvider = new Map(connections.map((c) => [c.provider, c]));
   const connectedCount = connections.filter((c) => c.status === "CONNECTED").length;
   const wanted = new Set(Array.isArray(location.wantedIntegrations) ? (location.wantedIntegrations as string[]) : []);
+
+  // OAuth readiness can come from env OR the admin settings store (async).
+  const oauthReadyMap = Object.fromEntries(
+    await Promise.all(PROVIDERS.map(async (p) => [p.key, await isConfiguredAsync(p.key)] as const)),
+  ) as Record<string, boolean>;
 
   return (
     <div>
@@ -69,7 +74,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                   const connected = conn?.status === "CONNECTED";
                   // Any provider with a configured Placid app can do one-click OAuth —
                   // including api-key providers like Square (keys stay as a fallback).
-                  const oauthReady = isConfigured(p.key);
+                  const oauthReady = oauthReadyMap[p.key] ?? false;
                   return (
                     <div key={p.key} className={cn("card flex flex-col p-5", wanted.has(p.key) && "ring-2 ring-brand-200")}>
                       <div className="flex items-start justify-between gap-2">

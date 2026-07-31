@@ -10,6 +10,7 @@ const nav = [
   { href: "/admin/plans", label: "Plans" },
   { href: "/admin/payments", label: "Payments" },
   { href: "/admin/ai", label: "AI" },
+  { href: "/admin/integrations", label: "Integrations" },
   { href: "/admin/users", label: "Users" },
 ];
 

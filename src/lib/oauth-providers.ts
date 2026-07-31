@@ -282,6 +282,38 @@ function basicAuth(c: OAuthConfig): string {
   return "Basic " + Buffer.from(`${process.env[c.clientIdEnv] ?? ""}:${process.env[c.clientSecretEnv] ?? ""}`).toString("base64");
 }
 
+// Providers whose client secret can be set from the admin UI (encrypted Setting
+// store) instead of server env — so a super-admin can connect an OAuth app
+// without SSH. Dynamic import keeps the server-only settings module out of any
+// client bundle that imports this file's types.
+const SECRET_SETTING_KEY: Record<string, string> = { EBAY: "ebay_client_secret" };
+
+async function clientSecret(provider: string, c: OAuthConfig): Promise<string> {
+  const key = SECRET_SETTING_KEY[provider];
+  if (key) {
+    try {
+      const { getSetting } = await import("@/lib/platform-settings");
+      const v = await getSetting(key);
+      if (v) return v;
+    } catch {
+      /* fall back to env */
+    }
+  }
+  return process.env[c.clientSecretEnv] || "";
+}
+
+async function basicAuthAsync(provider: string, c: OAuthConfig): Promise<string> {
+  const secret = await clientSecret(provider, c);
+  return "Basic " + Buffer.from(`${process.env[c.clientIdEnv] ?? ""}:${secret}`).toString("base64");
+}
+
+/** Like isConfigured, but also honours a secret stored in the admin settings. */
+export async function isConfiguredAsync(provider: string): Promise<boolean> {
+  const c = OAUTH[provider as ProviderKey];
+  if (!c || !process.env[c.clientIdEnv]) return false;
+  return Boolean(await clientSecret(provider, c));
+}
+
 /** TikTok Shop returns tokens nested under `data`, with epoch-second expiries. */
 function tiktokTokenSet(json: unknown): TokenSet | null {
   const d = ((json as { data?: Record<string, unknown> })?.data ?? {}) as Record<string, unknown>;
@@ -325,10 +357,10 @@ export async function exchangeCode(provider: string, code: string): Promise<Toke
   if (redirect) fields.redirect_uri = redirect;
   const extraHeaders: Record<string, string> = {};
   if (c.authHeaderBasic) {
-    extraHeaders.Authorization = basicAuth(c);
+    extraHeaders.Authorization = await basicAuthAsync(provider, c);
   } else {
     fields.client_id = process.env[c.clientIdEnv] ?? "";
-    fields.client_secret = process.env[c.clientSecretEnv] ?? "";
+    fields.client_secret = await clientSecret(provider, c);
   }
 
   let res: Response;
@@ -373,11 +405,11 @@ export async function refreshToken(provider: string, refresh: string): Promise<T
   const fields: Record<string, string> = { refresh_token: refresh, grant_type: "refresh_token" };
   const extraHeaders: Record<string, string> = {};
   if (c.authHeaderBasic) {
-    extraHeaders.Authorization = basicAuth(c);
+    extraHeaders.Authorization = await basicAuthAsync(provider, c);
     if (c.scope) fields.scope = c.scope; // eBay requires scope on refresh
   } else {
     fields.client_id = process.env[c.clientIdEnv] ?? "";
-    fields.client_secret = process.env[c.clientSecretEnv] ?? "";
+    fields.client_secret = await clientSecret(provider, c);
   }
 
   const res =
