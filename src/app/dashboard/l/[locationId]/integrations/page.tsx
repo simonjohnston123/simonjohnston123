@@ -4,6 +4,7 @@ import { PageHeader, Badge } from "@/components/ui";
 import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
 import { PROVIDERS, type ProviderKey } from "@/lib/integrations-catalog";
 import { isConfiguredAsync } from "@/lib/oauth-providers";
+import { shopifyConfigured } from "@/lib/shopify-oauth";
 import { saveWantedIntegrationsAction } from "./actions";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,8 @@ export default async function IntegrationsPage({ params }: { params: { locationI
   const oauthReadyMap = Object.fromEntries(
     await Promise.all(PROVIDERS.map(async (p) => [p.key, await isConfiguredAsync(p.key)] as const)),
   ) as Record<string, boolean>;
+  // Shopify has its own dedicated OAuth (per-store URLs), not the generic map.
+  oauthReadyMap.SHOPIFY = await shopifyConfigured();
 
   return (
     <div>

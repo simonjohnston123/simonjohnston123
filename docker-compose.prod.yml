@@ -61,6 +61,10 @@ services:
       EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
       EBAY_RUNAME: ${EBAY_RUNAME:-}
       EBAY_VERIFICATION_TOKEN: ${EBAY_VERIFICATION_TOKEN:-}
+      # Shopify OAuth (platform app). Client ID is public (has a built-in default);
+      # the Client Secret is entered encrypted at /admin/integrations.
+      SHOPIFY_CLIENT_ID: ${SHOPIFY_CLIENT_ID:-}
+      SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET:-}
       # Placid Storage yard feed (Storage tab pulls live yard data from the storage app).
       STORAGE_URL: ${STORAGE_URL:-https://placidstoragesolutions.com.au}
       STORAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}

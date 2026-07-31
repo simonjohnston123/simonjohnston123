@@ -22,12 +22,61 @@ export function ConnectButton({
 }) {
   const def = providerDef(provider);
   const [open, setOpen] = useState(false);
+  const [shop, setShop] = useState("");
   const [state, formAction] = useFormState(connectApiKeyAction, INIT);
 
   if (!def) return null;
 
   const oauthHref = `/api/integrations/${provider.toLowerCase()}/connect?locationId=${locationId}`;
   const hasKeys = Boolean(def.fields?.length);
+
+  // Shopify: one-click OAuth once the platform Client Secret is set. We only need
+  // to know WHICH store first, then bounce the merchant to Shopify's own consent.
+  if (provider === "SHOPIFY" && oauthReady) {
+    const go = () => {
+      const s = shop.trim();
+      if (!s) return;
+      window.location.href = `/api/integrations/shopify/connect?locationId=${locationId}&shop=${encodeURIComponent(s)}`;
+    };
+    return (
+      <>
+        <button className={connected ? "btn-secondary text-sm" : "btn-primary text-sm"} onClick={() => setOpen(true)}>
+          {connected ? "Reconnect" : "Connect with Shopify"}
+        </button>
+        {open ? (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4" onClick={() => setOpen(false)}>
+            <div className="card my-8 w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">Connect with Shopify</h2>
+                <button className="btn-ghost" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+              </div>
+              <p className="mb-4 text-sm text-slate-500">Enter your store, then approve access on Shopify. No tokens to copy.</p>
+              <label className="label" htmlFor="shopDomain">Store domain</label>
+              <input
+                id="shopDomain"
+                value={shop}
+                onChange={(e) => setShop(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") go(); }}
+                type="text"
+                className="input"
+                placeholder="your-store.myshopify.com"
+                autoComplete="off"
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Your permanent .myshopify.com address — NOT your custom domain. Find it in Shopify admin → Settings → Domains.
+                You can also just type the store name (e.g. &ldquo;ugkjdv-vk&rdquo;).
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>
+                <button type="button" className="btn-primary" onClick={go}>Continue to Shopify →</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  }
 
   // API-key providers open a modal to paste credentials.
   if (state?.ok && open) setTimeout(() => setOpen(false), 0);

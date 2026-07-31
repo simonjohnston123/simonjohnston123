@@ -12,6 +12,7 @@ export const SETTING_KEYS = {
   platformFeePercent: "platform_fee_percent",
   anthropicApiKey: "anthropic_api_key",
   ebayClientSecret: "ebay_client_secret",
+  shopifyClientSecret: "shopify_client_secret",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {
