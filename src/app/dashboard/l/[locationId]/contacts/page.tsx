@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState, Badge } from "@/components/ui";
 import { NewContactButton } from "@/components/contact-form";
 import { ImportContactsButton } from "@/components/import-contacts";
+import { GuestStageTabs } from "@/components/guest-stage-tabs";
 import { contactName, formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export default async function ContactsPage({
   params: { locationId: string };
   searchParams: { q?: string };
 }) {
-  await requireLocationAccess(params.locationId);
+  const { location } = await requireLocationAccess(params.locationId);
+  const isHomestead = /home\s*stead|accommodation/i.test(location.name);
   const q = (searchParams.q ?? "").trim();
 
   const contacts = await prisma.contact.findMany({
@@ -52,6 +54,8 @@ export default async function ContactsPage({
           </div>
         }
       />
+
+      {isHomestead ? <GuestStageTabs /> : null}
 
       <form className="mb-4" action={`${base}/contacts`}>
         <input
