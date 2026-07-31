@@ -210,3 +210,42 @@ export async function createDirectCheckout(
   const session = await call("POST", "/checkout/sessions", p, loc.stripeAccountId);
   return { url: String(session.url), feeMinor };
 }
+
+/**
+ * Create a PaymentIntent on the business's connected account for an on-screen
+ * card charge. Returns the client secret + account id so the browser can mount
+ * Stripe's Payment Element and confirm the charge in place (no redirect/link).
+ * The platform application fee is applied automatically.
+ */
+export async function createPaymentIntent(
+  locationId: string,
+  opts: { amountMinor: number; description: string; currency?: string },
+): Promise<{ clientSecret: string; accountId: string; publishableKey: string; feeMinor: number }> {
+  const loc = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!loc?.stripeAccountId) throw new Error("This business hasn't set up payments yet.");
+  const status = await refreshAccountStatus(locationId);
+  if (!status.charges) throw new Error("Payments setup isn't finished for this business yet.");
+  if (!Number.isFinite(opts.amountMinor) || opts.amountMinor < 50) {
+    throw new Error("Enter an amount of at least $0.50.");
+  }
+  const pk = await stripePublishableKey();
+  if (!pk) throw new Error("Payments aren't configured.");
+
+  const currency = (opts.currency || "aud").toLowerCase();
+  const feeMinor = await applicationFeeMinor(opts.amountMinor);
+  const p = new URLSearchParams();
+  p.set("amount", String(Math.round(opts.amountMinor)));
+  p.set("currency", currency);
+  p.set("description", opts.description || "Payment");
+  p.set("automatic_payment_methods[enabled]", "true");
+  if (feeMinor > 0) p.set("application_fee_amount", String(feeMinor));
+  p.set("metadata[locationId]", locationId);
+
+  const pi = await call("POST", "/payment_intents", p, loc.stripeAccountId);
+  return {
+    clientSecret: String(pi.client_secret),
+    accountId: loc.stripeAccountId,
+    publishableKey: pk,
+    feeMinor,
+  };
+}

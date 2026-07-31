@@ -21,6 +21,8 @@
     "@prisma/client": "5.18.0",
     "@stripe/connect-js": "^3.4.6",
     "@stripe/react-connect-js": "^3.4.4",
+    "@stripe/react-stripe-js": "^6.8.0",
+    "@stripe/stripe-js": "^9.12.1",
     "bcryptjs": "2.4.3",
     "imapflow": "^1.6.5",
     "jose": "5.6.3",

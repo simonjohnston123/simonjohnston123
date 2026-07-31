@@ -1,7 +1,7 @@
 "use server";
 
 import { requireLocationAccess } from "@/lib/auth";
-import { createOnboardingSession, refreshAccountStatus, createDirectCheckout } from "@/lib/stripe-connect";
+import { createOnboardingSession, refreshAccountStatus, createDirectCheckout, createPaymentIntent } from "@/lib/stripe-connect";
 
 /**
  * Called by the embedded onboarding component to (lazily create and) fetch a
@@ -27,6 +27,22 @@ export async function refreshStatusAction(locationId: string): Promise<void> {
     await refreshAccountStatus(locationId);
   } catch {
     // Non-fatal — the page will just show the last-known status.
+  }
+}
+
+/** Start an on-screen card charge — returns the client secret for Payment Element. */
+export async function startPaymentAction(
+  locationId: string,
+  amountDollars: number,
+  description: string,
+): Promise<{ clientSecret: string; accountId: string; publishableKey: string; feeCents: number } | { error: string }> {
+  await requireLocationAccess(locationId);
+  try {
+    const amountMinor = Math.round(Number(amountDollars) * 100);
+    const r = await createPaymentIntent(locationId, { amountMinor, description: description?.trim() || "Payment" });
+    return { clientSecret: r.clientSecret, accountId: r.accountId, publishableKey: r.publishableKey, feeCents: r.feeMinor };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not start the payment." };
   }
 }
 
