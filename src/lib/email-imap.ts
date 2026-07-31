@@ -85,6 +85,18 @@ export async function getEmailImapCreds(locationId: string): Promise<ImapCreds |
   };
 }
 
+type FolderRule = { name: string; matchField: string; matchValue: string };
+/** First user-defined folder whose rule matches the sender/subject, else null. */
+function matchFolder(folders: FolderRule[], sender: string, subject: string): string | null {
+  for (const f of folders) {
+    const v = (f.matchValue || "").toLowerCase().trim();
+    if (!v) continue;
+    const hay = (f.matchField === "SUBJECT" ? subject : sender).toLowerCase();
+    if (hay.includes(v)) return f.name;
+  }
+  return null;
+}
+
 function stripHtml(html: string): string {
   return String(html || "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -127,6 +139,7 @@ async function importMessage(
   locationId: string,
   parsed: ParsedMail,
   internalDate: Date | undefined,
+  customFolders: FolderRule[] = [],
 ): Promise<"imported" | "skipped"> {
   const msgId = normalizeMessageId(parsed.messageId);
 
@@ -188,7 +201,8 @@ async function importMessage(
         contactId: contact.id,
         channel: "EMAIL",
         subject: subject || null,
-        sourceLabel: detectSource(from.address),
+        // User-defined folder rules win; fall back to the built-in source detection.
+        sourceLabel: matchFolder(customFolders, from.address, subject) || detectSource(from.address),
       },
       select: { id: true },
     });
@@ -257,6 +271,13 @@ export async function syncLocationEmail(locationId: string): Promise<SyncResult>
     return { ok: false, reason: `connect failed: ${errMsg(e)}`, fetched, imported, skipped, lastUid: folders.INBOX?.lastUid || 0 };
   }
 
+  // The business's own folder rules (applied to new conversations).
+  const customFolders = await prisma.inboxFolder.findMany({
+    where: { locationId },
+    orderBy: { position: "asc" },
+    select: { name: true, matchField: true, matchValue: true },
+  });
+
   try {
     for (const folderName of SYNC_FOLDERS) {
       let lock;
@@ -286,7 +307,7 @@ export async function syncLocationEmail(locationId: string): Promise<SyncResult>
           try {
             const parsed = await simpleParser(msg.source as Buffer);
             const internal = msg.internalDate ? new Date(msg.internalDate) : undefined;
-            const outcome = await importMessage(locationId, parsed, internal);
+            const outcome = await importMessage(locationId, parsed, internal, customFolders);
             if (outcome === "imported") imported++;
             else skipped++;
           } catch (e) {

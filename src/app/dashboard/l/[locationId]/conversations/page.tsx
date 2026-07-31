@@ -260,8 +260,8 @@ export default async function ConversationsPage({
             </form>
 
             {/* Source folders — auto-sorted by who the conversation is from */}
-            {folders.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {folders.length > 0 ? (
                 <Link
                   href={sourceHref(undefined)}
                   className={cn(
@@ -271,20 +271,26 @@ export default async function ConversationsPage({
                 >
                   📥 All
                 </Link>
-                {folders.map((f) => (
-                  <Link
-                    key={f.key}
-                    href={sourceHref(f.key)}
-                    className={cn(
-                      "rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                      source === f.key ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600 hover:bg-slate-50",
-                    )}
-                  >
-                    {f.label} <span className="text-slate-400">{f.count}</span>
-                  </Link>
-                ))}
-              </div>
-            ) : null}
+              ) : null}
+              {folders.map((f) => (
+                <Link
+                  key={f.key}
+                  href={sourceHref(f.key)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                    source === f.key ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {f.label} <span className="text-slate-400">{f.count}</span>
+                </Link>
+              ))}
+              <Link
+                href={`${base}/conversations/folders`}
+                className="rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50"
+              >
+                ⚙ Folders
+              </Link>
+            </div>
           </div>
 
           <div className="card overflow-hidden p-1.5">

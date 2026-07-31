@@ -99,6 +99,7 @@ model Location {
   externalBusy      ExternalBusy[]
   forms             Form[]
   products          Product[]
+  inboxFolders      InboxFolder[]
   // Provider keys this business chose to use (set at onboarding) — drives which
   // integrations we surface first.
   wantedIntegrations Json @default("[]")
@@ -650,6 +651,23 @@ enum ConnectionStatus {
   DISCONNECTED
   ERROR
   PENDING
+}
+
+// User-defined inbox folders (per business). A folder auto-files a conversation
+// when its rule matches — sender or subject contains `matchValue`. Businesses
+// create/manage these themselves from the Inbox.
+model InboxFolder {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  color      String   @default("#8e2de2")
+  matchField String   @default("SENDER") // SENDER | SUBJECT
+  matchValue String                       // case-insensitive substring to match
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([locationId])
 }
 
 // Platform-wide settings (encrypted). Lets the super-admin set secrets like the

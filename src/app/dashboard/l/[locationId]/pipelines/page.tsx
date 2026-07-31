@@ -105,13 +105,14 @@ export default async function PipelinesPage({
         </div>
       ) : null}
 
-      {/* Stacks vertically on mobile (no horizontal scroll); kanban board on desktop. */}
-      <div className="flex flex-col gap-4 pb-4 lg:flex-row lg:overflow-x-auto">
+      {/* Stacks vertically on mobile; on desktop the stages share the page width
+          evenly (min 210px each) and only scroll when there are many. */}
+      <div className="flex flex-col gap-3 pb-4 lg:flex-row lg:overflow-x-auto">
         {active.stages.map((stage) => {
           const items = opportunities.filter((o) => o.stageId === stage.id);
           const stageValue = items.reduce((s, o) => s + o.value, 0);
           return (
-            <div key={stage.id} className="w-full shrink-0 lg:w-72">
+            <div key={stage.id} className="w-full lg:w-auto lg:min-w-[210px] lg:flex-1">
               <div className="mb-2 flex items-center justify-between px-1">
                 <h3 className="text-sm font-semibold text-slate-700">{stage.name}</h3>
                 <span className="text-xs text-slate-400">{items.length} · {formatMoney(stageValue)}</span>
