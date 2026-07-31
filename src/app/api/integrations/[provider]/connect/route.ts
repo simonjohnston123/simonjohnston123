@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireLocationAccess } from "@/lib/auth";
-import { isConfigured, buildAuthUrl, signState } from "@/lib/oauth-providers";
+import { isConfiguredAsync, buildAuthUrl, signState } from "@/lib/oauth-providers";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
   const back = (q: string) =>
     NextResponse.redirect(new URL(`/dashboard/l/${locationId}/integrations?${q}`, req.url));
 
-  if (!isConfigured(provider)) return back("error=not_configured");
+  if (!(await isConfiguredAsync(provider))) return back("error=not_configured");
 
   const state = signState({ locationId, provider, t: String(Date.now()) });
   const url = buildAuthUrl(provider, state);
