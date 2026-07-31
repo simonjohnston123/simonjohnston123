@@ -91,10 +91,13 @@ export async function ensureConnectedAccount(locationId: string): Promise<string
   p.set("business_profile[name]", loc.name);
   if (loc.website) p.set("business_profile[url]", loc.website);
   // White-label controller config — the business sees only Placid Connect.
+  // fees.payer=account + losses.payments=stripe → the connected business bears
+  // Stripe's processing fee AND dispute liability, so Placid's application fee
+  // (PLATFORM_FEE_PERCENT) is CLEAN margin, not eroded by Stripe's cut.
   p.set("controller[stripe_dashboard][type]", "none");
   p.set("controller[requirement_collection]", "stripe");
-  p.set("controller[fees][payer]", "application");
-  p.set("controller[losses][payments]", "application");
+  p.set("controller[fees][payer]", "account");
+  p.set("controller[losses][payments]", "stripe");
   p.set("capabilities[card_payments][requested]", "true");
   p.set("capabilities[transfers][requested]", "true");
   p.set("metadata[locationId]", loc.id);
