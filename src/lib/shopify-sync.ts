@@ -28,6 +28,7 @@ async function getShopifyCreds(locationId: string): Promise<ShopifyCreds | null>
 type ShopifyOrder = {
   id: number;
   order_number: number;
+  created_at?: string;
   total_price: string;
   financial_status?: string;
   fulfillment_status?: string | null;
@@ -54,19 +55,28 @@ export async function syncShopifyOrders(locationId: string): Promise<ShopifySync
   const creds = await getShopifyCreds(locationId);
   if (!creds) return { ok: false, reason: "Shopify isn't connected", fetched: 0, imported: 0, updated: 0 };
 
-  let orders: ShopifyOrder[];
+  // Pull full history, following Shopify's Link-header cursor pagination up to the cap.
+  const MAX_ORDERS = 1000;
+  const headers = { "X-Shopify-Access-Token": creds.adminToken, "content-type": "application/json" };
+  const orders: ShopifyOrder[] = [];
+  let url: string | null = `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders.json?status=any&limit=250`;
   try {
-    const res = await fetch(
-      `https://${creds.shopDomain}/admin/api/${API_VERSION}/orders.json?status=any&limit=100`,
-      { headers: { "X-Shopify-Access-Token": creds.adminToken, "content-type": "application/json" }, cache: "no-store" },
-    );
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, reason: `Shopify ${res.status}: ${detail.slice(0, 120)}`, fetched: 0, imported: 0, updated: 0 };
+    while (url && orders.length < MAX_ORDERS) {
+      const res: Response = await fetch(url, { headers, cache: "no-store" });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        if (orders.length === 0) return { ok: false, reason: `Shopify ${res.status}: ${detail.slice(0, 120)}`, fetched: 0, imported: 0, updated: 0 };
+        break;
+      }
+      orders.push(...(((await res.json()) as { orders?: ShopifyOrder[] }).orders ?? []));
+      // Next page comes from the Link header: <…>; rel="next"
+      const link = res.headers.get("link") || "";
+      const next = link.split(",").find((p) => p.includes('rel="next"'));
+      const m = next?.match(/<([^>]+)>/);
+      url = m ? m[1] : null;
     }
-    orders = ((await res.json()) as { orders?: ShopifyOrder[] }).orders ?? [];
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
+    if (orders.length === 0) return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
   }
 
   const route = await getOrderRoute(locationId);
@@ -104,6 +114,7 @@ export async function syncShopifyOrders(locationId: string): Promise<ShopifySync
       customerPhone: phone,
       customerEmail: email,
       deliveryAddress: addressLine(o.shipping_address),
+      placedAt: o.created_at ? new Date(o.created_at) : null,
     };
 
     const existing = await prisma.order.findFirst({ where: { locationId, source: "Shopify", externalId }, select: { id: true } });

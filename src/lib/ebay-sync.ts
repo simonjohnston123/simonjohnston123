@@ -8,7 +8,9 @@ import { getOrderRoute, routeOrderToTrack } from "@/lib/order-routing";
 // Fulfillment API, using the token stored when they connected eBay. eBay masks
 // buyer email, so we match/create contacts by ship-to name (+ email when given).
 
-const FULFILLMENT_URL = "https://api.ebay.com/sell/fulfillment/v1/order?limit=50";
+const FULFILLMENT_BASE = "https://api.ebay.com/sell/fulfillment/v1/order";
+const PAGE_LIMIT = 200; // eBay getOrders max page size
+const MAX_ORDERS = 1000; // safety cap on full-history pull
 
 type StoredToken = { accessToken?: string; refreshToken?: string; expiresAt?: number };
 
@@ -44,6 +46,7 @@ async function getValidToken(locationId: string): Promise<string | null> {
 type EbayOrder = {
   orderId: string;
   legacyOrderId?: string;
+  creationDate?: string;
   orderFulfillmentStatus?: string;
   pricingSummary?: { total?: { value?: string } };
   buyer?: { username?: string };
@@ -78,19 +81,28 @@ export async function syncEbayOrders(locationId: string): Promise<EbaySyncResult
   const token = await getValidToken(locationId);
   if (!token) return { ok: false, reason: "eBay isn't connected", fetched: 0, imported: 0, updated: 0 };
 
-  let orders: EbayOrder[];
+  // Pull the full order history, one page of PAGE_LIMIT at a time, up to MAX_ORDERS.
+  const orders: EbayOrder[] = [];
   try {
-    const res = await fetch(FULFILLMENT_URL, {
-      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { ok: false, reason: `eBay ${res.status}: ${detail.slice(0, 120)}`, fetched: 0, imported: 0, updated: 0 };
+    let offset = 0;
+    while (orders.length < MAX_ORDERS) {
+      const res = await fetch(`${FULFILLMENT_BASE}?limit=${PAGE_LIMIT}&offset=${offset}`, {
+        headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        // First page failing is a real error; a later page failing → keep what we have.
+        if (offset === 0) return { ok: false, reason: `eBay ${res.status}: ${detail.slice(0, 120)}`, fetched: 0, imported: 0, updated: 0 };
+        break;
+      }
+      const batch = ((await res.json()) as { orders?: EbayOrder[] }).orders ?? [];
+      orders.push(...batch);
+      if (batch.length < PAGE_LIMIT) break;
+      offset += PAGE_LIMIT;
     }
-    orders = ((await res.json()) as { orders?: EbayOrder[] }).orders ?? [];
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
+    if (orders.length === 0) return { ok: false, reason: e instanceof Error ? e.message : "fetch failed", fetched: 0, imported: 0, updated: 0 };
   }
 
   const route = await getOrderRoute(locationId);
@@ -127,6 +139,7 @@ export async function syncEbayOrders(locationId: string): Promise<EbaySyncResult
       customerPhone: phone,
       customerEmail: email,
       deliveryAddress: addressLine(o),
+      placedAt: o.creationDate ? new Date(o.creationDate) : null,
     };
 
     const existing = await prisma.order.findFirst({ where: { locationId, source: "eBay", externalId }, select: { id: true } });

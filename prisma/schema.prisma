@@ -751,6 +751,9 @@ model Order {
   // Where the order came from (Shopify/eBay/…) + the external id for dedup.
   source          String?
   externalId      String?
+  // When the order was actually placed on the marketplace (eBay creationDate /
+  // Shopify created_at). Null for manual orders. createdAt is our import time.
+  placedAt        DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -758,6 +761,7 @@ model Order {
   @@index([locationId, status])
   @@index([contactId])
   @@index([locationId, source, externalId])
+  @@index([locationId, placedAt])
 }
 
 // ---------------------------------------------------------------------------
