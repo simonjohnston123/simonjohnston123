@@ -17,7 +17,10 @@ function headers(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     "content-type": "application/json",
+    // eBay's Inventory API validates BOTH Content-Language and Accept-Language;
+    // omitting Accept-Language 400s with errorId 25709.
     "Content-Language": CONTENT_LANGUAGE,
+    "Accept-Language": CONTENT_LANGUAGE,
     "X-EBAY-C-MARKETPLACE-ID": MARKETPLACE_ID,
   };
 }
