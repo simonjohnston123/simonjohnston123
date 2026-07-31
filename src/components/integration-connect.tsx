@@ -54,6 +54,7 @@ export function ConnectButton({
                     placeholder={f.placeholder}
                     autoComplete="off"
                   />
+                  {f.hint ? <p className="mt-1 text-xs text-slate-400">{f.hint}</p> : null}
                 </div>
               ))}
               <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">

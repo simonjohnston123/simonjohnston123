@@ -24,7 +24,7 @@ export type ProviderKey =
 // "apikey" → the client pastes their own credentials (works today, no approval)
 export type ConnectType = "oauth" | "apikey";
 
-export type ApiKeyField = { key: string; label: string; placeholder?: string; secret?: boolean };
+export type ApiKeyField = { key: string; label: string; placeholder?: string; secret?: boolean; hint?: string };
 
 export type ProviderDef = {
   key: ProviderKey;
@@ -168,8 +168,19 @@ export const PROVIDERS: ProviderDef[] = [
     connectType: "apikey",
     ready: true,
     fields: [
-      { key: "shopDomain", label: "Store domain", placeholder: "your-store.myshopify.com" },
-      { key: "adminToken", label: "Admin API access token", placeholder: "shpat_…", secret: true },
+      {
+        key: "shopDomain",
+        label: "Store domain",
+        placeholder: "your-store.myshopify.com",
+        hint: "Your permanent .myshopify.com address — NOT your custom domain. Find it in Shopify admin → Settings → Domains (or in your admin URL bar). It looks random, e.g. ugkjdv-vk.myshopify.com.",
+      },
+      {
+        key: "adminToken",
+        label: "Admin API access token",
+        placeholder: "shpat_…",
+        secret: true,
+        hint: "Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes (read_orders, read_products, read_customers) → Install app → reveal the Admin API access token (starts with shpat_).",
+      },
     ],
   },
   {
