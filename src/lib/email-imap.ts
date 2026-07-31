@@ -3,6 +3,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser, type ParsedMail, type AddressObject } from "mailparser";
 import { prisma } from "@/lib/db";
 import { decryptJson } from "@/lib/crypto";
+import { detectSource } from "@/lib/email-source";
 import type { ConnectionProvider } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -182,7 +183,13 @@ async function importMessage(
   }
   if (!conversationId) {
     const created = await prisma.conversation.create({
-      data: { locationId, contactId: contact.id, channel: "EMAIL", subject: subject || null },
+      data: {
+        locationId,
+        contactId: contact.id,
+        channel: "EMAIL",
+        subject: subject || null,
+        sourceLabel: detectSource(from.address),
+      },
       select: { id: true },
     });
     conversationId = created.id;

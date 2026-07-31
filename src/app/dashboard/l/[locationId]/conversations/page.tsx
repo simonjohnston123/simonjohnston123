@@ -51,7 +51,7 @@ export default async function ConversationsPage({
   searchParams,
 }: {
   params: { locationId: string };
-  searchParams: { c?: string; sendfail?: string; filter?: string; q?: string };
+  searchParams: { c?: string; sendfail?: string; filter?: string; q?: string; source?: string };
 }) {
   await requireLocationAccess(params.locationId);
 
@@ -60,11 +60,13 @@ export default async function ConversationsPage({
   const activeId = searchParams.c;
   const filter = searchParams.filter === "unread" || searchParams.filter === "starred" ? searchParams.filter : "all";
   const q = (searchParams.q || "").trim();
+  const source = searchParams.source; // a source folder label, or "General" for null
 
-  // Build the filtered list query (filter tab + search).
+  // Build the filtered list query (filter tab + source folder + search).
   const listWhere: Record<string, unknown> = { locationId };
   if (filter === "unread") listWhere.unread = true;
   if (filter === "starred") listWhere.starred = true;
+  if (source) listWhere.sourceLabel = source === "General" ? null : source;
   if (q) {
     listWhere.contact = {
       OR: [
@@ -89,6 +91,19 @@ export default async function ConversationsPage({
     prisma.conversation.count({ where: { locationId } }),
     prisma.connection.findFirst({ where: { locationId, provider: "SMTP", status: "CONNECTED" }, select: { id: true } }),
   ]);
+
+  // Source "folders" — one per distinct sender source, with a count.
+  const folderGroups = await prisma.conversation.groupBy({
+    by: ["sourceLabel"],
+    where: { locationId },
+    _count: { _all: true },
+    orderBy: { _count: { sourceLabel: "desc" } },
+  });
+  const folders = folderGroups.map((g) => ({
+    key: g.sourceLabel ?? "General",
+    label: g.sourceLabel ?? "General",
+    count: g._count._all,
+  }));
 
   const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c) }));
   const hasEmail = Boolean(emailConn);
@@ -118,6 +133,7 @@ export default async function ConversationsPage({
     const p = new URLSearchParams();
     if (filter !== "all") p.set("filter", filter);
     if (q) p.set("q", q);
+    if (source) p.set("source", source);
     for (const [k, v] of Object.entries(extra)) {
       if (v === undefined) p.delete(k);
       else p.set(k, v);
@@ -129,7 +145,17 @@ export default async function ConversationsPage({
     const p = new URLSearchParams();
     if (f !== "all") p.set("filter", f);
     if (q) p.set("q", q);
+    if (source) p.set("source", source);
     if (activeId) p.set("c", activeId);
+    const qs = p.toString();
+    return `${base}/conversations${qs ? `?${qs}` : ""}`;
+  };
+  const sourceHref = (s?: string) => {
+    const p = new URLSearchParams();
+    if (filter !== "all") p.set("filter", filter);
+    if (q) p.set("q", q);
+    if (activeId) p.set("c", activeId);
+    if (s) p.set("source", s);
     const qs = p.toString();
     return `${base}/conversations${qs ? `?${qs}` : ""}`;
   };
@@ -219,6 +245,7 @@ export default async function ConversationsPage({
             </div>
             <form action={`${base}/conversations`} method="get" className="flex items-center gap-1">
               {filter !== "all" ? <input type="hidden" name="filter" value={filter} /> : null}
+              {source ? <input type="hidden" name="source" value={source} /> : null}
               <input
                 name="q"
                 defaultValue={q}
@@ -231,6 +258,33 @@ export default async function ConversationsPage({
                 </Link>
               ) : null}
             </form>
+
+            {/* Source folders — auto-sorted by who the conversation is from */}
+            {folders.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                <Link
+                  href={sourceHref(undefined)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                    !source ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  📥 All
+                </Link>
+                {folders.map((f) => (
+                  <Link
+                    key={f.key}
+                    href={sourceHref(f.key)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                      source === f.key ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    {f.label} <span className="text-slate-400">{f.count}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="card overflow-hidden p-1.5">

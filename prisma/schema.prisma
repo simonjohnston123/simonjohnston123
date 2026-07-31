@@ -330,11 +330,15 @@ model Conversation {
   lastMessageAt DateTime @default(now())
   unread     Boolean   @default(false)
   starred    Boolean   @default(false)
+  // Auto-detected "folder" — the source of the conversation (eBay, Temu, …),
+  // derived from the sender for email. Null = General.
+  sourceLabel String?
   createdAt  DateTime  @default(now())
   messages   Message[]
 
   @@index([locationId])
   @@index([locationId, lastMessageAt])
+  @@index([locationId, sourceLabel])
 }
 
 model Message {
