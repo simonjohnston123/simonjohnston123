@@ -1022,6 +1022,73 @@ enum ConnectListingStatus {
   SOLD
 }
 
+// ---- Listing Tool (multi-marketplace listing optimiser) --------------------
+enum Marketplace {
+  PLACID_CONNECT
+  EBAY
+  AMAZON
+  TEMU
+  FACEBOOK
+  GOOGLE
+}
+
+enum ListingBatchStatus {
+  DRAFT
+  OPTIMISED
+  PUBLISHED
+  PARTIAL
+}
+
+enum ListingAiStatus {
+  UNOPTIMISED
+  OPTIMISING
+  OPTIMISED
+  FAILED
+}
+
+// A saved, named group of products to re-list as a set.
+model Collection {
+  id          String   @id @default(cuid())
+  locationId  String
+  name        String
+  description String?
+  rule        Json     @default("{}") // saved product filter
+  productIds  Json     @default("[]") // explicit membership
+  createdAt   DateTime @default(now())
+
+  @@index([locationId])
+}
+
+// One run of the Listing Tool: products being prepared for one marketplace.
+model ListingBatch {
+  id          String             @id @default(cuid())
+  locationId  String
+  name        String
+  marketplace Marketplace
+  status      ListingBatchStatus @default(DRAFT)
+  createdAt   DateTime           @default(now())
+  items       ListingItem[]
+
+  @@index([locationId])
+  @@index([locationId, marketplace])
+}
+
+// One product inside a batch, holding the marketplace-specific fields.
+model ListingItem {
+  id            String          @id @default(cuid())
+  batchId       String
+  batch         ListingBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  productId     String
+  fields        Json            @default("{}") // marketplace-shaped fields
+  aiStatus      ListingAiStatus @default(UNOPTIMISED)
+  validation    Json            @default("[]") // rule violations
+  publishStatus String? // null | PUBLISHED | FAILED
+  externalId    String?
+  createdAt     DateTime        @default(now())
+
+  @@index([batchId])
+}
+
 // Placid Connect marketplace listing (Facebook Marketplace-style).
 model ConnectListing {
   id          String                @id @default(cuid())

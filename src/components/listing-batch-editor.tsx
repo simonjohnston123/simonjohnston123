@@ -1,0 +1,183 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { rulebook, type ListingField } from "@/lib/listing-marketplaces";
+import {
+  updateListingItemAction,
+  removeListingItemAction,
+  publishBatchAction,
+  optimiseItemAction,
+  deleteBatchAction,
+} from "@/app/dashboard/l/[locationId]/listings/actions";
+import { cn } from "@/lib/utils";
+
+type Violation = { field: string; message: string };
+type ItemData = {
+  id: string;
+  productName: string;
+  productImage: string | null;
+  fields: Record<string, unknown>;
+  validation: Violation[];
+  publishStatus: string | null;
+  externalId: string | null;
+};
+type BatchData = { id: string; name: string; marketplace: string; status: string };
+
+export function ListingBatchEditor({ locationId, batch, items }: { locationId: string; batch: BatchData; items: ItemData[] }) {
+  const rb = rulebook(batch.marketplace);
+  const [msg, setMsg] = useState("");
+  const [pending, start] = useTransition();
+
+  if (!rb) return <p className="text-sm text-rose-600">Unknown marketplace.</p>;
+
+  const publish = () => {
+    if (!rb.available) { setMsg(`Publishing to ${rb.label} is coming soon — you can still draft and optimise here.`); return; }
+    if (!window.confirm(`Publish ${items.length} listing(s) to ${rb.label} now?`)) return;
+    start(async () => setMsg((await publishBatchAction(locationId, batch.id)).message));
+  };
+  const optimiseAll = () => start(async () => setMsg((await optimiseItemAction()).message));
+  const del = () => {
+    if (!window.confirm("Delete this whole batch? The drafts are removed (published listings stay live).")) return;
+    start(async () => { await deleteBatchAction(locationId, batch.id); });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="card sticky top-2 z-10 flex flex-wrap items-center gap-2 p-3">
+        <div className="mr-auto">
+          <div className="font-semibold text-slate-900">{batch.name}</div>
+          <div className="text-xs text-brand-600">{rb.label} · {items.length} item{items.length === 1 ? "" : "s"}</div>
+        </div>
+        <button onClick={optimiseAll} disabled={pending} className="btn-secondary text-sm disabled:opacity-50" title="AI optimisation (Phase 3)">
+          ✨ Optimise all
+        </button>
+        <button onClick={publish} disabled={pending} className="btn-primary text-sm disabled:opacity-50">
+          {pending ? "Working…" : rb.available ? `⬆ Publish to ${rb.label}` : "Publish (soon)"}
+        </button>
+        <button onClick={del} disabled={pending} className="text-sm text-slate-400 hover:text-rose-600" title="Delete batch">🗑</button>
+      </div>
+
+      {msg ? <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{msg}</p> : null}
+
+      <div className="space-y-3">
+        {items.map((it) => (
+          <ListingItemCard key={it.id} locationId={locationId} rb={rb.fields} item={it} onMsg={setMsg} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ListingItemCard({
+  locationId,
+  rb,
+  item,
+  onMsg,
+}: {
+  locationId: string;
+  rb: ListingField[];
+  item: ItemData;
+  onMsg: (m: string) => void;
+}) {
+  const [fields, setFields] = useState<Record<string, unknown>>(item.fields);
+  const [violations, setViolations] = useState<Violation[]>(item.validation);
+  const [status, setStatus] = useState<string | null>(item.publishStatus);
+  const [saved, setSaved] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const [pending, start] = useTransition();
+
+  if (removed) return null;
+
+  const set = (k: string, v: unknown) => {
+    setFields((f) => ({ ...f, [k]: v }));
+    setSaved(false);
+  };
+  const save = () =>
+    start(async () => {
+      const r = await updateListingItemAction(locationId, item.id, fields);
+      if (r.ok) {
+        setViolations(r.violations);
+        setSaved(true);
+        if (status !== "PUBLISHED") setStatus(null);
+      }
+    });
+  const remove = () =>
+    start(async () => {
+      await removeListingItemAction(locationId, item.id);
+      setRemoved(true);
+    });
+  const optimise = () => start(async () => onMsg((await optimiseItemAction()).message));
+
+  const vFor = (id: string) => violations.find((v) => v.field === id)?.message;
+
+  return (
+    <div className="card p-4">
+      <div className="mb-3 flex items-center gap-3">
+        {item.productImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.productImage} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+        ) : (
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-400">🛍</span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-500">{item.productName}</span>
+        {status === "PUBLISHED" ? (
+          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">✓ Live</span>
+        ) : status === "FAILED" ? (
+          <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">Failed</span>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3">
+        {rb.map((f) => {
+          const raw = fields[f.id];
+          const v = vFor(f.id);
+          const strVal = f.type === "list" ? (Array.isArray(raw) ? (raw as string[]).join("\n") : "") : raw == null ? "" : String(raw);
+          const counter = f.max && (f.type === "text" || f.type === "textarea") ? `${strVal.length}/${f.max}` : null;
+          return (
+            <div key={f.id}>
+              <div className="flex items-baseline justify-between">
+                <label className="label">{f.label}{f.required ? <span className="text-rose-500"> *</span> : null}</label>
+                {counter ? (
+                  <span className={cn("font-mono text-[10px]", f.max && strVal.length > f.max ? "text-rose-500" : "text-slate-400")}>{counter}</span>
+                ) : null}
+              </div>
+              {f.type === "textarea" || f.type === "list" ? (
+                <textarea
+                  rows={f.type === "list" ? 5 : 3}
+                  value={strVal}
+                  onChange={(e) => set(f.id, f.type === "list" ? e.target.value.split("\n").filter(Boolean) : e.target.value)}
+                  placeholder={f.type === "list" ? "One per line…" : undefined}
+                  className="input resize-y text-sm"
+                />
+              ) : f.type === "price" || f.type === "number" ? (
+                <input
+                  type="number"
+                  step={f.type === "price" ? "0.01" : "1"}
+                  min="0"
+                  value={raw == null ? "" : String(raw)}
+                  onChange={(e) => set(f.id, e.target.value === "" ? "" : Number(e.target.value))}
+                  className="input h-9 w-40 text-sm"
+                />
+              ) : (
+                <input value={strVal} onChange={(e) => set(f.id, e.target.value)} className="input h-9 text-sm" />
+              )}
+              {v ? <p className="mt-0.5 text-[11px] text-rose-500">{v}</p> : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button onClick={save} disabled={pending} className="btn-primary text-xs disabled:opacity-50">
+          {pending ? "…" : saved ? "Saved ✓" : "Save"}
+        </button>
+        <button onClick={optimise} disabled={pending} className="btn-secondary text-xs disabled:opacity-50" title="AI optimisation (Phase 3)">
+          ✨ AI optimise
+        </button>
+        <button onClick={remove} disabled={pending} className="ml-auto text-xs text-slate-400 hover:text-rose-600">
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}

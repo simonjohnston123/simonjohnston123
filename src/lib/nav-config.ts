@@ -23,6 +23,7 @@ export const CUSTOMERS_SUB: NavItem[] = [
 export const STUDIO_BASE: NavItem[] = [
   { key: "website", label: "Website", icon: "❖" },
   { key: "products", label: "Products", icon: "🛍️" },
+  { key: "listings", label: "Listing Tool", icon: "🏷️" },
   { key: "forms", label: "Forms & Surveys", icon: "📝" },
   { key: "marketing", label: "Marketing", icon: "📣" },
   { key: "automations", label: "Automations", icon: "⚡" },
