@@ -55,6 +55,12 @@ services:
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       PLATFORM_FEE_PERCENT: ${PLATFORM_FEE_PERCENT:-2}
       STRIPE_CONNECT_CLIENT_ID: ${STRIPE_CONNECT_CLIENT_ID:-}
+      # eBay OAuth (platform app) — businesses connect their own eBay. RUNAME is
+      # the redirect config; VERIFICATION_TOKEN secures the account-deletion webhook.
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+      EBAY_RUNAME: ${EBAY_RUNAME:-}
+      EBAY_VERIFICATION_TOKEN: ${EBAY_VERIFICATION_TOKEN:-}
       # Placid Storage yard feed (Storage tab pulls live yard data from the storage app).
       STORAGE_URL: ${STORAGE_URL:-https://placidstoragesolutions.com.au}
       STORAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}

@@ -3,7 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge, SegTabs } from "@/components/ui";
 import { NewOrderButton } from "@/components/new-order";
-import { ShopifySyncButton } from "@/components/shopify-sync-button";
+import { OrderSyncButton } from "@/components/order-sync-button";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
 
@@ -45,10 +45,12 @@ export default async function OrdersPage({
   const base = `/dashboard/l/${locationId}/orders`;
   const open = orders.filter((o) => !["COMPLETED", "CANCELLED"].includes(o.status)).length;
 
-  const shopifyConn = await prisma.connection.findFirst({
-    where: { locationId, provider: "SHOPIFY", status: "CONNECTED" },
-    select: { id: true },
+  const channelConns = await prisma.connection.findMany({
+    where: { locationId, provider: { in: ["SHOPIFY", "EBAY"] }, status: "CONNECTED" },
+    select: { provider: true },
   });
+  const hasShopify = channelConns.some((c) => c.provider === "SHOPIFY");
+  const hasEbay = channelConns.some((c) => c.provider === "EBAY");
 
   return (
     <div>
@@ -57,7 +59,8 @@ export default async function OrdersPage({
         subtitle={`${open} open`}
         action={
           <div className="flex items-center gap-2">
-            {shopifyConn ? <ShopifySyncButton locationId={locationId} /> : null}
+            {hasShopify ? <OrderSyncButton locationId={locationId} channel="shopify" /> : null}
+            {hasEbay ? <OrderSyncButton locationId={locationId} channel="ebay" /> : null}
             <NewOrderButton locationId={locationId} />
           </div>
         }
