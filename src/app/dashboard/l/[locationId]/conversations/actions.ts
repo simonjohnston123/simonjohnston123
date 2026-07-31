@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { deliverForLocation } from "@/lib/comms-location";
+import { runStageActions } from "@/lib/stage-actions";
 
 type ChannelValue = "SMS" | "EMAIL" | "WHATSAPP" | "WEBCHAT" | "NOTE";
 
@@ -111,7 +112,7 @@ export async function sendToTrackAction(formData: FormData) {
   const name = convo!.contact
     ? [convo!.contact.firstName, convo!.contact.lastName].filter(Boolean).join(" ") || convo!.contact.email || "New deal"
     : "New deal";
-  await prisma.opportunity.create({
+  const deal = await prisma.opportunity.create({
     data: {
       locationId,
       pipelineId: pipeline!.id,
@@ -121,6 +122,7 @@ export async function sendToTrackAction(formData: FormData) {
       value: 0,
     },
   });
+  await runStageActions(deal.id, pipeline!.stages[0].id);
 
   revalidatePath(`/dashboard/l/${locationId}/pipelines`);
   redirect(`/dashboard/l/${locationId}/pipelines?pipeline=${pipeline!.id}`);

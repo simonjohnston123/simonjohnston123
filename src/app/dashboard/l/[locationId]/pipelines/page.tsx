@@ -5,6 +5,7 @@ import { PageHeader, EmptyState, Badge, SegTabs } from "@/components/ui";
 import { NewOpportunityButton } from "@/components/new-opportunity";
 import { NewPipelineButton, StageEditor } from "@/components/pipeline-manager";
 import { StageSelect } from "@/components/stage-select";
+import { StageActionsButton } from "@/components/stage-actions";
 import { setOpportunityStatusAction, deleteOpportunityAction } from "./actions";
 import { formatMoney, contactName } from "@/lib/utils";
 
@@ -21,7 +22,7 @@ export default async function PipelinesPage({
 
   const pipelines = await prisma.pipeline.findMany({
     where: { locationId: params.locationId },
-    include: { stages: { orderBy: { position: "asc" } } },
+    include: { stages: { include: { actions: { orderBy: { position: "asc" } } }, orderBy: { position: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
 
@@ -113,9 +114,17 @@ export default async function PipelinesPage({
           const stageValue = items.reduce((s, o) => s + o.value, 0);
           return (
             <div key={stage.id} className="w-full lg:w-auto lg:min-w-[210px] lg:flex-1">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <h3 className="text-sm font-semibold text-slate-700">{stage.name}</h3>
-                <span className="text-xs text-slate-400">{items.length} · {formatMoney(stageValue)}</span>
+              <div className="mb-2 flex items-center justify-between gap-1 px-1">
+                <h3 className="truncate text-sm font-semibold text-slate-700">{stage.name}</h3>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-xs text-slate-400">{items.length} · {formatMoney(stageValue)}</span>
+                  <StageActionsButton
+                    locationId={params.locationId}
+                    stageId={stage.id}
+                    stageName={stage.name}
+                    actions={stage.actions.map((a) => ({ id: a.id, type: a.type, config: (a.config ?? {}) as Record<string, string> }))}
+                  />
+                </div>
               </div>
               <div className="space-y-2 rounded-xl bg-slate-100 p-2">
                 {items.length === 0 ? (

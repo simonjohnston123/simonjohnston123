@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { generatePipelineStages } from "@/lib/ai";
+import { runStageActions, STAGE_ACTION_TYPES } from "@/lib/stage-actions";
 
 const oppSchema = z.object({
   title: z.string().min(1, "Enter a title."),
@@ -33,7 +34,7 @@ export async function createOpportunityAction(_prev: unknown, formData: FormData
   });
   if (!stage) return { error: "Invalid pipeline stage." };
 
-  await prisma.opportunity.create({
+  const created = await prisma.opportunity.create({
     data: {
       locationId,
       pipelineId: parsed.data.pipelineId,
@@ -43,6 +44,7 @@ export async function createOpportunityAction(_prev: unknown, formData: FormData
       value: parsed.data.value,
     },
   });
+  await runStageActions(created.id, parsed.data.stageId);
   revalidatePath(`/dashboard/l/${locationId}/pipelines`);
   return { error: "", ok: true };
 }
@@ -62,6 +64,48 @@ export async function moveOpportunityAction(formData: FormData) {
     where: { id: opportunityId, locationId },
     data: { stageId },
   });
+  // The stage IS the workflow — fire this stage's automations.
+  await runStageActions(opportunityId, stageId);
+  revalidatePath(`/dashboard/l/${locationId}/pipelines`);
+}
+
+/** Add an automation to a stage. */
+export async function createStageActionAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const stageId = String(formData.get("stageId") ?? "");
+  const type = String(formData.get("type") ?? "");
+  await requireLocationAccess(locationId);
+  if (!(STAGE_ACTION_TYPES as readonly string[]).includes(type)) return;
+
+  const stage = await prisma.pipelineStage.findFirst({ where: { id: stageId, pipeline: { locationId } } });
+  if (!stage) return;
+
+  const config: Record<string, string> = {};
+  if (type === "SEND_EMAIL") {
+    config.subject = String(formData.get("subject") ?? "").trim();
+    config.body = String(formData.get("body") ?? "").trim();
+  } else if (type === "SEND_SMS") {
+    config.body = String(formData.get("body") ?? "").trim();
+  } else if (type === "ADD_TAG") {
+    config.tag = String(formData.get("tag") ?? "").trim();
+  } else if (type === "CREATE_TASK") {
+    config.title = String(formData.get("title") ?? "").trim();
+  }
+
+  const last = await prisma.stageAction.findFirst({ where: { stageId }, orderBy: { position: "desc" } });
+  await prisma.stageAction.create({ data: { stageId, type, config, position: (last?.position ?? -1) + 1 } });
+  revalidatePath(`/dashboard/l/${locationId}/pipelines`);
+}
+
+export async function deleteStageActionAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const actionId = String(formData.get("actionId") ?? "");
+  await requireLocationAccess(locationId);
+  const action = await prisma.stageAction.findFirst({
+    where: { id: actionId, stage: { pipeline: { locationId } } },
+  });
+  if (!action) return;
+  await prisma.stageAction.delete({ where: { id: actionId } });
   revalidatePath(`/dashboard/l/${locationId}/pipelines`);
 }
 

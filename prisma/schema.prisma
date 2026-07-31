@@ -270,8 +270,23 @@ model PipelineStage {
   name       String
   position   Int           @default(0)
   opportunities Opportunity[]
+  actions    StageAction[]
 
   @@index([pipelineId])
+}
+
+// Automations that fire when a deal lands in a stage — the "workflow lives in
+// the Success Track" model. type ∈ SEND_EMAIL | SEND_SMS | ADD_TAG | CREATE_TASK.
+model StageAction {
+  id        String        @id @default(cuid())
+  stageId   String
+  stage     PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  type      String
+  config    Json          @default("{}")
+  position  Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([stageId])
 }
 
 enum OpportunityStatus {
