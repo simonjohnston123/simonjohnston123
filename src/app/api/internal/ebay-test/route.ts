@@ -23,6 +23,29 @@ export async function GET(req: NextRequest) {
   const token = await getValidToken(locationId);
   if (!token) return NextResponse.json({ step: "token", ok: false, error: "eBay not connected for this location" });
 
+  // Raw probe of the eBay endpoints resolveListingContext relies on, so we can
+  // see exactly what eBay returns (status + body) when policies don't resolve.
+  if (req.nextUrl.searchParams.get("probe") === "1") {
+    const H = {
+      Authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "Content-Language": "en-AU",
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_AU",
+    };
+    const probe = async (path: string) => {
+      const r = await fetch(`https://api.ebay.com${path}`, { headers: H, cache: "no-store" });
+      return { path, status: r.status, body: (await r.text()).slice(0, 500) };
+    };
+    const out = await Promise.all([
+      probe("/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_AU"),
+      probe("/sell/account/v1/payment_policy?marketplace_id=EBAY_AU"),
+      probe("/sell/account/v1/return_policy?marketplace_id=EBAY_AU"),
+      probe("/sell/account/v1/privilege"),
+      probe("/sell/inventory/v1/location"),
+    ]);
+    return NextResponse.json({ step: "probe", results: out });
+  }
+
   const ctx = await resolveListingContext(token);
   if (!ctx.ok || !ctx.ctx) return NextResponse.json({ step: "context", ok: false, reason: ctx.reason });
   if (dry) return NextResponse.json({ step: "context", ok: true, ctx: ctx.ctx });
