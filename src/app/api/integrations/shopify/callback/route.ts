@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { encryptJson } from "@/lib/crypto";
 import { verifyState, appUrl } from "@/lib/oauth-providers";
 import { exchangeShopifyCode, verifyShopifyHmac, normalizeShop } from "@/lib/shopify-oauth";
+import { registerShopifyWebhooks } from "@/lib/shopify-webhooks";
 import type { ConnectionProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -48,5 +49,11 @@ export async function GET(req: NextRequest) {
     },
     update: { status: "CONNECTED", accountLabel: shop, secretCipher },
   });
+  // Subscribe to live product webhooks so the catalogue stays fresh (best-effort).
+  try {
+    await registerShopifyWebhooks(locationId);
+  } catch {
+    /* non-fatal — can be re-registered later */
+  }
   return back("connected=SHOPIFY");
 }
