@@ -42,12 +42,19 @@ services:
       TWILIO_FROM: ${TWILIO_FROM:-}
       INBOUND_DOMAIN: ${INBOUND_DOMAIN:-inbox.placid.group}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      INBOUND_TOKEN: ${INBOUND_TOKEN:-}
+      # Email receive (IMAP) cron auth — scheduler calls /api/cron/email-sync.
+      CRON_SECRET: ${CRON_SECRET:-}
       # Meta (Facebook + Instagram) OAuth app — flips those channels live once set.
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
       # Stripe platform billing (charge businesses for PlacidCRM plans).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Embedded white-label Stripe Connect payments + platform fee.
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      PLATFORM_FEE_PERCENT: ${PLATFORM_FEE_PERCENT:-2}
+      STRIPE_CONNECT_CLIENT_ID: ${STRIPE_CONNECT_CLIENT_ID:-}
       # Placid Storage yard feed (Storage tab pulls live yard data from the storage app).
       STORAGE_URL: ${STORAGE_URL:-https://placidstoragesolutions.com.au}
       STORAGE_ADMIN_TOKEN: ${STORAGE_ADMIN_TOKEN:-}
