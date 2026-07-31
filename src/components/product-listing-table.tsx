@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CHANNELS } from "@/lib/channels";
-import { marketToChannelAction, type ProductFilter } from "@/app/dashboard/l/[locationId]/products/listing-actions";
+import { marketToChannelAction, publishToEbayAction, type ProductFilter } from "@/app/dashboard/l/[locationId]/products/listing-actions";
 
 export type ListingProduct = {
   id: string;
@@ -81,6 +81,18 @@ export function ProductListingTable({
     });
   };
 
+  const publishEbay = () => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    if (!window.confirm(`Create ${Math.min(ids.length, 25)} LIVE eBay listing(s) now? This posts real listings to your eBay account.`)) return;
+    start(async () => {
+      setMsg(null);
+      const r = await publishToEbayAction(locationId, ids);
+      setMsg(r.message);
+      if (r.ok) { clearSel(); router.refresh(); }
+    });
+  };
+
   return (
     <>
       {/* Bulk market-to-channel bar */}
@@ -96,6 +108,11 @@ export function ProductListingTable({
               {c.icon} {c.label}
             </button>
           ))}
+          {!allMatching ? (
+            <button disabled={pending} onClick={publishEbay} className="btn-primary text-xs disabled:opacity-50" title="Create real eBay listings for the selected products">
+              ⬆ Publish to eBay (live)
+            </button>
+          ) : null}
           <button onClick={clearSel} className="ml-auto text-xs text-slate-400 hover:text-slate-600">Clear</button>
           {msg ? <span className="w-full text-xs text-slate-600">{msg}</span> : null}
         </div>

@@ -14,7 +14,7 @@ const MAX_ORDERS = 1000; // safety cap on full-history pull
 
 type StoredToken = { accessToken?: string; refreshToken?: string; expiresAt?: number };
 
-async function getValidToken(locationId: string): Promise<string | null> {
+export async function getValidToken(locationId: string): Promise<string | null> {
   const conn = await prisma.connection.findUnique({
     where: { locationId_provider: { locationId, provider: "EBAY" } },
   });

@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { CHANNEL_BY_KEY, channelAllowsShipCountries } from "@/lib/channels";
+import { getValidToken, resolveListingContext, pushProductToEbay } from "@/lib/ebay-listing";
 
 export type ProductFilter = {
   q?: string;
@@ -77,6 +78,46 @@ export async function marketToChannelAction(
   const bits = [`${eligibleIds.length} marked for ${channel.label}`];
   if (skipped) bits.push(`${skipped} skipped (doesn't ship to a ${channel.label} country)`);
   return { ok: true, message: bits.join(" · "), marketed: eligibleIds.length, skipped };
+}
+
+const EBAY_PUSH_CAP = 25; // keep first runs small — eBay rate-limits + we validate as we go
+
+/** Actually create live eBay listings for the selected products (inventory→offer→publish).
+ *  Untested against live eBay yet — only geo-eligible products are attempted. */
+export async function publishToEbayAction(locationId: string, ids: string[]): Promise<MarketResult> {
+  await requireLocationAccess(locationId);
+  if (!ids.length) return { ok: false, message: "Select products first.", marketed: 0, skipped: 0 };
+
+  const token = await getValidToken(locationId);
+  if (!token) return { ok: false, message: "eBay isn't connected.", marketed: 0, skipped: 0 };
+  const resolved = await resolveListingContext(token);
+  if (!resolved.ok || !resolved.ctx) return { ok: false, message: resolved.reason || "eBay setup incomplete.", marketed: 0, skipped: 0 };
+
+  const ebay = CHANNEL_BY_KEY.ebay;
+  const products = await prisma.product.findMany({
+    where: { locationId, id: { in: ids.slice(0, EBAY_PUSH_CAP) } },
+    select: { id: true, externalId: true, name: true, description: true, imageUrl: true, priceCents: true, inventory: true, sku: true, category: true, shipCountries: true },
+  });
+
+  let published = 0;
+  let failed = 0;
+  let firstError = "";
+  for (const p of products) {
+    const ship = Array.isArray(p.shipCountries) ? (p.shipCountries as string[]) : [];
+    if (!channelAllowsShipCountries(ebay, ship)) { failed++; continue; }
+    const r = await pushProductToEbay(locationId, p, resolved.ctx, token);
+    if (r.ok) {
+      published++;
+      await prisma.$executeRaw`UPDATE "Product" SET channels = (CASE WHEN channels @> '"ebay"'::jsonb THEN channels ELSE channels || '"ebay"'::jsonb END) WHERE id = ${p.id}`;
+    } else {
+      failed++;
+      if (!firstError) firstError = r.reason || "unknown error";
+    }
+  }
+
+  revalidatePath(`/dashboard/l/${locationId}/products`);
+  const msg = `${published} published to eBay${failed ? ` · ${failed} failed${firstError ? ` (${firstError})` : ""}` : ""}${ids.length > EBAY_PUSH_CAP ? ` — capped at ${EBAY_PUSH_CAP}/run` : ""}`;
+  return { ok: published > 0 || failed === 0, message: msg, marketed: published, skipped: failed };
 }
 
 /** Remove a channel from selected products. */
