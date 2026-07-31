@@ -36,11 +36,11 @@ export function NewPipelineButton({ locationId }: { locationId: string }) {
 
   return (
     <>
-      <button className="btn-primary" onClick={() => setOpen(true)}>+ New pipeline</button>
+      <button className="btn-primary" onClick={() => setOpen(true)}>+ New track</button>
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setOpen(false)}>
           <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-1 text-lg font-semibold text-slate-900">New pipeline</h2>
+            <h2 className="mb-1 text-lg font-semibold text-slate-900">New Success Track</h2>
             <p className="mb-4 text-sm text-slate-500">Name it, then set the stages — or let AI draft them for you.</p>
 
             {/* AI drafting */}
@@ -64,7 +64,7 @@ export function NewPipelineButton({ locationId }: { locationId: string }) {
             <form action={createAction} className="space-y-4">
               <input type="hidden" name="locationId" value={locationId} />
               <div>
-                <label className="label" htmlFor="name">Pipeline name</label>
+                <label className="label" htmlFor="name">Track name</label>
                 <input id="name" name="name" required className="input" placeholder="e.g. Storage bookings" />
               </div>
               <div>
@@ -83,7 +83,7 @@ export function NewPipelineButton({ locationId }: { locationId: string }) {
               ) : null}
               <div className="flex justify-end gap-2">
                 <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>
-                <SubmitButton className="btn-primary">Create pipeline</SubmitButton>
+                <SubmitButton className="btn-primary">Create track</SubmitButton>
               </div>
             </form>
           </div>

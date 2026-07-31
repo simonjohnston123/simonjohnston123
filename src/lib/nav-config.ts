@@ -15,7 +15,7 @@ export const HUBS: NavItem[] = [
 // Under the Customers hub.
 export const CUSTOMERS_SUB: NavItem[] = [
   { key: "contacts", label: "Contacts", icon: "◍" },
-  { key: "pipelines", label: "Pipelines", icon: "▤" },
+  { key: "pipelines", label: "Success Tracks", icon: "▤" },
   { key: "tasks", label: "Tasks", icon: "✓" },
 ];
 

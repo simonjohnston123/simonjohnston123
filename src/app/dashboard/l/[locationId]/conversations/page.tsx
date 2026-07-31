@@ -7,7 +7,7 @@ import { EmailSyncButton } from "@/components/email-sync-button";
 import { DeleteConversationButton } from "@/components/delete-conversation-button";
 import { locationSendStatus } from "@/lib/comms-location";
 import { Linkify } from "@/components/linkify";
-import { sendMessageAction, deleteConversationAction, toggleStarAction } from "./actions";
+import { sendMessageAction, deleteConversationAction, toggleStarAction, sendToTrackAction } from "./actions";
 import { contactName, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -123,6 +123,11 @@ export default async function ConversationsPage({
     await prisma.conversation.update({ where: { id: active.id }, data: { unread: false } });
     active.unread = false;
   }
+
+  // Success Tracks this conversation can be pushed into.
+  const trackList = active
+    ? await prisma.pipeline.findMany({ where: { locationId }, select: { id: true, name: true }, orderBy: { createdAt: "asc" } })
+    : [];
 
   const sendStatus = await locationSendStatus(locationId);
   const activeSend =
@@ -504,6 +509,30 @@ export default async function ConversationsPage({
                       </div>
                     )}
                   </div>
+
+                  {trackList.length > 0 ? (
+                    <form action={sendToTrackAction} className="mt-4 border-t border-slate-100 pt-4">
+                      <input type="hidden" name="locationId" value={locationId} />
+                      <input type="hidden" name="conversationId" value={active.id} />
+                      <label className="mb-1 block text-[11px] uppercase tracking-wide text-slate-400">
+                        Send to a Success Track
+                      </label>
+                      <div className="flex gap-1.5">
+                        <select name="pipelineId" className="input h-9 flex-1 text-sm">
+                          {trackList.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="btn-primary shrink-0 text-sm">Send</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <Link href={`${base}/pipelines`} className="mt-4 block text-center text-xs text-brand-600 hover:underline">
+                      Create a Success Track to route deals →
+                    </Link>
+                  )}
 
                   <Link href={`${base}/contacts`} className="btn-secondary mt-4 block w-full text-center text-sm">
                     Open in Contacts

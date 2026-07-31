@@ -29,12 +29,12 @@ export default async function PipelinesPage({
     return (
       <div>
         <PageHeader
-          title="Pipelines"
+          title="Success Tracks"
           action={<NewPipelineButton locationId={params.locationId} />}
         />
         <EmptyState
-          title="No pipelines yet"
-          body="Create your first pipeline — describe your business and let AI draft the stages, or set them yourself."
+          title="No tracks yet"
+          body="Create your first Success Track — describe your business and let AI draft the stages, or set them yourself."
         />
       </div>
     );
@@ -66,7 +66,7 @@ export default async function PipelinesPage({
   return (
     <div>
       <PageHeader
-        title="Pipelines"
+        title="Success Tracks"
         subtitle={`${active.name} · ${formatMoney(totalValue)} open`}
         action={
           <div className="flex items-center gap-2">

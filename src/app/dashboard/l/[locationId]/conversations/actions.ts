@@ -93,6 +93,39 @@ export async function sendMessageAction(formData: FormData) {
   redirect(threadUrl(locationId, conversationId, sendResult.sent ? undefined : sendResult.detail));
 }
 
+/** Turn a conversation into a deal on a Success Track (first stage). */
+export async function sendToTrackAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const pipelineId = String(formData.get("pipelineId") ?? "");
+  await requireLocationAccess(locationId);
+
+  const [convo, pipeline] = await Promise.all([
+    prisma.conversation.findFirst({ where: { id: conversationId, locationId }, include: { contact: true } }),
+    prisma.pipeline.findFirst({ where: { id: pipelineId, locationId }, include: { stages: { orderBy: { position: "asc" }, take: 1 } } }),
+  ]);
+  if (!convo || !pipeline || pipeline.stages.length === 0) {
+    redirect(`/dashboard/l/${locationId}/conversations?c=${conversationId}`);
+  }
+
+  const name = convo!.contact
+    ? [convo!.contact.firstName, convo!.contact.lastName].filter(Boolean).join(" ") || convo!.contact.email || "New deal"
+    : "New deal";
+  await prisma.opportunity.create({
+    data: {
+      locationId,
+      pipelineId: pipeline!.id,
+      stageId: pipeline!.stages[0].id,
+      contactId: convo!.contactId,
+      title: convo!.subject?.replace(/^Subject:\s*/i, "").trim() || name,
+      value: 0,
+    },
+  });
+
+  revalidatePath(`/dashboard/l/${locationId}/pipelines`);
+  redirect(`/dashboard/l/${locationId}/pipelines?pipeline=${pipeline!.id}`);
+}
+
 /** Toggle the star flag on a conversation. */
 export async function toggleStarAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
