@@ -90,6 +90,23 @@ export async function connectApiKeyAction(_prev: unknown, formData: FormData) {
   const provider = String(formData.get("provider") ?? "") as ProviderKey;
   await requireLocationAccess(locationId);
 
+  // Facebook: the manual path takes a System-User (or Page) access token and runs
+  // it through the same page-enumeration + webhook-subscription as the OAuth flow.
+  if (provider === "FACEBOOK") {
+    const token = String(formData.get("pageToken") ?? "").trim();
+    if (!token) return { error: "Paste your Page / System-User access token." };
+    const { setupFacebookConnection } = await import("@/lib/facebook");
+    const result = await setupFacebookConnection(locationId, token);
+    if (!result) {
+      return { error: "Facebook rejected that token. Check it's a valid System-User token with the Pages assigned." };
+    }
+    if (result.pages.length === 0) {
+      return { error: "That token works but no Pages are assigned to it. In Business Settings → System users, assign your Pages to the system user, then regenerate the token." };
+    }
+    revalidatePath(`/dashboard/l/${locationId}/integrations`);
+    return { error: "", ok: true };
+  }
+
   const def = providerDef(provider);
   if (!def || def.connectType !== "apikey" || !def.fields) {
     return { error: "This integration can't be connected that way." };

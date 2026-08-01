@@ -96,6 +96,19 @@ export const PROVIDERS: ProviderDef[] = [
     blurb: "Connect your Facebook Pages — messages and post comments come into your inbox.",
     connectType: "oauth",
     ready: false,
+    // Manual fallback: paste a System-User (or Page) access token. Used when the
+    // Pages are owned inside a Business Portfolio that the OAuth grant flow can't
+    // reach (e.g. the portfolio that owns this app). The token is validated by
+    // pulling its assigned Pages; each Page is then subscribed to webhooks.
+    fields: [
+      {
+        key: "pageToken",
+        label: "Page / System-User access token",
+        secret: true,
+        placeholder: "EAAG…",
+        hint: "Business Settings → Users → System users → Generate token, with your Pages assigned and pages_show_list, pages_messaging, pages_read_engagement, pages_manage_metadata.",
+      },
+    ],
   },
   {
     key: "INSTAGRAM",
