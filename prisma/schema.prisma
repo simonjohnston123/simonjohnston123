@@ -1027,9 +1027,10 @@ enum Marketplace {
   PLACID_CONNECT
   EBAY
   AMAZON
-  TEMU
-  FACEBOOK
+  TIKTOK
   GOOGLE
+  FACEBOOK
+  TEMU
 }
 
 enum ListingBatchStatus {
