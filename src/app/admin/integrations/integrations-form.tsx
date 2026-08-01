@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { saveEbayCertAction, saveShopifySecretAction, type SaveState } from "./actions";
+import { saveEbayCertAction, saveShopifySecretAction, saveFacebookCredsAction, type SaveState } from "./actions";
 
 function SaveButton({ label = "Save" }: { label?: string }) {
   const { pending } = useFormStatus();
@@ -9,6 +9,32 @@ function SaveButton({ label = "Save" }: { label?: string }) {
     <button type="submit" disabled={pending} className="btn-primary">
       {pending ? "Saving…" : label}
     </button>
+  );
+}
+
+export function FacebookCredsForm({ idSet, secretSet }: { idSet: boolean; secretSet: boolean }) {
+  const [state, action] = useFormState<SaveState, FormData>(saveFacebookCredsAction, { error: "" });
+  return (
+    <form action={action} className="space-y-3">
+      {state.ok ? (
+        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">✓ Saved. Facebook is now connectable — businesses can link their Pages.</p>
+      ) : null}
+      {state.error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{state.error}</p> : null}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Facebook App ID {idSet ? <span className="text-xs font-normal text-green-600">· set ✓</span> : <span className="text-xs font-normal text-amber-600">· not set</span>}
+        </label>
+        <input name="appId" type="text" autoComplete="off" placeholder={idSet ? "•••••••• (leave blank to keep current)" : "1198310812472618"} className="input w-full font-mono" />
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          Facebook App Secret {secretSet ? <span className="text-xs font-normal text-green-600">· set ✓</span> : <span className="text-xs font-normal text-amber-600">· not set</span>}
+        </label>
+        <input name="appSecret" type="password" autoComplete="off" placeholder={secretSet ? "•••••••• (leave blank to keep current)" : "click Show on the app's Settings → Basic"} className="input w-full font-mono" />
+        <p className="mt-1 text-xs text-slate-500">From your Meta app → App settings → Basic. Stored encrypted, used server-side only.</p>
+      </div>
+      <SaveButton label="Save Facebook credentials" />
+    </form>
   );
 }
 

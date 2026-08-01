@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyFbSignature, connectionForPage, fbSenderName, ingestFacebook, fbVerifyToken } from "@/lib/facebook";
+import { verifyFbSignature, connectionForPage, fbSenderName, ingestFacebook, fbVerifyToken, getFbAppSecret } from "@/lib/facebook";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
 // Incoming Page events → CRM inbox.
 export async function POST(req: NextRequest) {
   const raw = await req.text();
-  if (!verifyFbSignature(raw, req.headers.get("x-hub-signature-256"))) {
+  const secret = await getFbAppSecret();
+  if (!verifyFbSignature(raw, req.headers.get("x-hub-signature-256"), secret)) {
     return new NextResponse("bad signature", { status: 401 });
   }
 

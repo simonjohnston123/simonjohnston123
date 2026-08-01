@@ -13,6 +13,8 @@ export const SETTING_KEYS = {
   anthropicApiKey: "anthropic_api_key",
   ebayClientSecret: "ebay_client_secret",
   shopifyClientSecret: "shopify_client_secret",
+  facebookAppId: "facebook_app_id",
+  facebookAppSecret: "facebook_app_secret",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {

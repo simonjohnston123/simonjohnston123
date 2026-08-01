@@ -18,6 +18,19 @@ export async function saveEbayCertAction(_prev: SaveState, formData: FormData): 
   return { error: "", ok: true };
 }
 
+export async function saveFacebookCredsAction(_prev: SaveState, formData: FormData): Promise<SaveState> {
+  await requireSuperAdmin();
+  const appId = String(formData.get("appId") ?? "").trim();
+  const appSecret = String(formData.get("appSecret") ?? "").trim();
+  if (!appId && !appSecret) return { error: "Enter your Facebook App ID and App Secret." };
+  if (appId && !/^\d{10,20}$/.test(appId)) return { error: "The App ID should be the long number from App settings → Basic." };
+  if (appSecret && appSecret.length < 20) return { error: "That doesn't look like an App Secret (a long hex string; click Show on App settings → Basic)." };
+  if (appId) await setSetting(SETTING_KEYS.facebookAppId, appId);
+  if (appSecret) await setSetting(SETTING_KEYS.facebookAppSecret, appSecret);
+  revalidatePath("/admin/integrations");
+  return { error: "", ok: true };
+}
+
 export async function saveShopifySecretAction(_prev: SaveState, formData: FormData): Promise<SaveState> {
   await requireSuperAdmin();
   const secret = String(formData.get("clientSecret") ?? "").trim();

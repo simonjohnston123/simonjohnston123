@@ -2,13 +2,19 @@ import "server-only";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { encryptJson, decryptJson } from "@/lib/crypto";
+import { getSetting, SETTING_KEYS } from "@/lib/platform-settings";
 
 // Facebook Pages integration: connect a business's chosen Pages, subscribe them
 // to webhooks, and drop their messages + comments into the CRM inbox.
 
 const GRAPH = "https://graph.facebook.com/v21.0";
-const appId = () => process.env.FACEBOOK_APP_ID || "";
-const appSecret = () => process.env.FACEBOOK_APP_SECRET || "";
+// App credentials come from the admin-managed settings first, then env.
+async function appId(): Promise<string> {
+  return (await getSetting(SETTING_KEYS.facebookAppId)) || process.env.FACEBOOK_APP_ID || "";
+}
+export async function getFbAppSecret(): Promise<string> {
+  return (await getSetting(SETTING_KEYS.facebookAppSecret)) || process.env.FACEBOOK_APP_SECRET || "";
+}
 export const fbVerifyToken = () => process.env.FACEBOOK_VERIFY_TOKEN || "placid-fb-verify";
 
 type FbSecret = { accessToken: string; pageTokens: Record<string, string> };
@@ -26,8 +32,9 @@ export async function setupFacebookConnection(
   // 1) exchange short-lived → long-lived user token (best-effort)
   let userTok = userAccessToken;
   try {
+    const [id, secret] = await Promise.all([appId(), getFbAppSecret()]);
     const ex = await fetch(
-      `${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId()}&client_secret=${appSecret()}&fb_exchange_token=${encodeURIComponent(userAccessToken)}`,
+      `${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${id}&client_secret=${secret}&fb_exchange_token=${encodeURIComponent(userAccessToken)}`,
     );
     if (ex.ok) {
       const j = (await ex.json()) as { access_token?: string };
@@ -73,9 +80,9 @@ export async function setupFacebookConnection(
 }
 
 /** Verify Meta's X-Hub-Signature-256 over the raw request body. */
-export function verifyFbSignature(rawBody: string, signature: string | null): boolean {
-  if (!signature || !appSecret()) return false;
-  const expected = "sha256=" + crypto.createHmac("sha256", appSecret()).update(rawBody, "utf8").digest("hex");
+export function verifyFbSignature(rawBody: string, signature: string | null, secret: string): boolean {
+  if (!signature || !secret) return false;
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
   } catch {

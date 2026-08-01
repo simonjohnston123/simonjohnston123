@@ -2,18 +2,21 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { getSetting, SETTING_KEYS } from "@/lib/platform-settings";
 import { isConfiguredAsync } from "@/lib/oauth-providers";
 import { shopifyConfigured } from "@/lib/shopify-oauth";
-import { EbayCertForm, ShopifySecretForm } from "./integrations-form";
+import { EbayCertForm, ShopifySecretForm, FacebookCredsForm } from "./integrations-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin — Integrations" };
 
 export default async function AdminIntegrationsPage() {
   await requireSuperAdmin();
-  const [cert, ebayReady, shopifySecret, shopifyReady] = await Promise.all([
+  const [cert, ebayReady, shopifySecret, shopifyReady, fbId, fbSecret, fbReady] = await Promise.all([
     getSetting(SETTING_KEYS.ebayClientSecret),
     isConfiguredAsync("EBAY"),
     getSetting(SETTING_KEYS.shopifyClientSecret),
     shopifyConfigured(),
+    getSetting(SETTING_KEYS.facebookAppId),
+    getSetting(SETTING_KEYS.facebookAppSecret),
+    isConfiguredAsync("FACEBOOK"),
   ]);
 
   return (
@@ -42,8 +45,19 @@ export default async function AdminIntegrationsPage() {
         <p className="mt-1 text-xs text-slate-500">The Client ID is already set on the server; only the Client Secret is needed here.</p>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
         <ShopifySecretForm secretSet={Boolean(shopifySecret)} />
+      </div>
+
+      <div className={`mb-6 rounded-xl border p-4 ${fbReady ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+        <p className={`text-sm font-medium ${fbReady ? "text-green-800" : "text-amber-800"}`}>
+          {fbReady ? "● Facebook is connectable — businesses can link their Pages (messages + comments into the inbox)." : "● Facebook is not connectable yet — add the App ID + Secret below."}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">From the Meta &ldquo;Placid CRM Pages&rdquo; Business app → App settings → Basic.</p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <FacebookCredsForm idSet={Boolean(fbId)} secretSet={Boolean(fbSecret)} />
       </div>
     </div>
   );

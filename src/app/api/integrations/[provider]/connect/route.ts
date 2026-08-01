@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
   if (!(await isConfiguredAsync(provider))) return back("error=not_configured");
 
   const state = signState({ locationId, provider, t: String(Date.now()) });
-  const url = buildAuthUrl(provider, state);
+  const url = await buildAuthUrl(provider, state);
   if (!url) return back("error=unknown_provider");
 
   return NextResponse.redirect(url);

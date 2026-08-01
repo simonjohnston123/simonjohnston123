@@ -237,7 +237,7 @@ export function verifyState(state: string): Record<string, string> | null {
 }
 
 /** Build the provider consent URL to send the client to. */
-export function buildAuthUrl(provider: string, state: string): string | null {
+export async function buildAuthUrl(provider: string, state: string): Promise<string | null> {
   const c = OAUTH[provider as ProviderKey];
   if (!c) return null;
 
@@ -248,7 +248,7 @@ export function buildAuthUrl(provider: string, state: string): string | null {
   }
 
   const params = new URLSearchParams({
-    client_id: process.env[c.clientIdEnv] ?? "",
+    client_id: await clientId(provider, c),
     scope: c.scope,
     response_type: "code",
     state,
@@ -288,7 +288,9 @@ function basicAuth(c: OAuthConfig): string {
 // store) instead of server env — so a super-admin can connect an OAuth app
 // without SSH. Dynamic import keeps the server-only settings module out of any
 // client bundle that imports this file's types.
-const SECRET_SETTING_KEY: Record<string, string> = { EBAY: "ebay_client_secret" };
+const SECRET_SETTING_KEY: Record<string, string> = { EBAY: "ebay_client_secret", FACEBOOK: "facebook_app_secret" };
+// Providers whose CLIENT ID (not just secret) can be set from the admin UI.
+const CLIENT_ID_SETTING_KEY: Record<string, string> = { FACEBOOK: "facebook_app_id" };
 
 async function clientSecret(provider: string, c: OAuthConfig): Promise<string> {
   const key = SECRET_SETTING_KEY[provider];
@@ -304,6 +306,21 @@ async function clientSecret(provider: string, c: OAuthConfig): Promise<string> {
   return process.env[c.clientSecretEnv] || "";
 }
 
+/** Client id from the admin-managed setting if present, else the env var. */
+async function clientId(provider: string, c: OAuthConfig): Promise<string> {
+  const key = CLIENT_ID_SETTING_KEY[provider];
+  if (key) {
+    try {
+      const { getSetting } = await import("@/lib/platform-settings");
+      const v = await getSetting(key);
+      if (v) return v;
+    } catch {
+      /* fall back to env */
+    }
+  }
+  return process.env[c.clientIdEnv] || "";
+}
+
 async function basicAuthAsync(provider: string, c: OAuthConfig): Promise<string> {
   const secret = await clientSecret(provider, c);
   return "Basic " + Buffer.from(`${process.env[c.clientIdEnv] ?? ""}:${secret}`).toString("base64");
@@ -312,8 +329,9 @@ async function basicAuthAsync(provider: string, c: OAuthConfig): Promise<string>
 /** Like isConfigured, but also honours a secret stored in the admin settings. */
 export async function isConfiguredAsync(provider: string): Promise<boolean> {
   const c = OAUTH[provider as ProviderKey];
-  if (!c || !process.env[c.clientIdEnv]) return false;
-  return Boolean(await clientSecret(provider, c));
+  if (!c) return false;
+  const [id, secret] = await Promise.all([clientId(provider, c), clientSecret(provider, c)]);
+  return Boolean(id && secret);
 }
 
 /** TikTok Shop returns tokens nested under `data`, with epoch-second expiries. */
@@ -361,7 +379,7 @@ export async function exchangeCode(provider: string, code: string): Promise<Toke
   if (c.authHeaderBasic) {
     extraHeaders.Authorization = await basicAuthAsync(provider, c);
   } else {
-    fields.client_id = process.env[c.clientIdEnv] ?? "";
+    fields.client_id = await clientId(provider, c);
     fields.client_secret = await clientSecret(provider, c);
   }
 
@@ -410,7 +428,7 @@ export async function refreshToken(provider: string, refresh: string): Promise<T
     extraHeaders.Authorization = await basicAuthAsync(provider, c);
     if (c.scope) fields.scope = c.scope; // eBay requires scope on refresh
   } else {
-    fields.client_id = process.env[c.clientIdEnv] ?? "";
+    fields.client_id = await clientId(provider, c);
     fields.client_secret = await clientSecret(provider, c);
   }
 
