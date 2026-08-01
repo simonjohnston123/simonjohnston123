@@ -28,6 +28,45 @@ async function getCreds(locationId: string): Promise<ShopifyCreds | null> {
   }
 }
 
+/**
+ * On-demand sync of supplier COST (Shopify unitCost) + freight metafield for a
+ * set of products, by their Shopify product id (externalId). Used when a listing
+ * batch is created so profit maths has real numbers — no 60k backfill needed.
+ * Returns how many products were updated.
+ */
+export async function syncCostsForProducts(locationId: string, externalIds: string[]): Promise<number> {
+  const creds = await getCreds(locationId);
+  if (!creds || externalIds.length === 0) return 0;
+  const url = `https://${creds.shopDomain}/admin/api/${API_VERSION}/graphql.json`;
+  const headers = { "X-Shopify-Access-Token": creds.adminToken, "content-type": "application/json" };
+  const query = `query($ids:[ID!]!){ nodes(ids:$ids){ ... on Product { legacyResourceId variants(first:1){edges{node{inventoryItem{unitCost{amount}}}}} metafield(namespace:"pdd",key:"freight"){value} } } }`;
+  let updated = 0;
+  for (let i = 0; i < externalIds.length; i += 100) {
+    const ids = externalIds.slice(i, i + 100).map((id) => `gid://shopify/Product/${id}`);
+    let json: { data?: { nodes?: Array<{ legacyResourceId?: string; variants?: { edges?: Array<{ node?: { inventoryItem?: { unitCost?: { amount?: string } } } }> }; metafield?: { value?: string } | null }> } };
+    try {
+      const res = await fetch(url, { method: "POST", headers, cache: "no-store", body: JSON.stringify({ query, variables: { ids } }) });
+      if (!res.ok) continue;
+      json = await res.json();
+    } catch {
+      continue;
+    }
+    for (const n of json?.data?.nodes ?? []) {
+      if (!n?.legacyResourceId) continue;
+      const amt = n.variants?.edges?.[0]?.node?.inventoryItem?.unitCost?.amount;
+      const freightRaw = n.metafield?.value;
+      const data: { costCents?: number; freightCents?: number } = {};
+      if (amt != null && Number.isFinite(Number(amt))) data.costCents = Math.round(Number(amt) * 100);
+      if (freightRaw != null && Number.isFinite(Number(freightRaw))) data.freightCents = Math.round(Number(freightRaw) * 100);
+      if (Object.keys(data).length) {
+        await prisma.product.updateMany({ where: { locationId, source: "Shopify", externalId: String(n.legacyResourceId) }, data });
+        updated++;
+      }
+    }
+  }
+  return updated;
+}
+
 type ShopifyVariant = { price?: string; sku?: string; inventory_quantity?: number };
 type ShopifyProduct = {
   id: number;

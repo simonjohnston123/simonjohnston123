@@ -189,6 +189,21 @@ export const RULEBOOKS: Record<MarketplaceKey, Rulebook> = {
 
 export const MARKETPLACE_LIST: Rulebook[] = Object.values(RULEBOOKS);
 
+// Typical selling-fee % per marketplace (editable defaults — used for profit maths).
+export const MARKETPLACE_FEE_PCT: Record<MarketplaceKey, number> = {
+  PLACID_CONNECT: 5,
+  EBAY: 13,
+  AMAZON: 15,
+  TIKTOK: 8,
+  GOOGLE: 0,
+  FACEBOOK: 5,
+  TEMU: 10,
+};
+
+export function feePct(key: string): number {
+  return MARKETPLACE_FEE_PCT[key as MarketplaceKey] ?? 0;
+}
+
 export function rulebook(key: string): Rulebook | undefined {
   return RULEBOOKS[key as MarketplaceKey];
 }

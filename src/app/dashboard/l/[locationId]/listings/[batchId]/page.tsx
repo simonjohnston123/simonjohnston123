@@ -22,19 +22,24 @@ export default async function BatchPage({ params }: { params: { locationId: stri
 
   const products = await prisma.product.findMany({
     where: { id: { in: batch.items.map((i) => i.productId) } },
-    select: { id: true, name: true, imageUrl: true },
+    select: { id: true, name: true, imageUrl: true, costCents: true, freightCents: true },
   });
   const pmap = new Map(products.map((p) => [p.id, p]));
 
-  const items = batch.items.map((i) => ({
-    id: i.id,
-    productName: pmap.get(i.productId)?.name ?? "(product removed)",
-    productImage: pmap.get(i.productId)?.imageUrl ?? null,
-    fields: (i.fields ?? {}) as Record<string, unknown>,
-    validation: (i.validation ?? []) as Violation[],
-    publishStatus: i.publishStatus,
-    externalId: i.externalId,
-  }));
+  const items = batch.items.map((i) => {
+    const p = pmap.get(i.productId);
+    return {
+      id: i.id,
+      productName: p?.name ?? "(product removed)",
+      productImage: p?.imageUrl ?? null,
+      cost: p?.costCents != null ? p.costCents / 100 : null,
+      freight: p?.freightCents != null ? p.freightCents / 100 : null,
+      fields: (i.fields ?? {}) as Record<string, unknown>,
+      validation: (i.validation ?? []) as Violation[],
+      publishStatus: i.publishStatus,
+      externalId: i.externalId,
+    };
+  });
 
   return (
     <div>

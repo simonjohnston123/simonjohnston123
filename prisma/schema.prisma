@@ -471,6 +471,8 @@ model Product {
   category    String?  // Shopify product_type
   vendor      String?
   priceCents  Int?     // accurate price incl. cents
+  costCents   Int?     // supplier/dropshipper cost per item (synced from Shopify unitCost)
+  freightCents Int?    // per-item freight/shipping cost, where known
   inventory   Int?     // total stock across variants
   source      String?  // where it came from (Shopify/eBay/manual)
   externalId  String?  // provider product id (dedup)

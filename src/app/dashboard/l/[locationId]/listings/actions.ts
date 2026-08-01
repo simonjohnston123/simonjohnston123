@@ -8,6 +8,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
 import { rulebook, validateFields, type MarketplaceKey } from "@/lib/listing-marketplaces";
 import { optimiseListing } from "@/lib/ai";
+import { syncCostsForProducts } from "@/lib/shopify-products";
 
 export type ActionResult = { ok: boolean; message: string };
 
@@ -29,9 +30,19 @@ export async function createBatchAction(
 
   const products = await prisma.product.findMany({
     where: { locationId, id: { in: ids } },
-    select: { id: true, name: true, description: true, priceCents: true, price: true, imageUrl: true, category: true },
+    select: { id: true, name: true, description: true, priceCents: true, price: true, imageUrl: true, category: true, externalId: true, costCents: true },
   });
   if (!products.length) return { ok: false, message: "None of those products were found." };
+
+  // Pull real supplier cost from Shopify for any batch products we don't have it for.
+  const needCost = products.filter((p) => p.costCents == null && p.externalId).map((p) => p.externalId as string);
+  if (needCost.length) {
+    try {
+      await syncCostsForProducts(locationId, needCost);
+    } catch {
+      /* non-fatal — profit shows "cost unknown" until synced */
+    }
+  }
 
   const batch = await prisma.listingBatch.create({
     data: { locationId, name: name.trim() || `${rb.label} batch`, marketplace: marketplace as MarketplaceKey },

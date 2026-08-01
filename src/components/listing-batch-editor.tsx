@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { rulebook, type ListingField } from "@/lib/listing-marketplaces";
+import { rulebook, feePct, type ListingField } from "@/lib/listing-marketplaces";
 import {
   updateListingItemAction,
   removeListingItemAction,
@@ -17,6 +17,8 @@ type ItemData = {
   id: string;
   productName: string;
   productImage: string | null;
+  cost: number | null;
+  freight: number | null;
   fields: Record<string, unknown>;
   validation: Violation[];
   publishStatus: string | null;
@@ -106,7 +108,7 @@ export function ListingBatchEditor({ locationId, batch, items }: { locationId: s
 
       <div className="space-y-3">
         {shown.map((it) => (
-          <ListingItemCard key={it.id} locationId={locationId} rb={rb.fields} item={it} onMsg={setMsg} />
+          <ListingItemCard key={it.id} locationId={locationId} rb={rb.fields} item={it} fee={feePct(batch.marketplace)} marketplaceLabel={rb.label} onMsg={setMsg} />
         ))}
         {shown.length === 0 ? <p className="px-3 py-6 text-center text-sm text-slate-400">No listings match "{q}".</p> : null}
       </div>
@@ -118,11 +120,15 @@ function ListingItemCard({
   locationId,
   rb,
   item,
+  fee,
+  marketplaceLabel,
   onMsg,
 }: {
   locationId: string;
   rb: ListingField[];
   item: ItemData;
+  fee: number;
+  marketplaceLabel: string;
   onMsg: (m: string) => void;
 }) {
   const [fields, setFields] = useState<Record<string, unknown>>(item.fields);
@@ -166,6 +172,14 @@ function ListingItemCard({
 
   const vFor = (id: string) => violations.find((v) => v.field === id)?.message;
 
+  // Live profit maths — updates as the price is edited.
+  const price = Number((fields as Record<string, unknown>).price) || 0;
+  const cost = item.cost;
+  const freight = item.freight ?? 0;
+  const feeAmt = price * (fee / 100);
+  const profit = cost != null ? price - cost - freight - feeAmt : null;
+  const margin = profit != null && price > 0 ? (profit / price) * 100 : null;
+
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -181,6 +195,22 @@ function ListingItemCard({
         ) : status === "FAILED" ? (
           <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">Failed</span>
         ) : null}
+      </div>
+
+      {/* Profit after cost + freight + marketplace fee (updates as you edit the price) */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        {cost != null ? (
+          <>
+            <span>Cost <b className="font-mono text-slate-800">${cost.toFixed(2)}</b></span>
+            {freight ? <span>Freight <b className="font-mono text-slate-800">${freight.toFixed(2)}</b></span> : null}
+            <span>{marketplaceLabel} fee {fee}% <b className="font-mono text-slate-800">${feeAmt.toFixed(2)}</b></span>
+            <span className={cn("ml-auto font-semibold", (profit ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600")}>
+              Profit <b className="font-mono">${(profit ?? 0).toFixed(2)}</b>{margin != null ? ` · ${margin.toFixed(0)}% margin` : ""}
+            </span>
+          </>
+        ) : (
+          <span className="text-slate-400">Cost not synced for this product yet — profit will show once cost is available.</span>
+        )}
       </div>
 
       <div className="grid gap-3">
