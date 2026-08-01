@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type LiveProduct = { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null };
-type Channel = { slug: string; label: string; count: number };
+type Channel = { slug: string; label: string; count: number; icon?: string };
 type CartLine = { p: LiveProduct; qty: number };
 type Msg = { role: "you" | "host"; text: string };
 type Show = { day: number; name: string; emoji: string; color: string; tag: string };
@@ -232,8 +232,8 @@ function ShopView({ products, channels, accent, loading, addToCart, openCart, on
           </div>
         </div>
         <div className="mx-auto -mt-1 flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {[{ slug: "all", label: "All", count: products.length }, ...channels].map((c) => (
-            <button key={c.slug} onClick={() => setCat(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${cat === c.slug ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`} style={cat === c.slug ? { background: accent } : undefined}>{c.label}</button>
+          {[{ slug: "all", label: "All", count: products.length } as Channel, ...channels].map((c) => (
+            <button key={c.slug} onClick={() => setCat(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${cat === c.slug ? "border-transparent text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`} style={cat === c.slug ? { background: accent } : undefined}>{c.icon ? `${c.icon} ` : ""}{c.label}</button>
           ))}
         </div>
       </div>
@@ -311,52 +311,60 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
       </div>
     );
   const present = new Set(products.map((p) => p.channel));
-  const pills = [{ slug: "all", label: "All", count: products.length }, ...channels.filter((c) => present.has(c.slug))];
+  const pills = [{ slug: "all", label: "All", count: products.length } as Channel, ...channels.filter((c) => present.has(c.slug))];
 
   return (
-    <div className="relative h-[86vh] min-h-[560px] w-full select-none overflow-hidden bg-black text-white">
-      {current.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={current.imageUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30 blur-2xl" />) : null}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/20 to-black/90" />
-      <div className="relative z-10 grid h-full place-items-center px-4 pt-28 pb-56">
-        {current.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img key={current.id} src={current.imageUrl} alt={current.name} className="max-h-full w-auto max-w-full rounded-2xl object-contain shadow-2xl" />) : <div className="grid h-64 w-64 place-items-center rounded-2xl bg-white/5 text-6xl">🛍</div>}
+    <div className="relative flex h-[88vh] min-h-[600px] w-full select-none flex-col overflow-hidden bg-slate-950 text-white">
+      {current.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={current.imageUrl} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-20 blur-2xl" />) : null}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70" />
+
+      {/* Header */}
+      <div className="relative z-10 flex items-center justify-between gap-2 px-4 pt-3">
+        <div className="flex items-center gap-2">
+          <button onClick={onSchedule} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur hover:bg-white/20">‹ Shows</button>
+          {live ? <span className="animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold">● LIVE</span> : <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">PREVIEW</span>}
+          <span className="hidden rounded-full bg-black/40 px-2.5 py-0.5 text-xs backdrop-blur sm:inline">👁 {viewers.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onShop} className="rounded-full bg-white/10 px-3 py-2 text-sm backdrop-blur hover:bg-white/20">🛍</button>
+          {cartButton}
+        </div>
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-20 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button onClick={onSchedule} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur hover:bg-white/20">‹ Shows</button>
-            {live ? <span className="animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold">● LIVE</span> : <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">PREVIEW</span>}
-            <span className="rounded-full bg-black/40 px-2.5 py-0.5 text-xs backdrop-blur">👁 {viewers.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onShop} className="rounded-full bg-white/10 px-3 py-2 text-sm backdrop-blur hover:bg-white/20">🛍</button>
-            {cartButton}
-          </div>
-        </div>
-        {show ? <div className="mt-2 flex items-center gap-2"><span className="text-lg">{show.emoji}</span><span className="text-sm font-bold" style={{ color: show.color }}>{show.name}</span>{!live && show.day >= 0 ? <span className="text-[11px] text-slate-400">· airs {DAY_LABEL[show.day]} 6:00 PM</span> : null}</div> : null}
+      {/* Show + search + channels */}
+      <div className="relative z-10 px-4 pt-2">
+        {show ? <div className="flex items-center gap-2"><span className="text-base">{show.emoji}</span><span className="truncate text-sm font-bold" style={{ color: show.color }}>{show.name}</span>{!live && show.day >= 0 ? <span className="shrink-0 text-[11px] text-slate-400">· airs {DAY_LABEL[show.day]} 6:00 PM</span> : null}</div> : null}
         <div className="mt-2"><SearchBar accent={accent} searching={searching} onSearch={onSearch} /></div>
         <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {pills.map((c) => <button key={c.slug} onClick={() => setActiveCh(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${activeCh === c.slug ? "border-white/0 bg-white text-slate-900" : "border-white/15 bg-black/30 text-white hover:bg-black/50"}`}>{c.label}</button>)}
+          {pills.map((c) => <button key={c.slug} onClick={() => setActiveCh(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${activeCh === c.slug ? "border-white/0 bg-white text-slate-900" : "border-white/15 bg-black/30 text-white hover:bg-black/50"}`}>{c.icon ? `${c.icon} ` : ""}{c.label}</button>)}
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent p-4 pb-6">
-        <div className="mb-3 flex justify-center gap-1">{list.slice(0, 12).map((_, j) => <span key={j} className={`h-1 rounded-full transition-all ${j === Math.min(idx, 11) ? "w-6 bg-white" : "w-1.5 bg-white/30"}`} />)}</div>
+      {/* Stage — image contained in the remaining space */}
+      <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 py-3">
+        {current.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img key={current.id} src={current.imageUrl} alt={current.name} className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />) : <div className="grid h-48 w-48 place-items-center rounded-2xl bg-white/5 text-6xl">🛍</div>}
+      </div>
+
+      {/* Bottom — product + actions (always visible) */}
+      <div className="relative z-10 px-4 pb-4">
+        <div className="mb-2 flex justify-center gap-1">{list.slice(0, 12).map((_, j) => <span key={j} className={`h-1 rounded-full transition-all ${j === Math.min(idx, 11) ? "w-6 bg-white" : "w-1.5 bg-white/30"}`} />)}</div>
         <div className="mx-auto max-w-xl">
-          <h2 className="text-lg font-bold leading-tight drop-shadow">{current.name}</h2>
-          <div className="mt-0.5 flex items-center gap-2"><span className="text-2xl font-extrabold drop-shadow" style={{ color: accent }}>{money(current.priceCents)}</span>{current.stock != null && current.stock <= 5 ? <span className="rounded-full bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold">Only {current.stock} left</span> : null}</div>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-bold leading-tight">{current.name}</h2>
+              <div className="flex items-center gap-2"><span className="text-2xl font-extrabold" style={{ color: accent }}>{money(current.priceCents)}</span>{current.stock != null && current.stock <= 5 ? <span className="rounded-full bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold">Only {current.stock} left</span> : null}</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 text-xs text-slate-300">
+              <button onClick={() => setIdx((p) => (p - 1 + list.length) % list.length)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 hover:bg-white/20">‹</button>
+              <span className="tabular-nums">{Math.min(idx + 1, list.length)}/{list.length}</span>
+              <button onClick={() => setIdx((p) => (p + 1) % list.length)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 hover:bg-white/20">›</button>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
             <button onClick={() => add(current)} className="flex-1 rounded-xl px-4 py-3 text-sm font-bold text-white transition" style={{ background: added ? "#22c55e" : accent }}>{added ? "✓ Added" : "🛒 Add to cart"}</button>
             <button onClick={() => { addToCart(current); openCart(); }} className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-900 hover:bg-slate-100">Buy now</button>
-            <button onClick={() => setPanel("ai")} aria-label="Ask AI" className="grid h-11 w-11 place-items-center rounded-xl bg-white/10 text-lg backdrop-blur hover:bg-white/20">💬</button>
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-300">
-            <button onClick={() => setPanel("shelf")} className="rounded-full bg-white/10 px-3 py-1.5 font-medium backdrop-blur hover:bg-white/20">🛍 Shop this channel</button>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setIdx((p) => (p - 1 + list.length) % list.length)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 backdrop-blur hover:bg-white/20">‹</button>
-              <span className="tabular-nums">{Math.min(idx + 1, list.length)}/{list.length}</span>
-              <button onClick={() => setIdx((p) => (p + 1) % list.length)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 backdrop-blur hover:bg-white/20">›</button>
-            </div>
+            <button onClick={() => setPanel("ai")} aria-label="Ask AI" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10 text-lg hover:bg-white/20">💬</button>
+            <button onClick={() => setPanel("shelf")} aria-label="Shop channel" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10 text-lg hover:bg-white/20">🛍</button>
           </div>
         </div>
       </div>

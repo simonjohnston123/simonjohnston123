@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { classify } from "@/lib/live-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,8 @@ export async function GET(req: NextRequest) {
   const seenImg = new Set<string>();
   const products: { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null }[] = [];
   for (const p of rows) {
+    const ch = classify(p.name, p.category);
+    if (!ch) continue; // excluded (adult, etc.)
     const nameKey = p.name.trim().toLowerCase().replace(/\s+/g, " ");
     const imgKey = (p.imageUrl ?? "").split("?")[0];
     if (seenName.has(nameKey) || (imgKey && seenImg.has(imgKey))) continue;
@@ -44,15 +47,11 @@ export async function GET(req: NextRequest) {
       priceCents: typeof p.priceCents === "number" && p.priceCents > 0 ? p.priceCents : Math.round((p.price ?? 0) * 100),
       imageUrl: p.imageUrl,
       description: (p.description ?? "").slice(0, 240) || null,
-      channel: slugify((p.category ?? "").split(/>|\/|,/)[0]?.trim() || "other"),
+      channel: ch.slug,
       stock: p.inventory,
     });
     if (products.length >= 120) break;
   }
 
   return NextResponse.json({ products });
-}
-
-function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "other";
 }
