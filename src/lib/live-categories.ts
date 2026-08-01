@@ -32,10 +32,14 @@ const RULES: Rule[] = [
 export const CHANNELS: LiveChannel[] = RULES.map(({ slug, label, icon }) => ({ slug, label, icon }));
 const OTHER: LiveChannel = { slug: "everything-else", label: "Everything Else", icon: "🛍️" };
 
-/** Classify a product into one clean channel. Returns null if it should be excluded. */
+/** Classify a product into one clean channel. Returns null if it should be excluded.
+ *  The product NAME is trusted first (supplier categories are unreliable — e.g. a
+ *  mouse trap mis-tagged under "Baby"); category is only a fallback. */
 export function classify(name: string | null, category: string | null): LiveChannel | null {
-  const text = `${name ?? ""} ${category ?? ""}`;
-  if (EXCLUDE_RE.test(text)) return null;
-  for (const r of RULES) if (r.re.test(text)) return { slug: r.slug, label: r.label, icon: r.icon };
+  const n = name ?? "";
+  const c = category ?? "";
+  if (EXCLUDE_RE.test(`${n} ${c}`)) return null;
+  for (const r of RULES) if (r.re.test(n)) return { slug: r.slug, label: r.label, icon: r.icon };
+  for (const r of RULES) if (r.re.test(c)) return { slug: r.slug, label: r.label, icon: r.icon };
   return OTHER;
 }
