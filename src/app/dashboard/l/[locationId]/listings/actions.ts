@@ -102,6 +102,11 @@ async function businessMemberForLocation(locationId: string, locationName: strin
  *  records under the location's business member. Other marketplaces: coming soon. */
 export async function publishBatchAction(locationId: string, batchId: string): Promise<ActionResult> {
   await requireLocationAccess(locationId);
+  return publishBatchCore(locationId, batchId);
+}
+
+/** Auth-free publish core (callable from an internal trigger). */
+export async function publishBatchCore(locationId: string, batchId: string): Promise<ActionResult> {
   const batch = await prisma.listingBatch.findFirst({ where: { id: batchId, locationId }, include: { items: true } });
   if (!batch) return { ok: false, message: "Batch not found." };
   const rb = rulebook(batch.marketplace);
