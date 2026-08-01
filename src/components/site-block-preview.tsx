@@ -38,6 +38,19 @@ export function BlockPreview({
           ) : null}
         </section>
       );
+    case "liveshop":
+      return (
+        <section className="mx-auto max-w-5xl px-4 py-10">
+          {block.heading ? <h2 className="mb-4 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
+          <div className="grid h-72 place-items-center rounded-2xl border border-slate-200 bg-slate-950 text-center">
+            <div className="px-6">
+              <div className="text-3xl">📺</div>
+              <div className="mt-2 text-sm font-semibold text-white">Live Shop</div>
+              <div className="mt-1 text-xs text-slate-400">Plays the Placid Connect live shopping channel with category tabs. Shows live on the published page.</div>
+            </div>
+          </div>
+        </section>
+      );
     case "text":
       return (
         <section className="mx-auto max-w-3xl px-6 py-14">

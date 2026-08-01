@@ -162,6 +162,17 @@ export const BLOCK_DEFS: BlockDef[] = [
     default: { heading: "", embedUrl: "" },
   },
   {
+    type: "liveshop",
+    label: "Live Shop",
+    icon: "📺",
+    category: "Media",
+    fields: [
+      { k: "heading", label: "Heading", kind: "text" },
+      { k: "embedUrl", label: "Live Shop URL", kind: "url", placeholder: "https://placidconnect.com/embed/liveshop" },
+    ],
+    default: { heading: "Live Shopping", embedUrl: "https://placidconnect.com/embed/liveshop" },
+  },
+  {
     type: "button",
     label: "Button",
     icon: "⬛",
