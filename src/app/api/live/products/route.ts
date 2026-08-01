@@ -3,45 +3,55 @@ import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Public feed for the on-site live shopping experience: a location's own products
-// as channels (by department) + the product reel. Used by the site-builder
-// "Live Shop" block on the business's website.
+// Public feed for the on-site live shopping experience. Channels are derived from
+// the SAME products we return (so every pill has products), and products are
+// de-duplicated by name so the reel doesn't show the same item repeatedly.
 export async function GET(req: NextRequest) {
   const locationId = req.nextUrl.searchParams.get("locationId") ?? "";
   if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
 
-  const where = { locationId, active: true, imageUrl: { not: null } };
+  const rows = await prisma.product.findMany({
+    where: { locationId, active: true, imageUrl: { not: null } },
+    orderBy: { updatedAt: "desc" },
+    take: 3000,
+    select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, description: true, category: true, inventory: true },
+  });
 
-  const [rows, reel] = await Promise.all([
-    prisma.product.findMany({ where, select: { category: true }, take: 20000 }),
-    prisma.product.findMany({
-      where,
-      orderBy: { position: "asc" },
-      take: 300,
-      select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, description: true, category: true, inventory: true },
-    }),
-  ]);
-
-  // Channels = top-level departments derived from category, most-stocked first.
+  const seenName = new Set<string>();
+  const seenImg = new Set<string>();
+  const labels = new Map<string, string>();
   const counts = new Map<string, number>();
-  for (const r of rows) {
-    const ch = channelOf(r.category);
-    counts.set(ch.slug, (counts.get(ch.slug) ?? 0) + 1);
+  const products: { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null }[] = [];
+
+  for (const p of rows) {
+    // De-dupe: one product per distinct name AND per distinct image.
+    const nameKey = p.name.trim().toLowerCase().replace(/\s+/g, " ");
+    const imgKey = (p.imageUrl ?? "").split("?")[0];
+    if (seenName.has(nameKey) || (imgKey && seenImg.has(imgKey))) continue;
+    seenName.add(nameKey);
+    if (imgKey) seenImg.add(imgKey);
+
+    const label = firstSegment(p.category);
+    const slug = slugify(label);
+    if (!labels.has(slug)) labels.set(slug, label);
+    counts.set(slug, (counts.get(slug) ?? 0) + 1);
+
+    products.push({
+      id: p.id,
+      name: p.name,
+      priceCents: typeof p.priceCents === "number" && p.priceCents > 0 ? p.priceCents : Math.round((p.price ?? 0) * 100),
+      imageUrl: p.imageUrl,
+      description: (p.description ?? "").slice(0, 240) || null,
+      channel: slug,
+      stock: p.inventory,
+    });
+    if (products.length >= 900) break;
   }
+
   const channels = [...counts.entries()]
-    .map(([slug, count]) => ({ slug, label: labelOf(slug), count }))
+    .map(([slug, count]) => ({ slug, label: labels.get(slug) ?? slug, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 16);
-
-  const products = reel.map((p) => ({
-    id: p.id,
-    name: p.name,
-    priceCents: typeof p.priceCents === "number" && p.priceCents > 0 ? p.priceCents : Math.round((p.price ?? 0) * 100),
-    imageUrl: p.imageUrl,
-    description: p.description,
-    channel: channelOf(p.category).slug,
-    stock: p.inventory,
-  }));
 
   return NextResponse.json({ channels, products });
 }
@@ -52,14 +62,4 @@ function firstSegment(category: string | null): string {
 }
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "other";
-}
-const LABELS = new Map<string, string>();
-function channelOf(category: string | null): { slug: string; label: string } {
-  const label = firstSegment(category);
-  const slug = slugify(label);
-  if (!LABELS.has(slug)) LABELS.set(slug, label);
-  return { slug, label };
-}
-function labelOf(slug: string): string {
-  return LABELS.get(slug) ?? slug;
 }

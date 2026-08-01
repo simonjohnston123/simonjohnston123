@@ -82,10 +82,10 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
           onWatch={(s) => { setShow(s); setView("live"); }} onShop={() => setView("shop")} cartButton={cartButton} />
       ) : view === "shop" ? (
         <ShopView products={products} channels={data?.channels ?? []} accent={accent} loading={!data}
-          addToCart={addToCart} onBack={() => setView("schedule")} onLive={() => setView(show ? "live" : "schedule")} cartButton={cartButton} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show ? "live" : "schedule")} cartButton={cartButton} />
       ) : (
         <LivePlayer products={products} channels={data?.channels ?? []} show={show} live={show ? isLiveNow(show) : false} accent={accent}
-          addToCart={addToCart} onSchedule={() => setView("schedule")} onShop={() => setView("shop")} cartButton={cartButton} locationId={locationId} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => setView("schedule")} onShop={() => setView("shop")} cartButton={cartButton} locationId={locationId} />
       )}
 
       {cartOpen ? (
@@ -189,9 +189,9 @@ function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, onWatch, 
 }
 
 /* ---------------- Shop (normal storefront) ---------------- */
-function ShopView({ products, channels, accent, loading, addToCart, onBack, onLive, cartButton }: {
+function ShopView({ products, channels, accent, loading, addToCart, openCart, onBack, onLive, cartButton }: {
   products: LiveProduct[]; channels: Channel[]; accent: string; loading: boolean;
-  addToCart: (p: LiveProduct) => void; onBack: () => void; onLive: () => void; cartButton: React.ReactNode;
+  addToCart: (p: LiveProduct) => void; openCart: () => void; onBack: () => void; onLive: () => void; cartButton: React.ReactNode;
 }) {
   const [cat, setCat] = useState("all");
   const list = cat === "all" ? products : products.filter((p) => p.channel === cat);
@@ -222,7 +222,10 @@ function ShopView({ products, channels, accent, loading, addToCart, onBack, onLi
                 <div className="flex flex-1 flex-col p-3">
                   <div className="line-clamp-2 text-sm font-medium">{p.name}</div>
                   <div className="mt-1 text-base font-bold" style={{ color: accent }}>{money(p.priceCents)}</div>
-                  <button onClick={() => addToCart(p)} className="mt-3 rounded-lg py-2 text-sm font-semibold text-white" style={{ background: accent }}>Add to cart</button>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button onClick={() => addToCart(p)} className="rounded-lg py-2 text-xs font-semibold text-white" style={{ background: accent }}>Add to cart</button>
+                    <button onClick={() => { addToCart(p); openCart(); }} className="rounded-lg border py-2 text-xs font-semibold" style={{ borderColor: accent, color: accent }}>Buy now</button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -234,9 +237,9 @@ function ShopView({ products, channels, accent, loading, addToCart, onBack, onLi
 }
 
 /* ---------------- Live player (immersive) ---------------- */
-function LivePlayer({ products, channels, show, live, accent, addToCart, onSchedule, onShop, cartButton }: {
+function LivePlayer({ products, channels, show, live, accent, addToCart, openCart, onSchedule, onShop, cartButton }: {
   products: LiveProduct[]; channels: Channel[]; show: Show | null; live: boolean; accent: string;
-  addToCart: (p: LiveProduct) => void; onSchedule: () => void; onShop: () => void; cartButton: React.ReactNode; locationId: string;
+  addToCart: (p: LiveProduct) => void; openCart: () => void; onSchedule: () => void; onShop: () => void; cartButton: React.ReactNode; locationId: string;
 }) {
   const [activeCh, setActiveCh] = useState("all");
   const [idx, setIdx] = useState(0);
@@ -265,7 +268,21 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, onSched
     catch { setAi((a) => ({ ...a, msgs: [...a.msgs, { role: "host", text: "Connection hiccup — try again." }], loading: false })); }
   }
 
-  if (!current) return <div className="grid h-[70vh] place-items-center bg-slate-950 text-slate-400">Loading the channel…</div>;
+  if (!current)
+    return (
+      <div className="grid h-[70vh] place-items-center bg-slate-950 text-center text-slate-300">
+        <div>
+          <div className="text-4xl">📺</div>
+          <p className="mt-3 text-sm">{products.length === 0 ? "Loading the channel…" : "No products in this channel yet."}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            {activeCh !== "all" && products.length > 0 ? (
+              <button onClick={() => setActiveCh("all")} className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ background: accent }}>All products</button>
+            ) : null}
+            <button onClick={onSchedule} className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20">‹ Back to shows</button>
+          </div>
+        </div>
+      </div>
+    );
   const pills = [{ slug: "all", label: "All", count: products.length }, ...channels];
 
   return (
@@ -301,6 +318,7 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, onSched
           <div className="mt-0.5 flex items-center gap-2"><span className="text-2xl font-extrabold drop-shadow" style={{ color: accent }}>{money(current.priceCents)}</span>{current.stock != null && current.stock <= 5 ? <span className="rounded-full bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold">Only {current.stock} left</span> : null}</div>
           <div className="mt-3 flex items-center gap-2">
             <button onClick={() => add(current)} className="flex-1 rounded-xl px-4 py-3 text-sm font-bold text-white transition" style={{ background: added ? "#22c55e" : accent }}>{added ? "✓ Added" : "🛒 Add to cart"}</button>
+            <button onClick={() => { addToCart(current); openCart(); }} className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-900 hover:bg-slate-100">Buy now</button>
             <button onClick={() => setPanel("ai")} aria-label="Ask AI" className="grid h-11 w-11 place-items-center rounded-xl bg-white/10 text-lg backdrop-blur hover:bg-white/20">💬</button>
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-slate-300">
