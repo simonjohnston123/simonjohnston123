@@ -27,6 +27,9 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   const [data, setData] = useState<{ channels: Channel[]; products: LiveProduct[] } | null>(null);
   const [view, setView] = useState<"schedule" | "live" | "shop">("schedule");
   const [show, setShow] = useState<Show | null>(null);
+  const [searchResults, setSearchResults] = useState<LiveProduct[] | null>(null);
+  const [searchShow, setSearchShow] = useState<Show | null>(null);
+  const [searching, setSearching] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [cartOpen, setCartOpen] = useState(false);
@@ -63,6 +66,22 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     setPlaced({ number: j.number ?? 0 }); setCart({});
   }
 
+  async function runSearch(q: string) {
+    const query = q.trim();
+    if (query.length < 2) return;
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/live/search?locationId=${encodeURIComponent(locationId)}&q=${encodeURIComponent(query)}`);
+      const j = await res.json();
+      setSearchResults(j.products ?? []);
+      setSearchShow({ day: -1, name: query, emoji: "🔎", color: accent, tag: `Live results for "${query}"` });
+      setShow(null);
+      setView("live");
+    } catch { setSearchResults([]); }
+    setSearching(false);
+  }
+  const clearSearch = () => { setSearchResults(null); setSearchShow(null); };
+
   const todayDay = now ? now.getDay() : -1;
   const hour = now ? now.getHours() : 0;
   const isLiveNow = (s: Show) => s.day === todayDay && hour >= 18;
@@ -79,13 +98,13 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     <div className="w-full bg-slate-950 text-white">
       {view === "schedule" ? (
         <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent}
-          onWatch={(s) => { setShow(s); setView("live"); }} onShop={() => setView("shop")} cartButton={cartButton} />
+          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={cartButton} />
       ) : view === "shop" ? (
         <ShopView products={products} channels={data?.channels ?? []} accent={accent} loading={!data}
-          addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show ? "live" : "schedule")} cartButton={cartButton} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show || searchShow ? "live" : "schedule")} cartButton={cartButton} />
       ) : (
-        <LivePlayer products={products} channels={data?.channels ?? []} show={show} live={show ? isLiveNow(show) : false} accent={accent}
-          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => setView("schedule")} onShop={() => setView("shop")} cartButton={cartButton} locationId={locationId} />
+        <LivePlayer products={searchResults ?? products} channels={data?.channels ?? []} show={searchShow ?? show} live={searchResults ? true : show ? isLiveNow(show) : false} accent={accent}
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => { clearSearch(); setView("schedule"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={cartButton} locationId={locationId} />
       )}
 
       {cartOpen ? (
@@ -131,21 +150,27 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
 }
 
 /* ---------------- Schedule (TV guide) ---------------- */
-function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, onWatch, onShop, cartButton }: {
+function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, onWatch, onShop, onSearch, searching, cartButton }: {
   shows: Show[]; isLiveNow: (s: Show) => boolean; isTonight: (s: Show) => boolean; tonights: Show | null; accent: string;
-  onWatch: (s: Show) => void; onShop: () => void; cartButton: React.ReactNode;
+  onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode;
 }) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2"><span className="animate-pulse rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-bold">● LIVE</span><span className="text-xs text-slate-400">A different show every night · 6:00 PM</span></div>
           <h2 className="mt-1 text-3xl font-extrabold sm:text-4xl">Placid Deals Live</h2>
         </div>
         <div className="flex items-center gap-2">
           {cartButton}
-          <button onClick={onShop} className="rounded-full px-4 py-2 text-sm font-bold text-white" style={{ background: accent }}>🛍 Shop products now →</button>
+          <button onClick={onShop} className="rounded-full px-4 py-2 text-sm font-bold text-white" style={{ background: accent }}>🛍 Shop now →</button>
         </div>
+      </div>
+
+      {/* Intent search — spin up a live channel of exactly what they want */}
+      <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="mb-2 text-sm font-semibold">🔎 What are you shopping for? <span className="font-normal text-slate-400">We&apos;ll play it live.</span></div>
+        <SearchBar accent={accent} searching={searching} onSearch={onSearch} big />
       </div>
 
       {tonights ? (
@@ -237,9 +262,9 @@ function ShopView({ products, channels, accent, loading, addToCart, openCart, on
 }
 
 /* ---------------- Live player (immersive) ---------------- */
-function LivePlayer({ products, channels, show, live, accent, addToCart, openCart, onSchedule, onShop, cartButton }: {
+function LivePlayer({ products, channels, show, live, accent, addToCart, openCart, onSchedule, onShop, onSearch, searching, cartButton }: {
   products: LiveProduct[]; channels: Channel[]; show: Show | null; live: boolean; accent: string;
-  addToCart: (p: LiveProduct) => void; openCart: () => void; onSchedule: () => void; onShop: () => void; cartButton: React.ReactNode; locationId: string;
+  addToCart: (p: LiveProduct) => void; openCart: () => void; onSchedule: () => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; locationId: string;
 }) {
   const [activeCh, setActiveCh] = useState("all");
   const [idx, setIdx] = useState(0);
@@ -283,7 +308,8 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
         </div>
       </div>
     );
-  const pills = [{ slug: "all", label: "All", count: products.length }, ...channels];
+  const present = new Set(products.map((p) => p.channel));
+  const pills = [{ slug: "all", label: "All", count: products.length }, ...channels.filter((c) => present.has(c.slug))];
 
   return (
     <div className="relative h-[86vh] min-h-[560px] w-full select-none overflow-hidden bg-black text-white">
@@ -305,7 +331,8 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
             {cartButton}
           </div>
         </div>
-        {show ? <div className="mt-2 flex items-center gap-2"><span className="text-lg">{show.emoji}</span><span className="text-sm font-bold" style={{ color: show.color }}>{show.name}</span>{!live ? <span className="text-[11px] text-slate-400">· airs {DAY_LABEL[show.day]} 6:00 PM</span> : null}</div> : null}
+        {show ? <div className="mt-2 flex items-center gap-2"><span className="text-lg">{show.emoji}</span><span className="text-sm font-bold" style={{ color: show.color }}>{show.name}</span>{!live && show.day >= 0 ? <span className="text-[11px] text-slate-400">· airs {DAY_LABEL[show.day]} 6:00 PM</span> : null}</div> : null}
+        <div className="mt-2"><SearchBar accent={accent} searching={searching} onSearch={onSearch} /></div>
         <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {pills.map((c) => <button key={c.slug} onClick={() => setActiveCh(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${activeCh === c.slug ? "border-white/0 bg-white text-slate-900" : "border-white/15 bg-black/30 text-white hover:bg-black/50"}`}>{c.label}</button>)}
         </div>
@@ -365,6 +392,24 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
             <button className="rounded-full px-4 py-2.5 text-sm font-semibold text-white" style={{ background: accent }}>Ask</button>
           </form>
         </Drawer>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchBar({ accent, searching, onSearch, big }: { accent: string; searching: boolean; onSearch: (q: string) => void; big?: boolean }) {
+  const [q, setQ] = useState("");
+  const chips = ["Earbuds", "Air fryer", "Dog bed", "Coffee", "Kids toys", "Power tools", "Skincare", "Camping"];
+  return (
+    <div>
+      <form onSubmit={(e) => { e.preventDefault(); onSearch(q); }} className="flex gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. earbuds, air fryer, dog bed…" className={`min-w-0 flex-1 rounded-full bg-white/10 px-4 ${big ? "py-3" : "py-2"} text-sm text-white outline-none placeholder:text-slate-400`} />
+        <button className="shrink-0 rounded-full px-4 py-2 text-sm font-bold text-white" style={{ background: accent }}>{searching ? "…" : "Play live"}</button>
+      </form>
+      {big ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {chips.map((c) => <button key={c} type="button" onClick={() => onSearch(c)} className="rounded-full border border-white/15 bg-white/[0.03] px-3 py-1 text-xs text-slate-200 hover:bg-white/10">{c}</button>)}
+        </div>
       ) : null}
     </div>
   );
