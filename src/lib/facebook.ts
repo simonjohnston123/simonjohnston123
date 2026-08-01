@@ -44,11 +44,39 @@ export async function setupFacebookConnection(
     /* keep short-lived token */
   }
 
-  // 2) the Pages the user chose to grant (each with its own Page token)
+  // 2) the Pages the user chose to grant. New Pages Experience often returns the
+  // page id/name here WITHOUT an access_token, so we mint each page token in a
+  // follow-up call rather than dropping token-less pages.
   const res = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token&limit=100&access_token=${encodeURIComponent(userTok)}`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as { data?: Array<{ id: string; name: string; access_token: string }> };
-  const pages = (data.data ?? []).filter((p) => p.id && p.access_token);
+  const rawBody = await res.text();
+  if (!res.ok) {
+    console.error("[facebook] /me/accounts failed", res.status, rawBody.slice(0, 500));
+    return null;
+  }
+  let data: { data?: Array<{ id: string; name: string; access_token?: string }> } = {};
+  try {
+    data = JSON.parse(rawBody);
+  } catch {
+    console.error("[facebook] /me/accounts unparseable", rawBody.slice(0, 500));
+  }
+  const listed = (data.data ?? []).filter((p) => p.id);
+  console.error(`[facebook] /me/accounts returned ${listed.length} page(s):`, listed.map((p) => `${p.name}(${p.id}) token=${p.access_token ? "yes" : "no"}`).join("; "));
+
+  // Ensure every listed page has a Page access token (fetch it if missing).
+  const pages: Array<{ id: string; name: string; access_token: string }> = [];
+  for (const p of listed) {
+    let token = p.access_token;
+    if (!token) {
+      try {
+        const tr = await fetch(`${GRAPH}/${p.id}?fields=access_token&access_token=${encodeURIComponent(userTok)}`);
+        if (tr.ok) token = ((await tr.json()) as { access_token?: string }).access_token;
+      } catch {
+        /* leave token undefined */
+      }
+    }
+    if (token) pages.push({ id: p.id, name: p.name, access_token: token });
+    else console.error(`[facebook] no page token obtainable for ${p.name}(${p.id})`);
+  }
 
   // 3) subscribe each Page to the webhook fields we care about
   for (const pg of pages) {
