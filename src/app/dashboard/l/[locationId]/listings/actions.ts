@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
 import { rulebook, validateFields, type MarketplaceKey } from "@/lib/listing-marketplaces";
+import { optimiseListing } from "@/lib/ai";
 
 export type ActionResult = { ok: boolean; message: string };
 
@@ -79,9 +80,90 @@ export async function deleteBatchAction(locationId: string, batchId: string): Pr
   redirect(`/dashboard/l/${locationId}/listings`);
 }
 
-/** P1 stub: AI optimisation unlocks once credits are enabled (Phase 3). */
-export async function optimiseItemAction(): Promise<ActionResult> {
-  return { ok: false, message: "AI optimisation unlocks once AI credits are switched on (Phase 3)." };
+export type OptimizeItemResult = { ok: boolean; message: string; fields?: Record<string, unknown>; priceSuggestion?: number | null };
+
+/** Optimise ONE listing to its marketplace's saved AI rules + suggest a price. */
+export async function optimiseItemAction(locationId: string, itemId: string): Promise<OptimizeItemResult> {
+  await requireLocationAccess(locationId);
+  const item = await prisma.listingItem.findFirst({ where: { id: itemId, batch: { locationId } }, include: { batch: true } });
+  if (!item) return { ok: false, message: "Item not found." };
+  const rb = rulebook(item.batch.marketplace);
+  if (!rb) return { ok: false, message: "Unknown marketplace." };
+  const product = await prisma.product.findFirst({
+    where: { id: item.productId, locationId },
+    select: { name: true, description: true, category: true, priceCents: true, price: true },
+  });
+  if (!product) return { ok: false, message: "Product not found." };
+
+  const current = (item.fields ?? {}) as Record<string, unknown>;
+  const result = await optimiseListing({
+    marketplaceLabel: rb.label,
+    aiRules: rb.aiRules,
+    pricingHint: rb.pricingHint,
+    fields: rb.fields.filter((f) => f.aiWritable).map((f) => ({ id: f.id, label: f.label, type: f.type, max: f.max })),
+    current,
+    product: {
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      price: typeof product.priceCents === "number" ? product.priceCents / 100 : product.price ?? undefined,
+    },
+  });
+
+  const merged = { ...current, ...result.fields };
+  if (result.priceSuggestion != null) merged.price = result.priceSuggestion;
+  const violations = validateFields(item.batch.marketplace, merged);
+  await prisma.listingItem.update({
+    where: { id: itemId },
+    data: { fields: merged as object, validation: violations as object, aiStatus: "OPTIMISED", publishStatus: item.publishStatus === "PUBLISHED" ? item.publishStatus : null },
+  });
+  revalidatePath(`/dashboard/l/${locationId}/listings/${item.batchId}`);
+  return { ok: true, message: result.note, fields: merged, priceSuggestion: result.priceSuggestion };
+}
+
+const MAX_OPTIMISE_RUN = 25;
+
+/** Optimise every item in a batch (capped per run) to the marketplace rules. */
+export async function optimiseBatchAction(locationId: string, batchId: string): Promise<ActionResult> {
+  await requireLocationAccess(locationId);
+  const batch = await prisma.listingBatch.findFirst({ where: { id: batchId, locationId }, include: { items: { take: MAX_OPTIMISE_RUN } } });
+  if (!batch) return { ok: false, message: "Batch not found." };
+  const rb = rulebook(batch.marketplace);
+  if (!rb) return { ok: false, message: "Unknown marketplace." };
+  const products = await prisma.product.findMany({
+    where: { id: { in: batch.items.map((i) => i.productId) }, locationId },
+    select: { id: true, name: true, description: true, category: true, priceCents: true, price: true },
+  });
+  const pmap = new Map(products.map((p) => [p.id, p]));
+  const writable = rb.fields.filter((f) => f.aiWritable).map((f) => ({ id: f.id, label: f.label, type: f.type, max: f.max }));
+
+  let done = 0;
+  let ai = 0;
+  for (const item of batch.items) {
+    const p = pmap.get(item.productId);
+    if (!p) continue;
+    const current = (item.fields ?? {}) as Record<string, unknown>;
+    const result = await optimiseListing({
+      marketplaceLabel: rb.label,
+      aiRules: rb.aiRules,
+      pricingHint: rb.pricingHint,
+      fields: writable,
+      current,
+      product: { name: p.name, description: p.description, category: p.category, price: typeof p.priceCents === "number" ? p.priceCents / 100 : p.price ?? undefined },
+    });
+    const merged = { ...current, ...result.fields };
+    if (result.priceSuggestion != null) merged.price = result.priceSuggestion;
+    await prisma.listingItem.update({
+      where: { id: item.id },
+      data: { fields: merged as object, validation: validateFields(batch.marketplace, merged) as object, aiStatus: "OPTIMISED", publishStatus: item.publishStatus === "PUBLISHED" ? item.publishStatus : null },
+    });
+    done++;
+    if (result.ai) ai++;
+  }
+  await prisma.listingBatch.update({ where: { id: batchId }, data: { status: "OPTIMISED" } });
+  revalidatePath(`/dashboard/l/${locationId}/listings/${batchId}`);
+  const tail = ai === 0 && done > 0 ? " (basic tidy-up — enable AI credits for full optimisation)" : "";
+  return { ok: done > 0, message: `Optimised ${done} listing${done === 1 ? "" : "s"}${tail}.` };
 }
 
 /** Find or create the hidden business member that owns a location's Placid

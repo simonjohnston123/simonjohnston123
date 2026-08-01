@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { rulebook, type ListingField } from "@/lib/listing-marketplaces";
 import {
   updateListingItemAction,
   removeListingItemAction,
   publishBatchAction,
   optimiseItemAction,
+  optimiseBatchAction,
   deleteBatchAction,
 } from "@/app/dashboard/l/[locationId]/listings/actions";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,14 @@ type BatchData = { id: string; name: string; marketplace: string; status: string
 export function ListingBatchEditor({ locationId, batch, items }: { locationId: string; batch: BatchData; items: ItemData[] }) {
   const rb = rulebook(batch.marketplace);
   const [msg, setMsg] = useState("");
+  const [q, setQ] = useState("");
   const [confirm, setConfirm] = useState<null | "publish" | "delete">(null);
   const [pending, start] = useTransition();
+
+  const shown = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return s ? items.filter((i) => i.productName.toLowerCase().includes(s)) : items;
+  }, [q, items]);
 
   if (!rb) return <p className="text-sm text-rose-600">Unknown marketplace.</p>;
 
@@ -35,7 +42,12 @@ export function ListingBatchEditor({ locationId, batch, items }: { locationId: s
     setConfirm(null);
     start(async () => setMsg((await publishBatchAction(locationId, batch.id)).message));
   };
-  const optimiseAll = () => start(async () => setMsg((await optimiseItemAction()).message));
+  const optimiseAll = () =>
+    start(async () => {
+      const r = await optimiseBatchAction(locationId, batch.id);
+      setMsg(r.message);
+      if (r.ok && typeof window !== "undefined") window.location.reload();
+    });
   const del = () => start(async () => { await deleteBatchAction(locationId, batch.id); });
 
   return (
@@ -59,8 +71,8 @@ export function ListingBatchEditor({ locationId, batch, items }: { locationId: s
           </>
         ) : (
           <>
-            <button onClick={optimiseAll} disabled={pending} className="btn-secondary text-sm disabled:opacity-50" title="AI optimisation (Phase 3)">
-              ✨ Optimise all
+            <button onClick={optimiseAll} disabled={pending} className="btn-secondary text-sm disabled:opacity-50" title="AI-optimise every listing to the marketplace rules">
+              {pending ? "Optimising…" : "✨ Optimise all"}
             </button>
             <button
               onClick={() => (rb.available ? setConfirm("publish") : setMsg(`Publishing to ${rb.label} is coming soon — you can still draft and optimise here.`))}
@@ -74,12 +86,29 @@ export function ListingBatchEditor({ locationId, batch, items }: { locationId: s
         )}
       </div>
 
+      {/* Saved marketplace rules the AI follows */}
+      <details className="card p-3 text-sm">
+        <summary className="cursor-pointer font-medium text-slate-700">✨ {rb.label} optimisation rules (what the AI applies)</summary>
+        <p className="mt-2 whitespace-pre-line text-slate-600">{rb.aiRules}</p>
+        <p className="mt-2 text-slate-500"><span className="font-medium text-slate-700">Pricing:</span> {rb.pricingHint}</p>
+      </details>
+
       {msg ? <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{msg}</p> : null}
 
+      {items.length > 4 ? (
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search listings by product…"
+          className="input h-9 text-sm"
+        />
+      ) : null}
+
       <div className="space-y-3">
-        {items.map((it) => (
+        {shown.map((it) => (
           <ListingItemCard key={it.id} locationId={locationId} rb={rb.fields} item={it} onMsg={setMsg} />
         ))}
+        {shown.length === 0 ? <p className="px-3 py-6 text-center text-sm text-slate-400">No listings match "{q}".</p> : null}
       </div>
     </div>
   );
@@ -123,7 +152,17 @@ function ListingItemCard({
       await removeListingItemAction(locationId, item.id);
       setRemoved(true);
     });
-  const optimise = () => start(async () => onMsg((await optimiseItemAction()).message));
+  const optimise = () =>
+    start(async () => {
+      const r = await optimiseItemAction(locationId, item.id);
+      if (r.ok && r.fields) {
+        setFields(r.fields);
+        setViolations([]);
+        setSaved(true);
+        if (status !== "PUBLISHED") setStatus(null);
+      }
+      onMsg(r.message + (r.priceSuggestion != null ? ` · Suggested price $${r.priceSuggestion.toFixed(2)}` : ""));
+    });
 
   const vFor = (id: string) => violations.find((v) => v.field === id)?.message;
 
@@ -188,7 +227,7 @@ function ListingItemCard({
         <button onClick={save} disabled={pending} className="btn-primary text-xs disabled:opacity-50">
           {pending ? "…" : saved ? "Saved ✓" : "Save"}
         </button>
-        <button onClick={optimise} disabled={pending} className="btn-secondary text-xs disabled:opacity-50" title="AI optimisation (Phase 3)">
+        <button onClick={optimise} disabled={pending} className="btn-secondary text-xs disabled:opacity-50" title="AI-optimise this listing to the marketplace rules">
           ✨ AI optimise
         </button>
         <button onClick={remove} disabled={pending} className="ml-auto text-xs text-slate-400 hover:text-rose-600">

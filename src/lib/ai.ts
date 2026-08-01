@@ -353,3 +353,94 @@ function heuristicStages(description: string): string[] {
     return ["New Lead", "Cart", "Checkout", "Paid", "Fulfilled"];
   return ["New Lead", "Contacted", "Qualified", "Quote Sent", "Won"];
 }
+
+// ---- Listing Tool: AI listing optimiser ------------------------------------
+export type OptimizeFieldSpec = { id: string; label: string; type: string; max?: number };
+export type OptimizeInput = {
+  marketplaceLabel: string;
+  aiRules: string;
+  pricingHint: string;
+  fields: OptimizeFieldSpec[]; // the AI-writable fields
+  current: Record<string, unknown>;
+  product: { name: string; description?: string | null; category?: string | null; price?: number };
+};
+export type OptimizeResult = { fields: Record<string, unknown>; priceSuggestion: number | null; note: string; ai: boolean };
+
+/** Rewrite a listing's fields to a marketplace's saved rules + suggest a price.
+ *  Real Claude when ANTHROPIC_API_KEY is set; a deterministic tidy-up otherwise. */
+export async function optimiseListing(input: OptimizeInput): Promise<OptimizeResult> {
+  const spec = input.fields
+    .map((f) => `- ${f.id} (${f.type}${f.max ? `, max ${f.max}${f.type === "list" ? " items" : " chars"}` : ""}): ${f.label}`)
+    .join("\n");
+  const prompt = `You are an expert ${input.marketplaceLabel} listing optimiser.
+Rewrite this product's listing to follow these rules EXACTLY:
+${input.aiRules}
+
+Pricing guidance: ${input.pricingHint}
+
+Product source data:
+- Name: ${input.product.name}
+- Category: ${input.product.category ?? ""}
+- Current price (AUD): ${input.product.price ?? ""}
+- Description: ${(input.product.description ?? "").slice(0, 1200)}
+
+Return STRICT JSON only (no markdown, no commentary) with exactly these keys:
+${spec}
+- priceSuggestion (number, AUD): your recommended sell price per the pricing guidance.
+Respect every max limit. For "list" fields return an array of strings. JSON:`;
+
+  const raw = await complete(prompt, 900);
+  const parsed = raw ? parseOptimize(raw, input.fields) : null;
+  if (parsed) return { fields: parsed.fields, priceSuggestion: parsed.priceSuggestion, note: `Optimised for ${input.marketplaceLabel}.`, ai: true };
+
+  return {
+    ...heuristicOptimize(input),
+    note: aiEnabled()
+      ? "AI was busy — applied a basic tidy-up. Try again for a full optimisation."
+      : "AI credits aren't switched on yet — applied a basic tidy-up. Enable AI for full optimisation.",
+    ai: false,
+  };
+}
+
+function parseOptimize(raw: string, fields: OptimizeFieldSpec[]): { fields: Record<string, unknown>; priceSuggestion: number | null } | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  const out: Record<string, unknown> = {};
+  for (const f of fields) {
+    const v = obj[f.id];
+    if (v == null) continue;
+    if (f.type === "list") {
+      const arr = (Array.isArray(v) ? v : [v]).map((x) => String(x).trim()).filter(Boolean);
+      out[f.id] = f.max ? arr.slice(0, f.max) : arr;
+    } else {
+      const s = String(v).trim();
+      out[f.id] = f.max ? s.slice(0, f.max) : s;
+    }
+  }
+  const priceNum = Number(obj.priceSuggestion);
+  return { fields: out, priceSuggestion: Number.isFinite(priceNum) && priceNum > 0 ? Math.round(priceNum * 100) / 100 : null };
+}
+
+function heuristicOptimize(input: OptimizeInput): { fields: Record<string, unknown>; priceSuggestion: number | null } {
+  const out: Record<string, unknown> = {};
+  const baseTitle = String(input.current.title ?? input.product.name ?? "").replace(/\s+/g, " ").trim();
+  const baseDesc = String(input.current.description ?? input.product.description ?? input.product.name ?? "").trim();
+  for (const f of input.fields) {
+    if (f.id === "title") out.title = f.max ? baseTitle.slice(0, f.max) : baseTitle;
+    else if (f.id === "description") out.description = f.max ? baseDesc.slice(0, f.max) : baseDesc;
+    else if (f.type === "list") {
+      const lines = baseDesc.split(/[.\n]/).map((s) => s.trim()).filter((s) => s.length > 8);
+      out[f.id] = lines.slice(0, f.max ?? 5);
+    } else if (f.id === "keywords") {
+      out.keywords = [input.product.category, ...baseTitle.split(" ")].filter(Boolean).slice(0, 10).join(" ").slice(0, f.max ?? 250);
+    }
+  }
+  return { fields: out, priceSuggestion: typeof input.product.price === "number" ? input.product.price : null };
+}
