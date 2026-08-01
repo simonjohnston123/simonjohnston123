@@ -3,9 +3,33 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
-import { encryptJson } from "@/lib/crypto";
+import { encryptJson, decryptJson } from "@/lib/crypto";
 import { providerDef, type ProviderKey } from "@/lib/integrations-catalog";
 import type { ConnectionProvider } from "@prisma/client";
+
+/** Re-run Facebook page enumeration using the token already stored on the
+ *  connection — picks up Pages newly assigned to the system user without asking
+ *  the user to paste the token again. */
+export async function refreshFacebookPagesAction(_prev: unknown, formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const conn = await prisma.connection.findUnique({
+    where: { locationId_provider: { locationId, provider: "FACEBOOK" } },
+  });
+  if (!conn?.secretCipher) return { error: "Connect Facebook first." };
+  let token = "";
+  try {
+    token = decryptJson<{ accessToken?: string }>(conn.secretCipher).accessToken ?? "";
+  } catch {
+    return { error: "Stored token couldn't be read — reconnect Facebook." };
+  }
+  if (!token) return { error: "No stored token — reconnect Facebook." };
+  const { setupFacebookConnection } = await import("@/lib/facebook");
+  const result = await setupFacebookConnection(locationId, token);
+  if (!result) return { error: "Facebook rejected the stored token — reconnect Facebook." };
+  revalidatePath(`/dashboard/l/${locationId}/integrations`);
+  return { error: "", ok: true };
+}
 
 /** Validate provider credentials where we can, before storing them. */
 async function validate(provider: ProviderKey, creds: Record<string, string>): Promise<string | null> {

@@ -1,7 +1,7 @@
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
-import { ConnectButton, DisconnectButton } from "@/components/integration-connect";
+import { ConnectButton, DisconnectButton, RefreshFacebookButton } from "@/components/integration-connect";
 import { PROVIDERS, type ProviderKey } from "@/lib/integrations-catalog";
 import { isConfiguredAsync } from "@/lib/oauth-providers";
 import { shopifyConfigured } from "@/lib/shopify-oauth";
@@ -103,6 +103,7 @@ export default async function IntegrationsPage({ params }: { params: { locationI
                       <p className="mt-3 flex-1 text-sm text-slate-500">{p.blurb}</p>
                       <div className="mt-4 flex items-center gap-2">
                         <ConnectButton locationId={locationId} provider={p.key as ProviderKey} connected={connected} oauthReady={oauthReady} />
+                        {connected && p.key === "FACEBOOK" ? <RefreshFacebookButton locationId={locationId} /> : null}
                         {connected ? <DisconnectButton locationId={locationId} provider={p.key as ProviderKey} /> : null}
                       </div>
                     </div>

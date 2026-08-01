@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFormState } from "react-dom";
 import { SubmitButton } from "@/components/submit-button";
 import { providerDef, type ProviderKey } from "@/lib/integrations-catalog";
-import { connectApiKeyAction, disconnectAction } from "@/app/dashboard/l/[locationId]/integrations/actions";
+import { connectApiKeyAction, disconnectAction, refreshFacebookPagesAction } from "@/app/dashboard/l/[locationId]/integrations/actions";
 
 type State = { error: string; ok?: boolean };
 const INIT: State = { error: "", ok: false };
@@ -155,6 +155,18 @@ export function ConnectButton({
       </button>
       {keyModal}
     </>
+  );
+}
+
+export function RefreshFacebookButton({ locationId }: { locationId: string }) {
+  const [state, action] = useFormState<State, FormData>(refreshFacebookPagesAction, INIT);
+  return (
+    <form action={action} className="inline-flex items-center gap-2">
+      <input type="hidden" name="locationId" value={locationId} />
+      <SubmitButton className="btn-ghost text-xs text-slate-500 hover:text-brand-600">Refresh pages</SubmitButton>
+      {state?.error ? <span className="text-xs text-red-600">{state.error}</span> : null}
+      {state?.ok ? <span className="text-xs text-green-600">Updated ✓</span> : null}
+    </form>
   );
 }
 
