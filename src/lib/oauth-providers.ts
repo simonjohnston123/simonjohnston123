@@ -19,6 +19,9 @@ type OAuthConfig = {
   tokenStyle?: "query" | "post" | "json";
   /** Extra params appended to the consent URL (e.g. Google's offline access). */
   authParams?: Record<string, string>;
+  /** Facebook Login for Business: permissions come from the config_id, and
+   *  sending `scope` alongside it triggers "Invalid Scopes" — omit scope. */
+  omitScope?: boolean;
   /** Extra headers on the token request (e.g. Square-Version). */
   tokenHeaders?: Record<string, string>;
   /** Square configures the redirect URL in its app dashboard and rejects it as
@@ -116,7 +119,18 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     clientSecretEnv: "FACEBOOK_APP_SECRET",
     authUrl: "https://www.facebook.com/v21.0/dialog/oauth",
     tokenUrl: `${GRAPH}/oauth/access_token`,
+    // Facebook Login for Business: the permissions (pages_show_list,
+    // pages_messaging, pages_read_engagement, pages_manage_metadata) live in the
+    // Meta "Placid CRM Pages" configuration, NOT in a scope param. Kept here for
+    // reference/documentation only — buildAuthUrl omits it (omitScope).
     scope: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
+    omitScope: true,
+    authParams: {
+      // config_id is the public Login-for-Business configuration id. Env override
+      // wins so it can change without a redeploy; falls back to the created one.
+      config_id: process.env.FACEBOOK_CONFIG_ID || "891443800248441",
+      override_default_response_type: "true",
+    },
     tokenStyle: "query",
     fetchLabel: metaLabel,
   },
@@ -249,11 +263,13 @@ export async function buildAuthUrl(provider: string, state: string): Promise<str
 
   const params = new URLSearchParams({
     client_id: await clientId(provider, c),
-    scope: c.scope,
     response_type: "code",
     state,
     ...(c.authParams ?? {}),
   });
+  // Most providers take scope on the consent URL; Facebook Login for Business
+  // gets its permissions from config_id instead and rejects a scope param.
+  if (!c.omitScope) params.set("scope", c.scope);
   // eBay sends its RuName as the redirect_uri value; Square omits it entirely.
   const redirect = c.redirectUriEnv ? process.env[c.redirectUriEnv] : c.omitRedirectInAuth ? undefined : redirectUri(provider);
   if (redirect) params.set("redirect_uri", redirect);
