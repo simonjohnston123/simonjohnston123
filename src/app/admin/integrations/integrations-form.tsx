@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { saveEbayCertAction, saveShopifySecretAction, saveFacebookCredsAction, type SaveState } from "./actions";
 
@@ -9,6 +10,52 @@ function SaveButton({ label = "Save" }: { label?: string }) {
     <button type="submit" disabled={pending} className="btn-primary">
       {pending ? "Saving…" : label}
     </button>
+  );
+}
+
+function CopyField({ label, value, mask = false }: { label: string; value: string; mask?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(!mask);
+  const shown = revealed ? value : "•".repeat(Math.min(value.length, 40));
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-lg bg-slate-100 px-3 py-2 font-mono text-xs text-slate-800">
+          {shown}
+        </code>
+        {mask ? (
+          <button type="button" onClick={() => setRevealed((r) => !r)} className="btn-secondary shrink-0 text-xs">
+            {revealed ? "Hide" : "Show"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard?.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+          className="btn-secondary shrink-0 text-xs"
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ConnectApiPanel({ baseUrl, token }: { baseUrl: string; token: string }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Give these two values to the Placid Connect side (its <code className="font-mono">.env</code>:{" "}
+        <code className="font-mono">CRM_API_URL</code> + <code className="font-mono">CRM_API_TOKEN</code>). Connect uses
+        them to pull the Placid Deals catalogue and push paid orders back for fulfilment. Keep the token secret.
+      </p>
+      <CopyField label="CRM_API_URL (base URL)" value={baseUrl} />
+      <CopyField label="CRM_API_TOKEN (Bearer token)" value={token} mask />
+    </div>
   );
 }
 

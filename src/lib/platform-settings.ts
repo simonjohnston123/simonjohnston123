@@ -15,6 +15,7 @@ export const SETTING_KEYS = {
   shopifyClientSecret: "shopify_client_secret",
   facebookAppId: "facebook_app_id",
   facebookAppSecret: "facebook_app_secret",
+  connectApiToken: "connect_api_token",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {

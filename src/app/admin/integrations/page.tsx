@@ -2,14 +2,15 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { getSetting, SETTING_KEYS } from "@/lib/platform-settings";
 import { isConfiguredAsync } from "@/lib/oauth-providers";
 import { shopifyConfigured } from "@/lib/shopify-oauth";
-import { EbayCertForm, ShopifySecretForm, FacebookCredsForm } from "./integrations-form";
+import { getConnectApiToken, CONNECT_API_BASE } from "@/lib/connect-api";
+import { EbayCertForm, ShopifySecretForm, FacebookCredsForm, ConnectApiPanel } from "./integrations-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin — Integrations" };
 
 export default async function AdminIntegrationsPage() {
   await requireSuperAdmin();
-  const [cert, ebayReady, shopifySecret, shopifyReady, fbId, fbSecret, fbReady] = await Promise.all([
+  const [cert, ebayReady, shopifySecret, shopifyReady, fbId, fbSecret, fbReady, connectToken] = await Promise.all([
     getSetting(SETTING_KEYS.ebayClientSecret),
     isConfiguredAsync("EBAY"),
     getSetting(SETTING_KEYS.shopifyClientSecret),
@@ -17,6 +18,7 @@ export default async function AdminIntegrationsPage() {
     getSetting(SETTING_KEYS.facebookAppId),
     getSetting(SETTING_KEYS.facebookAppSecret),
     isConfiguredAsync("FACEBOOK"),
+    getConnectApiToken(),
   ]);
 
   return (
@@ -56,8 +58,20 @@ export default async function AdminIntegrationsPage() {
         <p className="mt-1 text-xs text-slate-500">From the Meta &ldquo;Placid CRM Pages&rdquo; Business app → App settings → Basic.</p>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
         <FacebookCredsForm idSet={Boolean(fbId)} secretSet={Boolean(fbSecret)} />
+      </div>
+
+      <div className="mb-2 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+        <p className="text-sm font-medium text-indigo-800">● Placid Connect API — catalogue + orders bridge</p>
+        <p className="mt-1 text-xs text-slate-600">
+          The Placid Connect storefront pulls the Placid Deals catalogue (<code className="font-mono">GET /products</code>)
+          and pushes paid orders back for fulfilment (<code className="font-mono">POST /orders</code>) using the token below.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <ConnectApiPanel baseUrl={CONNECT_API_BASE} token={connectToken} />
       </div>
     </div>
   );
