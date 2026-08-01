@@ -1,5 +1,6 @@
 import { LeadForm, BookingForm } from "@/components/site-forms";
 import { SiteRow, type RowBlock } from "@/components/site-element";
+import { SiteLiveShopping } from "@/components/site-live-shopping";
 
 export type Block = { type: string; [k: string]: unknown };
 
@@ -7,10 +8,12 @@ export function SiteBlocks({
   blocks,
   slug,
   primaryColor,
+  locationId,
 }: {
   blocks: Block[];
   slug: string;
   primaryColor: string;
+  locationId: string;
 }) {
   return (
     <>
@@ -53,17 +56,13 @@ export function SiteBlocks({
                 </div>
               </section>
             ) : null;
-          case "liveshop": {
-            const url = s("embedUrl") || "https://placidconnect.com/embed/liveshop";
+          case "liveshop":
             return (
-              <section key={i} className="mx-auto max-w-5xl px-4 py-12">
-                {block.heading ? <h2 className="mb-5 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
-                  <iframe src={url} title="Live Shop" className="h-[820px] w-full" allow="autoplay; encrypted-media" />
-                </div>
+              <section key={i} className="w-full">
+                {block.heading ? <h2 className="mb-3 mt-8 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
+                <SiteLiveShopping locationId={locationId} primaryColor={primaryColor} />
               </section>
             );
-          }
           case "button":
             return (
               <section key={i} className="px-6 py-8" style={{ textAlign: (s("align") || "center") as "left" | "center" | "right" }}>

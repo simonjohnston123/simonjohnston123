@@ -42,7 +42,7 @@ export default async function SitePageView({
         primaryColor={site.primaryColor}
         pages={site.pages.map((p) => ({ title: p.title, slug: p.slug, isHome: p.isHome }))}
       >
-        <SiteBlocks blocks={blocks} slug={location.slug} primaryColor={site.primaryColor} />
+        <SiteBlocks blocks={blocks} slug={location.slug} primaryColor={site.primaryColor} locationId={location.id} />
       </SiteChrome>
     </>
   );
