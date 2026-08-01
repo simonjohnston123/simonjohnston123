@@ -127,8 +127,11 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     omitScope: true,
     authParams: {
       // config_id is the public Login-for-Business configuration id. Env override
-      // wins so it can change without a redeploy; falls back to the created one.
-      config_id: process.env.FACEBOOK_CONFIG_ID || "891443800248441",
+      // wins so it can change without a redeploy. Default is the "System-user
+      // access token" config (2273773636792765) — required to enumerate Pages
+      // owned inside a Business Portfolio (the user-token config 891443800248441
+      // returned an empty /me/accounts for portfolio-owned pages).
+      config_id: process.env.FACEBOOK_CONFIG_ID || "2273773636792765",
       override_default_response_type: "true",
     },
     tokenStyle: "query",

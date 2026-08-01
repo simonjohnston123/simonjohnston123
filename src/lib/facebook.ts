@@ -25,6 +25,66 @@ type FbMeta = { pageIds: string[]; pages: { id: string; name: string }[] };
  * pull the Pages the user granted, subscribe each to the messages + feed
  * webhooks, and persist page tokens (encrypted) + page ids (for routing).
  */
+type ListedPage = { id: string; name: string; access_token?: string };
+
+/** Fetch a page list from a Graph edge, tolerant of errors. */
+async function fetchPageEdge(url: string, tag: string): Promise<ListedPage[]> {
+  try {
+    const res = await fetch(url);
+    const raw = await res.text();
+    if (!res.ok) {
+      console.error(`[facebook] ${tag} status=${res.status} raw:`, raw.slice(0, 300));
+      return [];
+    }
+    const json = JSON.parse(raw) as { data?: ListedPage[] };
+    const rows = (json.data ?? []).filter((p) => p.id);
+    console.error(`[facebook] ${tag} returned ${rows.length} page(s):`, rows.map((p) => `${p.name}(${p.id})`).join("; "));
+    return rows;
+  } catch (e) {
+    console.error(`[facebook] ${tag} threw`, String(e));
+    return [];
+  }
+}
+
+/**
+ * Enumerate the Pages the user granted, across ownership models:
+ *   (a) /me/accounts (both the exchanged + original token)
+ *   (b) each Business Portfolio's owned_pages + client_pages
+ * Returns a deduped list, or null on a hard failure with no fallback.
+ */
+async function listGrantedPages(userTok: string, originalTok: string): Promise<ListedPage[] | null> {
+  const byId = new Map<string, ListedPage>();
+  const add = (rows: ListedPage[]) => {
+    for (const p of rows) {
+      const existing = byId.get(p.id);
+      // prefer a row that already carries an access_token
+      if (!existing || (!existing.access_token && p.access_token)) byId.set(p.id, p);
+    }
+  };
+
+  const acc = `${GRAPH}/me/accounts?fields=id,name,access_token&limit=200`;
+  add(await fetchPageEdge(`${acc}&access_token=${encodeURIComponent(userTok)}`, "/me/accounts (exchanged)"));
+  if (byId.size === 0 && userTok !== originalTok) {
+    add(await fetchPageEdge(`${acc}&access_token=${encodeURIComponent(originalTok)}`, "/me/accounts (original)"));
+  }
+
+  // (b) Business Portfolio pages — required for System-user / business-login tokens.
+  if (byId.size === 0) {
+    for (const tok of userTok === originalTok ? [userTok] : [userTok, originalTok]) {
+      const bizRows = await fetchPageEdge(`${GRAPH}/me/businesses?fields=id,name&limit=100&access_token=${encodeURIComponent(tok)}`, "/me/businesses");
+      for (const biz of bizRows) {
+        const q = `fields=id,name,access_token&limit=200&access_token=${encodeURIComponent(tok)}`;
+        add(await fetchPageEdge(`${GRAPH}/${biz.id}/owned_pages?${q}`, `biz ${biz.name} owned_pages`));
+        add(await fetchPageEdge(`${GRAPH}/${biz.id}/client_pages?${q}`, `biz ${biz.name} client_pages`));
+      }
+      if (byId.size > 0) break;
+    }
+  }
+
+  console.error(`[facebook] total distinct pages found: ${byId.size}`);
+  return Array.from(byId.values());
+}
+
 export async function setupFacebookConnection(
   locationId: string,
   userAccessToken: string,
@@ -44,52 +104,31 @@ export async function setupFacebookConnection(
     /* keep short-lived token */
   }
 
-  // 2) the Pages the user chose to grant. New Pages Experience often returns the
-  // page id/name here WITHOUT an access_token, so we mint each page token in a
-  // follow-up call rather than dropping token-less pages.
-  const res = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token&limit=100&access_token=${encodeURIComponent(userTok)}`);
-  const rawBody = await res.text();
-  if (!res.ok) {
-    console.error("[facebook] /me/accounts failed", res.status, rawBody.slice(0, 500));
-    return null;
-  }
-  let data: { data?: Array<{ id: string; name: string; access_token?: string }> } = {};
-  try {
-    data = JSON.parse(rawBody);
-  } catch {
-    console.error("[facebook] /me/accounts unparseable", rawBody.slice(0, 500));
-  }
-  let listed = (data.data ?? []).filter((p) => p.id);
-  console.error(`[facebook] /me/accounts (exchanged token) returned ${listed.length} page(s). raw:`, rawBody.slice(0, 800));
-
-  // If empty, retry with the original (pre-exchange) short-lived token — the
-  // long-lived exchange can drop FBL page grants.
-  if (listed.length === 0 && userTok !== userAccessToken) {
-    const res2 = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token&limit=100&access_token=${encodeURIComponent(userAccessToken)}`);
-    const raw2 = await res2.text();
-    console.error(`[facebook] /me/accounts (original token) status=${res2.status} raw:`, raw2.slice(0, 800));
-    try {
-      const d2 = JSON.parse(raw2) as { data?: Array<{ id: string; name: string; access_token?: string }> };
-      const l2 = (d2.data ?? []).filter((p) => p.id);
-      if (l2.length > 0) {
-        listed = l2;
-        userTok = userAccessToken; // page-token minting below must use a matching token
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  // 2) enumerate the granted Pages. We try several strategies because it depends
+  // on how the Pages are owned:
+  //   (a) /me/accounts — classic + New Pages a user directly administers
+  //   (b) Business Portfolio: /me/businesses → owned_pages + client_pages
+  //       (this is what System-user / business-login tokens need)
+  // New Pages Experience often omits the page access_token here, so we mint one
+  // per page afterwards.
+  const listed = await listGrantedPages(userTok, userAccessToken);
+  if (listed === null) return null; // hard API failure
 
   // Ensure every listed page has a Page access token (fetch it if missing).
   const pages: Array<{ id: string; name: string; access_token: string }> = [];
   for (const p of listed) {
     let token = p.access_token;
     if (!token) {
-      try {
-        const tr = await fetch(`${GRAPH}/${p.id}?fields=access_token&access_token=${encodeURIComponent(userTok)}`);
-        if (tr.ok) token = ((await tr.json()) as { access_token?: string }).access_token;
-      } catch {
-        /* leave token undefined */
+      for (const t of [userTok, userAccessToken]) {
+        try {
+          const tr = await fetch(`${GRAPH}/${p.id}?fields=access_token&access_token=${encodeURIComponent(t)}`);
+          if (tr.ok) {
+            token = ((await tr.json()) as { access_token?: string }).access_token;
+            if (token) break;
+          }
+        } catch {
+          /* try next token */
+        }
       }
     }
     if (token) pages.push({ id: p.id, name: p.name, access_token: token });
