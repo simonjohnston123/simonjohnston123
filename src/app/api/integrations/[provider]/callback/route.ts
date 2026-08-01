@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { encryptJson } from "@/lib/crypto";
 import { verifyState, exchangeCode, oauthConfig, connectionMeta, appUrl } from "@/lib/oauth-providers";
+import { setupFacebookConnection } from "@/lib/facebook";
 import type { ConnectionProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,15 @@ export async function GET(req: NextRequest, { params }: { params: { provider: st
 
   const tok = await exchangeCode(provider, code);
   if (!tok) return back("error=token_exchange_failed");
+
+  // Facebook is special: turn the user token into connected Pages (with their own
+  // tokens), subscribe each to webhooks, and store them for inbox routing.
+  if (provider === "FACEBOOK") {
+    const fb = await setupFacebookConnection(locationId, tok.accessToken);
+    if (!fb) return back("error=facebook_pages_failed");
+    if (fb.pages.length === 0) return back("error=no_pages_selected");
+    return back(`connected=FACEBOOK`);
+  }
 
   const label = (await oauthConfig(provider)?.fetchLabel?.(tok.accessToken)) ?? null;
 
