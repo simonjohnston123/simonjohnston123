@@ -59,8 +59,26 @@ export async function setupFacebookConnection(
   } catch {
     console.error("[facebook] /me/accounts unparseable", rawBody.slice(0, 500));
   }
-  const listed = (data.data ?? []).filter((p) => p.id);
-  console.error(`[facebook] /me/accounts returned ${listed.length} page(s):`, listed.map((p) => `${p.name}(${p.id}) token=${p.access_token ? "yes" : "no"}`).join("; "));
+  let listed = (data.data ?? []).filter((p) => p.id);
+  console.error(`[facebook] /me/accounts (exchanged token) returned ${listed.length} page(s). raw:`, rawBody.slice(0, 800));
+
+  // If empty, retry with the original (pre-exchange) short-lived token — the
+  // long-lived exchange can drop FBL page grants.
+  if (listed.length === 0 && userTok !== userAccessToken) {
+    const res2 = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token&limit=100&access_token=${encodeURIComponent(userAccessToken)}`);
+    const raw2 = await res2.text();
+    console.error(`[facebook] /me/accounts (original token) status=${res2.status} raw:`, raw2.slice(0, 800));
+    try {
+      const d2 = JSON.parse(raw2) as { data?: Array<{ id: string; name: string; access_token?: string }> };
+      const l2 = (d2.data ?? []).filter((p) => p.id);
+      if (l2.length > 0) {
+        listed = l2;
+        userTok = userAccessToken; // page-token minting below must use a matching token
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Ensure every listed page has a Page access token (fetch it if missing).
   const pages: Array<{ id: string; name: string; access_token: string }> = [];
