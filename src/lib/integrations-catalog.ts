@@ -90,10 +90,10 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     key: "FACEBOOK",
-    name: "Facebook Messenger",
+    name: "Facebook",
     icon: "📘",
     category: "Social",
-    blurb: "Reply to your Facebook Page messages from the inbox.",
+    blurb: "Connect your Facebook Pages — messages and post comments come into your inbox.",
     connectType: "oauth",
     ready: false,
   },
