@@ -116,7 +116,7 @@ export const OAUTH: Partial<Record<ProviderKey, OAuthConfig>> = {
     clientSecretEnv: "FACEBOOK_APP_SECRET",
     authUrl: "https://www.facebook.com/v21.0/dialog/oauth",
     tokenUrl: `${GRAPH}/oauth/access_token`,
-    scope: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,business_management",
+    scope: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
     tokenStyle: "query",
     fetchLabel: metaLabel,
   },
