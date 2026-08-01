@@ -53,7 +53,7 @@ export function ListingBatchBuilder({ locationId, products }: { locationId: stri
                   )}
                 >
                   {m.label}
-                  {!m.available ? <span className="ml-1 text-[9px] uppercase text-slate-400">soon</span> : null}
+                  {!m.available ? <span className="ml-1 text-[9px] uppercase text-slate-400">draft now</span> : null}
                 </button>
               ))}
             </div>
@@ -63,7 +63,14 @@ export function ListingBatchBuilder({ locationId, products }: { locationId: stri
             <input id="bname" value={name} onChange={(e) => setName(e.target.value)} placeholder={`${active?.label ?? ""} batch`} className="input h-9 text-sm" />
           </div>
         </div>
-        {active ? <p className="mt-2 text-xs text-slate-500">{active.blurb}</p> : null}
+        {active ? (
+          <p className="mt-2 text-xs text-slate-500">
+            {active.blurb}
+            {!active.available ? (
+              <span className="ml-1 font-medium text-brand-600">Draft &amp; AI-optimise now — one-click publish to {active.label} is coming soon.</span>
+            ) : null}
+          </p>
+        ) : null}
       </div>
 
       {/* Product picker */}
