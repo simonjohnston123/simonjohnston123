@@ -295,16 +295,18 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
 
   if (!current)
     return (
-      <div className="grid h-[70vh] place-items-center bg-slate-950 text-center text-slate-300">
-        <div>
-          <div className="text-4xl">📺</div>
-          <p className="mt-3 text-sm">{products.length === 0 ? "Loading the channel…" : "No products in this channel yet."}</p>
-          <div className="mt-4 flex justify-center gap-2">
-            {activeCh !== "all" && products.length > 0 ? (
-              <button onClick={() => setActiveCh("all")} className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ background: accent }}>All products</button>
-            ) : null}
-            <button onClick={onSchedule} className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20">‹ Back to shows</button>
-          </div>
+      <div className="grid h-[70vh] place-items-center bg-slate-950 px-6 text-center text-slate-300">
+        <div className="w-full max-w-md">
+          <div className="text-4xl">{searching ? "⏳" : "🔎"}</div>
+          <p className="mt-3 text-sm">
+            {searching ? "Finding live deals…" : show && show.day < 0 ? `Nothing matched “${show.name}” — try another word.` : "No products in this channel yet."}
+          </p>
+          {!searching ? (
+            <>
+              <div className="mt-4"><SearchBar accent={accent} searching={searching} onSearch={onSearch} big /></div>
+              <button onClick={onSchedule} className="mt-4 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20">‹ Back to shows</button>
+            </>
+          ) : null}
         </div>
       </div>
     );

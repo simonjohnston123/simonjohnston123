@@ -11,17 +11,19 @@ export async function GET(req: NextRequest) {
   if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
   if (q.length < 2) return NextResponse.json({ products: [] });
 
+  // Match singular/plural + each word so "pets" finds "Pet Care", "earphones"
+  // finds "earphone", etc. Any term matching any field counts.
+  const base = Array.from(new Set([q, q.replace(/s$/i, ""), q.endsWith("s") ? q : q + "s"]));
+  const words = q.split(/\s+/).filter((w) => w.length >= 3);
+  const terms = Array.from(new Set([...base, ...words].map((t) => t.trim()).filter((t) => t.length >= 2)));
+  const OR = terms.flatMap((t) => [
+    { name: { contains: t, mode: "insensitive" as const } },
+    { category: { contains: t, mode: "insensitive" as const } },
+    { description: { contains: t, mode: "insensitive" as const } },
+  ]);
+
   const rows = await prisma.product.findMany({
-    where: {
-      locationId,
-      active: true,
-      imageUrl: { not: null },
-      OR: [
-        { name: { contains: q, mode: "insensitive" } },
-        { category: { contains: q, mode: "insensitive" } },
-        { description: { contains: q, mode: "insensitive" } },
-      ],
-    },
+    where: { locationId, active: true, imageUrl: { not: null }, OR },
     orderBy: { inventory: "desc" },
     take: 400,
     select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, description: true, category: true, inventory: true },
