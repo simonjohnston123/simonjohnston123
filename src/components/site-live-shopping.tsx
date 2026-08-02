@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMallMusic, MusicButton } from "./mall-music";
 
 type LiveProduct = { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null };
 type Channel = { slug: string; label: string; count: number; icon?: string };
@@ -35,6 +36,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   const [cartOpen, setCartOpen] = useState(false);
   const [placed, setPlaced] = useState<{ number: number } | null>(null);
   const [checkoutErr, setCheckoutErr] = useState("");
+  const { on: musicOn, toggle: toggleMusic } = useMallMusic();
 
   useEffect(() => {
     setNow(new Date());
@@ -93,18 +95,24 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
       {cartCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold text-white" style={{ background: accent }}>{cartCount}</span> : null}
     </button>
   );
+  const controls = (
+    <>
+      <MusicButton on={musicOn} toggle={toggleMusic} accent={accent} />
+      {cartButton}
+    </>
+  );
 
   return (
     <div className="w-full bg-slate-950 text-white">
       {view === "schedule" ? (
         <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent}
-          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={cartButton} />
+          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} />
       ) : view === "shop" ? (
         <ShopView products={products} channels={data?.channels ?? []} accent={accent} loading={!data}
-          addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show || searchShow ? "live" : "schedule")} cartButton={cartButton} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show || searchShow ? "live" : "schedule")} cartButton={controls} />
       ) : (
         <LivePlayer products={searchResults ?? products} channels={data?.channels ?? []} show={searchShow ?? show} live={searchResults ? true : show ? isLiveNow(show) : false} accent={accent}
-          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => { clearSearch(); setView("schedule"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={cartButton} locationId={locationId} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => { clearSearch(); setView("schedule"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} locationId={locationId} />
       )}
 
       {cartOpen ? (
