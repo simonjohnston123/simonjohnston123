@@ -4,6 +4,17 @@ import { classify } from "@/lib/live-categories";
 
 export const dynamic = "force-dynamic";
 
+// Normalise the supplier gallery (Json) into a de-duped string[] of image URLs,
+// always leading with the primary image and capped so payloads stay light.
+export function gallery(images: unknown, primary: string | null): string[] {
+  const arr = Array.isArray(images) ? images.filter((x): x is string => typeof x === "string" && !!x) : [];
+  const all = [primary, ...arr].filter((x): x is string => !!x);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of all) { const k = u.split("?")[0]; if (seen.has(k)) continue; seen.add(k); out.push(u); if (out.length >= 8) break; }
+  return out;
+}
+
 // Public feed for the live shopping experience. Products are classified into
 // clean, safe channels by keyword (not the messy supplier department), adult
 // items are excluded, and the reel is de-duped so nothing repeats.
@@ -15,13 +26,13 @@ export async function GET(req: NextRequest) {
     where: { locationId, active: true, imageUrl: { not: null } },
     orderBy: { updatedAt: "desc" },
     take: 5000,
-    select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, description: true, category: true, inventory: true },
+    select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, images: true, colour: true, description: true, category: true, inventory: true },
   });
 
   const seenName = new Set<string>();
   const seenImg = new Set<string>();
   const channelMeta = new Map<string, { label: string; icon: string; count: number }>();
-  const products: { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null }[] = [];
+  const products: { id: string; name: string; priceCents: number; imageUrl: string | null; images: string[]; colour: string | null; description: string | null; channel: string; stock: number | null }[] = [];
 
   for (const p of rows) {
     const ch = classify(p.name, p.category);
@@ -42,6 +53,8 @@ export async function GET(req: NextRequest) {
       name: p.name,
       priceCents: typeof p.priceCents === "number" && p.priceCents > 0 ? p.priceCents : Math.round((p.price ?? 0) * 100),
       imageUrl: p.imageUrl,
+      images: gallery(p.images, p.imageUrl),
+      colour: p.colour ?? null,
       description: (p.description ?? "").slice(0, 240) || null,
       channel: ch.slug,
       stock: p.inventory,

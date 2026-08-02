@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { classify } from "@/lib/live-categories";
+import { gallery } from "../products/route";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +28,12 @@ export async function GET(req: NextRequest) {
     where: { locationId, active: true, imageUrl: { not: null }, OR },
     orderBy: { inventory: "desc" },
     take: 400,
-    select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, description: true, category: true, inventory: true },
+    select: { id: true, name: true, priceCents: true, price: true, imageUrl: true, images: true, colour: true, description: true, category: true, inventory: true },
   });
 
   const seenName = new Set<string>();
   const seenImg = new Set<string>();
-  const products: { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null }[] = [];
+  const products: { id: string; name: string; priceCents: number; imageUrl: string | null; images: string[]; colour: string | null; description: string | null; channel: string; stock: number | null }[] = [];
   for (const p of rows) {
     const ch = classify(p.name, p.category);
     if (!ch) continue; // excluded (adult, etc.)
@@ -46,6 +47,8 @@ export async function GET(req: NextRequest) {
       name: p.name,
       priceCents: typeof p.priceCents === "number" && p.priceCents > 0 ? p.priceCents : Math.round((p.price ?? 0) * 100),
       imageUrl: p.imageUrl,
+      images: gallery(p.images, p.imageUrl),
+      colour: p.colour ?? null,
       description: (p.description ?? "").slice(0, 240) || null,
       channel: ch.slug,
       stock: p.inventory,

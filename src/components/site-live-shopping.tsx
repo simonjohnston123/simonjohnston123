@@ -4,7 +4,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMallMusic, MusicButton } from "./mall-music";
 import { useVoice, HostAvatar, VoiceButton } from "./live-host";
 
-type LiveProduct = { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null };
+type LiveProduct = { id: string; name: string; priceCents: number; imageUrl: string | null; images?: string[]; colour?: string | null; description: string | null; channel: string; stock: number | null };
+
+// Best-effort size badge parsed from the product name (supplier bakes size into
+// the title). Conservative — only high-confidence tokens, else null.
+function parseSize(name: string): string | null {
+  const bed = name.match(/\b(King Single|Super King|King|Queen|Double|Single)\b/i);
+  if (bed) return bed[1].replace(/\b\w/g, (c) => c.toUpperCase());
+  const explicit = name.match(/\bSize[:\s]+([A-Za-z0-9]{1,4})\b/i);
+  if (explicit) return explicit[1].toUpperCase();
+  const tee = name.match(/(?:^|\s)(XS|XXXL|XXL|XL|[2-6]XL)(?:\s|,|$)/);
+  if (tee) return tee[1].toUpperCase();
+  return null;
+}
+function imagesOf(p: LiveProduct): string[] {
+  const arr = (p.images ?? []).filter(Boolean);
+  if (arr.length) return arr;
+  return p.imageUrl ? [p.imageUrl] : [];
+}
 type Channel = { slug: string; label: string; count: number; icon?: string };
 type CartLine = { p: LiveProduct; qty: number };
 type Msg = { role: "you" | "host"; text: string };
@@ -293,10 +310,14 @@ function ShopView({ products, channels, accent, loading, addToCart, openCart, on
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {list.map((p) => (
               <div key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-                {p.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={p.imageUrl} alt={p.name} className="h-40 w-full object-cover" />) : <div className="grid h-40 w-full place-items-center bg-slate-100 text-2xl">🛍</div>}
+                <div className="relative">
+                  {p.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={p.imageUrl} alt={p.name} className="h-40 w-full object-cover" />) : <div className="grid h-40 w-full place-items-center bg-slate-100 text-2xl">🛍</div>}
+                  {imagesOf(p).length > 1 ? <span className="absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white">📷 {imagesOf(p).length}</span> : null}
+                </div>
                 <div className="flex flex-1 flex-col p-3">
                   <div className="line-clamp-2 text-sm font-medium">{p.name}</div>
                   <div className="mt-1 text-base font-bold" style={{ color: accent }}>{money(p.priceCents)}</div>
+                  <Badges p={p} tone="light" />
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button onClick={() => addToCart(p)} className="rounded-lg py-2 text-xs font-semibold text-white" style={{ background: accent }}>Add to cart</button>
                     <button onClick={() => { addToCart(p); openCart(); }} className="rounded-lg border py-2 text-xs font-semibold" style={{ borderColor: accent, color: accent }}>Buy now</button>
@@ -390,9 +411,9 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
         </div>
       </div>
 
-      {/* Stage — image contained in the remaining space */}
-      <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 py-3">
-        {current.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img key={current.id} src={current.imageUrl} alt={current.name} className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />) : <div className="grid h-48 w-48 place-items-center rounded-2xl bg-white/5 text-6xl">🛍</div>}
+      {/* Stage — swipeable gallery contained in the remaining space */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-3">
+        <Gallery key={current.id} images={imagesOf(current)} name={current.name} accent={accent} />
       </div>
 
       {/* Bottom — product + actions (always visible) */}
@@ -402,7 +423,8 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <h2 className="truncate text-base font-bold leading-tight">{current.name}</h2>
-              <div className="flex items-center gap-2"><span className="text-2xl font-extrabold" style={{ color: accent }}>{money(current.priceCents)}</span>{current.stock != null && current.stock <= 5 ? <span className="rounded-full bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold">Only {current.stock} left</span> : null}</div>
+              <div className="flex items-center gap-2"><span className="text-2xl font-extrabold" style={{ color: accent }}>{money(current.priceCents)}</span>{current.stock != null && current.stock > 0 && current.stock <= 5 ? <span className="rounded-full bg-orange-500/90 px-2 py-0.5 text-[11px] font-semibold">Only {current.stock} left</span> : null}</div>
+              <Badges p={current} />
             </div>
             <div className="flex shrink-0 items-center gap-1.5 text-xs text-slate-300">
               <button onClick={() => setIdx((p) => (p - 1 + list.length) % list.length)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 hover:bg-white/20">‹</button>
@@ -662,6 +684,7 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
                           <div className="min-w-0 flex-1">
                             <div className="line-clamp-2 text-sm font-bold">{pk.name}</div>
                             <div className="text-lg font-extrabold" style={{ color: accent }}>{money(pk.priceCents)}</div>
+                            {p ? <Badges p={p} /> : null}
                             <div className="mt-1 rounded-lg bg-white/[0.06] px-2 py-1 text-xs italic text-slate-200">“{pk.pitch}”</div>
                           </div>
                         </div>
@@ -700,6 +723,53 @@ function Question({ label, show, children }: { label: string; show?: boolean; ch
 function Chip({ on, accent, onClick, children }: { on: boolean; accent: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${on ? "border-transparent text-white" : "border-white/15 bg-white/[0.03] text-slate-200 hover:bg-white/10"}`} style={on ? { background: accent } : undefined}>{children}</button>
+  );
+}
+
+/* ---------------- Product gallery + attribute badges ---------------- */
+// Swipeable image gallery. Remount per product via key={id} to reset the index.
+function Gallery({ images, name, accent }: { images: string[]; name: string; accent: string }) {
+  const [i, setI] = useState(0);
+  if (!images.length) return <div className="grid h-48 w-48 place-items-center rounded-2xl bg-white/5 text-6xl">🛍</div>;
+  const idx = Math.min(i, images.length - 1);
+  const cur = images[idx];
+  return (
+    <div className="flex min-h-0 w-full flex-1 flex-col items-center">
+      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img key={cur} src={cur} alt={name} className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />
+        {images.length > 1 ? (
+          <>
+            <button onClick={() => setI((idx - 1 + images.length) % images.length)} className="absolute left-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60">‹</button>
+            <button onClick={() => setI((idx + 1) % images.length)} className="absolute right-1 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60">›</button>
+            <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[11px] text-white backdrop-blur">📷 {idx + 1}/{images.length}</span>
+          </>
+        ) : null}
+      </div>
+      {images.length > 1 ? (
+        <div className="mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {images.slice(0, 8).map((u, j) => (
+            <button key={j} onClick={() => setI(j)} className="shrink-0 overflow-hidden rounded-lg border-2 transition" style={{ borderColor: j === idx ? accent : "transparent" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="" className="h-11 w-11 object-cover" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Badges({ p, tone = "dark" }: { p: LiveProduct; tone?: "dark" | "light" }) {
+  const size = parseSize(p.name);
+  const colour = p.colour || null;
+  if (!size && !colour) return null;
+  const cls = tone === "light" ? "border border-slate-200 bg-slate-50 text-slate-600" : "bg-white/10 text-white";
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {size ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>Size: {size}</span> : null}
+      {colour ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{colour}</span> : null}
+    </div>
   );
 }
 

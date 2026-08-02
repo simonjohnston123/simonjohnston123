@@ -468,6 +468,8 @@ model Product {
   price       Int?     // whole-dollar price (shop page; kept for back-compat)
   description String?  @db.Text
   imageUrl    String?
+  images      Json     @default("[]") // gallery image URLs (supplier), first = primary
+  colour      String?  // primary colour, where the supplier provides it
   active      Boolean  @default(true)
   position    Int      @default(0)
   // Catalogue fields — populated by marketplace import (Shopify/…).
