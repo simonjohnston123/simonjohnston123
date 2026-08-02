@@ -42,6 +42,9 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 RUN chown -R nextjs:nodejs /app/node_modules/@prisma /app/node_modules/prisma /app/node_modules/.prisma /app/node_modules/.bin
+# Uploads volume mount point — must exist app-user-writable so the named volume
+# inherits this ownership on first use.
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
 USER nextjs
 EXPOSE 3000
 ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -1,0 +1,61 @@
+import { prisma } from "@/lib/db";
+import { requireLocationAccess } from "@/lib/auth";
+import { PageHeader } from "@/components/ui";
+import { SocialStudio, type NetworkStatus, type QueuePost } from "@/components/social-studio";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Social Poster" };
+
+export default async function SocialPage({ params }: { params: { locationId: string } }) {
+  const locationId = params.locationId;
+  await requireLocationAccess(locationId);
+
+  const [connections, posts, products] = await Promise.all([
+    prisma.connection.findMany({ where: { locationId, provider: { in: ["FACEBOOK", "YOUTUBE"] } }, select: { provider: true, status: true, accountLabel: true, meta: true } }),
+    prisma.socialPost.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 40 }),
+    prisma.product.findMany({
+      where: { locationId, active: true, imageUrl: { not: null } },
+      orderBy: { updatedAt: "desc" }, take: 24,
+      select: { id: true, name: true, imageUrl: true },
+    }),
+  ]);
+
+  const fb = connections.find((c) => c.provider === "FACEBOOK" && c.status === "CONNECTED");
+  const yt = connections.find((c) => c.provider === "YOUTUBE" && c.status === "CONNECTED");
+  const fbPages = ((fb?.meta ?? {}) as { pages?: { id: string; name: string }[] }).pages ?? [];
+  const hasGoogleApp = !!process.env.GOOGLE_CLIENT_ID;
+
+  const networks: NetworkStatus[] = [
+    { key: "facebook", label: "Facebook", icon: "📘", ready: !!fb, detail: fb ? `${fbPages.length || 1} Page${fbPages.length === 1 ? "" : "s"} connected` : "Connect in Integrations → Facebook" },
+    { key: "instagram", label: "Instagram", icon: "📸", ready: !!fb, detail: fb ? "Posts via your Facebook Page's linked IG Business account" : "Connect Facebook first" },
+    { key: "youtube", label: "YouTube", icon: "▶️", ready: !!yt, detail: yt ? (yt.accountLabel ?? "Connected") : hasGoogleApp ? "Connect your channel" : "Needs Google app credentials (admin)", connectHref: !yt && hasGoogleApp ? `/api/integrations/youtube/connect?locationId=${locationId}` : undefined },
+    { key: "tiktok", label: "TikTok", icon: "🎵", ready: false, detail: "Needs our TikTok developer app approved — coming" },
+    { key: "google_business", label: "Google Business", icon: "📍", ready: false, detail: "Needs Google OAuth verification — coming" },
+    { key: "snapchat", label: "Snapchat", icon: "👻", ready: false, detail: "No organic API — ads only (ads phase)" },
+    { key: "spotify", label: "Spotify", icon: "🎧", ready: false, detail: "No posting API — podcasts distribute via RSS, ads via Ad Studio", never: true },
+  ];
+
+  const queue: QueuePost[] = posts.map((p) => ({
+    id: p.id,
+    body: p.body,
+    mediaUrls: (p.mediaUrls as string[]) ?? [],
+    mediaKind: p.mediaKind,
+    networks: (p.networks as string[]) ?? [],
+    results: (p.results as Record<string, { ok: boolean; id?: string; error?: string }>) ?? {},
+    scheduledAt: p.scheduledAt?.toISOString() ?? null,
+    status: p.status,
+    createdAt: p.createdAt.toISOString(),
+  }));
+
+  return (
+    <div>
+      <PageHeader title="Social Poster" subtitle="Compose once — post and schedule everywhere" />
+      <SocialStudio
+        locationId={locationId}
+        networks={networks}
+        queue={queue}
+        productImages={products.map((p) => ({ id: p.id, name: p.name, url: p.imageUrl! }))}
+      />
+    </div>
+  );
+}

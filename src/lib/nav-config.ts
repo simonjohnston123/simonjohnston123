@@ -26,6 +26,7 @@ export const STUDIO_BASE: NavItem[] = [
   { key: "listings", label: "Listing Tool", icon: "🏷️" },
   { key: "forms", label: "Forms & Surveys", icon: "📝" },
   { key: "marketing", label: "Marketing", icon: "📣" },
+  { key: "social", label: "Social Poster", icon: "📢" },
   { key: "automations", label: "Automations", icon: "⚡" },
   { key: "orders", label: "Orders", icon: "🧾" },
   { key: "payments", label: "Payments", icon: "💳" },

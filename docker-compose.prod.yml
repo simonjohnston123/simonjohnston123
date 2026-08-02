@@ -71,6 +71,12 @@ services:
       # AI helpers (pipeline stage generation, etc.). Optional — features fall back to heuristics.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # Social poster — YouTube OAuth app (Google Cloud). Optional until connected.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     expose:
       - "3000"
 
@@ -93,3 +99,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  uploads:
