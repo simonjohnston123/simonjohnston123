@@ -23,11 +23,14 @@ export default async function SocialPage({ params }: { params: { locationId: str
   const fb = connections.find((c) => c.provider === "FACEBOOK" && c.status === "CONNECTED");
   const yt = connections.find((c) => c.provider === "YOUTUBE" && c.status === "CONNECTED");
   const fbPages = ((fb?.meta ?? {}) as { pages?: { id: string; name: string }[] }).pages ?? [];
+  // "Ready" means genuinely postable: a connection with actual Pages granted —
+  // a CONNECTED row with zero pages (e.g. "No pages granted") is NOT ready.
+  const fbReady = !!fb && fbPages.length > 0;
   const hasGoogleApp = !!process.env.GOOGLE_CLIENT_ID;
 
   const networks: NetworkStatus[] = [
-    { key: "facebook", label: "Facebook", icon: "📘", ready: !!fb, detail: fb ? `${fbPages.length || 1} Page${fbPages.length === 1 ? "" : "s"} connected` : "Connect in Integrations → Facebook" },
-    { key: "instagram", label: "Instagram", icon: "📸", ready: !!fb, detail: fb ? "Posts via your Facebook Page's linked IG Business account" : "Connect Facebook first" },
+    { key: "facebook", label: "Facebook", icon: "📘", ready: fbReady, detail: fbReady ? `${fbPages.length} Page${fbPages.length === 1 ? "" : "s"} connected` : fb ? "Connected but no Pages granted — reconnect in Integrations → Facebook" : "Connect in Integrations → Facebook" },
+    { key: "instagram", label: "Instagram", icon: "📸", ready: fbReady, detail: fbReady ? "Posts via your Facebook Page's linked IG Business account" : "Connect Facebook (with Pages) first" },
     { key: "youtube", label: "YouTube", icon: "▶️", ready: !!yt, detail: yt ? (yt.accountLabel ?? "Connected") : hasGoogleApp ? "Connect your channel" : "Needs Google app credentials (admin)", connectHref: !yt && hasGoogleApp ? `/api/integrations/youtube/connect?locationId=${locationId}` : undefined },
     { key: "tiktok", label: "TikTok", icon: "🎵", ready: false, detail: "Needs our TikTok developer app approved — coming" },
     { key: "google_business", label: "Google Business", icon: "📍", ready: false, detail: "Needs Google OAuth verification — coming" },
@@ -53,6 +56,7 @@ export default async function SocialPage({ params }: { params: { locationId: str
       <SocialStudio
         locationId={locationId}
         networks={networks}
+        fbPages={fbPages}
         queue={queue}
         productImages={products.map((p) => ({ id: p.id, name: p.name, url: p.imageUrl! }))}
       />

@@ -752,6 +752,7 @@ model SocialPost {
   mediaUrls   Json             @default("[]") // absolute URLs (uploads or external)
   mediaKind   String?          // "image" | "video" (all media in one post share a kind)
   networks    Json             @default("[]") // e.g. ["facebook","instagram","youtube"]
+  options     Json             @default("{}") // per-network config, e.g. {facebookPageIds:[...]}
   results     Json             @default("{}") // per-network {ok, id?, error?, at}
   scheduledAt DateTime?
   status      SocialPostStatus @default(DRAFT)

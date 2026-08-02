@@ -65,9 +65,14 @@ export async function instagramAccount(locationId: string): Promise<{ igId: stri
 
 /* ------------------------------ adapters ------------------------------ */
 
-async function publishFacebook(locationId: string, body: string, mediaUrls: string[], mediaKind: string | null): Promise<NetResult> {
-  const pages = await facebookPages(locationId);
-  if (!pages.length) return { ok: false, error: "No Facebook Page connected (Integrations → Facebook).", at: new Date().toISOString() };
+async function publishFacebook(locationId: string, body: string, mediaUrls: string[], mediaKind: string | null, pageIds: string[]): Promise<NetResult> {
+  let pages = await facebookPages(locationId);
+  if (!pages.length) return { ok: false, error: "No Facebook Pages granted on this business's connection — reconnect in Integrations → Facebook, or post from the business that owns the Pages.", at: new Date().toISOString() };
+  // Only ever post to the explicitly chosen Pages — never blast every connected
+  // brand. With multiple Pages and no choice made, refuse rather than guess.
+  if (pageIds.length) pages = pages.filter((p) => pageIds.includes(p.id));
+  else if (pages.length > 1) return { ok: false, error: "This connection has multiple Pages — tick which Page(s) to post to.", at: new Date().toISOString() };
+  if (!pages.length) return { ok: false, error: "Chosen Page not found on this connection.", at: new Date().toISOString() };
 
   const ids: string[] = [];
   for (const page of pages) {
@@ -194,13 +199,14 @@ export async function publishPost(postId: string): Promise<void> {
 
   const networks = (Array.isArray(post.networks) ? post.networks : []) as SocialNetworkKey[];
   const mediaUrls = (Array.isArray(post.mediaUrls) ? post.mediaUrls : []) as string[];
+  const options = (post.options ?? {}) as { facebookPageIds?: string[] };
   const prev = (post.results ?? {}) as Record<string, NetResult>;
   const results: Record<string, NetResult> = { ...prev };
 
   for (const net of networks) {
     if (results[net]?.ok) continue; // retry only what failed
     try {
-      if (net === "facebook") results[net] = await publishFacebook(post.locationId, post.body, mediaUrls, post.mediaKind);
+      if (net === "facebook") results[net] = await publishFacebook(post.locationId, post.body, mediaUrls, post.mediaKind, options.facebookPageIds ?? []);
       else if (net === "instagram") results[net] = await publishInstagram(post.locationId, post.body, mediaUrls, post.mediaKind);
       else if (net === "youtube") results[net] = await publishYouTube(post.locationId, post.body, mediaUrls, post.mediaKind);
       else if (net === "tiktok") results[net] = stub("TikTok posting needs our TikTok developer app approved first.");

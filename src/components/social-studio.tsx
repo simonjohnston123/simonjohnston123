@@ -29,14 +29,17 @@ const ADS = [
   { icon: "🎧", name: "Spotify Ads", href: "https://ads.spotify.com", state: "Runs via Spotify Ad Studio — no public posting/ads API to integrate." },
 ];
 
-export function SocialStudio({ locationId, networks, queue, productImages }: {
-  locationId: string; networks: NetworkStatus[]; queue: QueuePost[]; productImages: { id: string; name: string; url: string }[];
+export function SocialStudio({ locationId, networks, fbPages, queue, productImages }: {
+  locationId: string; networks: NetworkStatus[]; fbPages: { id: string; name: string }[]; queue: QueuePost[]; productImages: { id: string; name: string; url: string }[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"compose" | "queue" | "ads">("compose");
   const [body, setBody] = useState("");
   const [media, setMedia] = useState<Media[]>([]);
   const [sel, setSel] = useState<Set<string>>(new Set(networks.filter((n) => n.ready).slice(0, 2).map((n) => n.key)));
+  // Which Facebook Page(s) this post goes to. One page → preselected; several →
+  // an explicit choice so one brand's post never lands on another brand's Page.
+  const [selPages, setSelPages] = useState<Set<string>>(new Set(fbPages.length === 1 ? [fbPages[0].id] : []));
   const [when, setWhen] = useState("");
   const [showProducts, setShowProducts] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
@@ -89,10 +92,15 @@ export function SocialStudio({ locationId, networks, queue, productImages }: {
 
   function submit(mode: "now" | "schedule" | "draft") {
     setMsg(null);
+    if (mode !== "draft" && sel.has("facebook") && fbPages.length > 1 && selPages.size === 0) {
+      setMsg({ kind: "err", text: "Tick which Facebook Page(s) this post goes to." });
+      return;
+    }
     start(async () => {
       const res = await saveSocialPostAction({
         locationId, body, mediaUrls: media.map((m) => m.url), mediaKind,
         networks: [...sel], mode, scheduledAt: when ? new Date(when).toISOString() : undefined,
+        facebookPageIds: [...selPages],
       });
       if (res.error) { setMsg({ kind: "err", text: res.error }); return; }
       setMsg({ kind: "ok", text: mode === "now" ? "Posted — check the Queue tab for per-network results." : mode === "schedule" ? "Scheduled ✓" : "Draft saved." });
@@ -174,6 +182,19 @@ export function SocialStudio({ locationId, networks, queue, productImages }: {
                 </button>
               ))}
             </div>
+            {sel.has("facebook") && fbPages.length > 1 ? (
+              <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Which Facebook Page(s)?</div>
+                <div className="flex flex-wrap gap-2">
+                  {fbPages.map((pg) => (
+                    <label key={pg.id} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700">
+                      <input type="checkbox" checked={selPages.has(pg.id)} onChange={() => setSelPages((s) => { const n = new Set(s); if (n.has(pg.id)) n.delete(pg.id); else n.add(pg.id); return n; })} />
+                      {pg.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Schedule + submit */}

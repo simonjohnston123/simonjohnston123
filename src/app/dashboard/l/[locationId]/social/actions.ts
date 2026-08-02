@@ -17,6 +17,7 @@ export async function saveSocialPostAction(input: {
   networks: string[];
   mode: "now" | "schedule" | "draft";
   scheduledAt?: string; // ISO from datetime-local
+  facebookPageIds?: string[]; // which Page(s) to post to when facebook is selected
 }): Promise<SaveResult> {
   await requireLocationAccess(input.locationId);
 
@@ -41,6 +42,7 @@ export async function saveSocialPostAction(input: {
       mediaUrls,
       mediaKind: mediaUrls.length ? input.mediaKind : null,
       networks,
+      options: { facebookPageIds: (input.facebookPageIds ?? []).slice(0, 20) },
       scheduledAt,
       status: input.mode === "schedule" ? "SCHEDULED" : "DRAFT",
     },
