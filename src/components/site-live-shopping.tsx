@@ -37,7 +37,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   const [placed, setPlaced] = useState<{ number: number } | null>(null);
   const [checkoutErr, setCheckoutErr] = useState("");
   const [storeChannel, setStoreChannel] = useState<Channel | null>(null);
-  const { on: musicOn, toggle: toggleMusic } = useMallMusic();
+  const { on: musicOn, toggle: toggleMusic, available: musicAvailable } = useMallMusic();
 
   useEffect(() => {
     setNow(new Date());
@@ -105,7 +105,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   );
   const controls = (
     <>
-      <MusicButton on={musicOn} toggle={toggleMusic} accent={accent} />
+      {musicAvailable ? <MusicButton on={musicOn} toggle={toggleMusic} accent={accent} /> : null}
       {cartButton}
     </>
   );

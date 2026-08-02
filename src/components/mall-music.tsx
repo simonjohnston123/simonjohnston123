@@ -9,65 +9,42 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // get the same feel by ARMING on the first tap anywhere — and the whole experience
 // is tap-driven, so music kicks in the moment someone enters the mall.
 //
-// Sound source, in order of preference:
-//   1. A licensed loop dropped at /public/music/mall-loop.mp3 (best — real muzak).
-//   2. A soft generated Web Audio pad fallback, so there's always something playing
-//      even before a track is added.
+// Music only plays when a REAL licensed track exists at /public/music/mall-loop.mp3.
+// Until then it stays silent and the 🔊 control is hidden — no synthesized tones
+// (a generated pad just sounds like an annoying drone on real speakers).
 const TRACK_URL = "/music/mall-loop.mp3";
 const PREF_KEY = "pd_mall_music";
 
 export function useMallMusic() {
   const [on, setOn] = useState(true); // visitor preference; default on
+  const [available, setAvailable] = useState(false); // is there a real track?
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const genRef = useRef<{ stop: () => void } | null>(null);
   const armedRef = useRef(false);
   const onRef = useRef(on);
   onRef.current = on;
 
-  // Restore the visitor's earlier choice.
+  // Restore preference + probe for a real track. Only set up audio if one exists.
   useEffect(() => {
     try { if (localStorage.getItem(PREF_KEY) === "off") setOn(false); } catch {}
-    const a = new Audio(TRACK_URL);
-    a.loop = true;
-    a.preload = "auto";
-    a.volume = 0.35;
-    audioRef.current = a;
-    return () => { a.pause(); genRef.current?.stop(); };
+    let cancelled = false;
+    fetch(TRACK_URL, { method: "HEAD" })
+      .then((r) => {
+        if (cancelled || !r.ok) return;
+        const a = new Audio(TRACK_URL);
+        a.loop = true; a.preload = "auto"; a.volume = 0.35;
+        audioRef.current = a;
+        setAvailable(true);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; audioRef.current?.pause(); };
   }, []);
   useEffect(() => { try { localStorage.setItem(PREF_KEY, on ? "on" : "off"); } catch {} }, [on]);
 
-  // Soft major-chord pad through a lowpass with a slow swell — calm and inoffensive.
-  const startGenerated = useCallback(() => {
-    if (genRef.current) return;
-    try {
-      const AC: typeof AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AC();
-      const master = ctx.createGain(); master.gain.value = 0.05; master.connect(ctx.destination);
-      const filter = ctx.createBiquadFilter(); filter.type = "lowpass"; filter.frequency.value = 850; filter.connect(master);
-      const notes = [220, 277.18, 329.63]; // A major pad
-      const oscs = notes.map((f, i) => {
-        const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = f;
-        const g = ctx.createGain(); g.gain.value = 0.22 / (i + 1);
-        o.connect(g); g.connect(filter); o.start(); return o;
-      });
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05;
-      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.02;
-      lfo.connect(lfoGain); lfoGain.connect(master.gain); lfo.start();
-      genRef.current = { stop: () => { try { oscs.forEach((o) => o.stop()); lfo.stop(); ctx.close(); } catch {} genRef.current = null; } };
-    } catch {}
-  }, []);
+  const play = useCallback(() => { audioRef.current?.play().catch(() => {}); }, []);
 
-  const stopAll = useCallback(() => { audioRef.current?.pause(); genRef.current?.stop(); }, []);
-
-  // Try the real track; if it's missing/blocked, fall back to the generated pad.
-  const play = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) { startGenerated(); return; }
-    a.play().then(() => { genRef.current?.stop(); }).catch(() => startGenerated());
-  }, [startGenerated]);
-
-  // Arm on the first user gesture anywhere on the page.
+  // Arm on the first user gesture — only when a real track is available.
   useEffect(() => {
+    if (!available) return;
     const arm = () => {
       if (armedRef.current) return;
       armedRef.current = true;
@@ -75,20 +52,20 @@ export function useMallMusic() {
       window.removeEventListener("pointerdown", arm);
       window.removeEventListener("keydown", arm);
     };
-    window.addEventListener("pointerdown", arm, { once: false });
-    window.addEventListener("keydown", arm, { once: false });
+    window.addEventListener("pointerdown", arm);
+    window.addEventListener("keydown", arm);
     return () => { window.removeEventListener("pointerdown", arm); window.removeEventListener("keydown", arm); };
-  }, [play]);
+  }, [available, play]);
 
   const toggle = useCallback(() => {
     setOn((prev) => {
       const next = !prev;
-      if (next) { armedRef.current = true; play(); } else { stopAll(); }
+      if (next) { armedRef.current = true; play(); } else { audioRef.current?.pause(); }
       return next;
     });
-  }, [play, stopAll]);
+  }, [play]);
 
-  return { on, toggle };
+  return { on, toggle, available };
 }
 
 export function MusicButton({ on, toggle, accent }: { on: boolean; toggle: () => void; accent: string }) {
