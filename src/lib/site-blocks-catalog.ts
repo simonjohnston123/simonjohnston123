@@ -166,8 +166,11 @@ export const BLOCK_DEFS: BlockDef[] = [
     label: "Live Shop",
     icon: "📺",
     category: "Media",
-    fields: [{ k: "heading", label: "Heading (optional)", kind: "text" }],
-    default: { heading: "" },
+    fields: [
+      { k: "heading", label: "Heading (optional)", kind: "text" },
+      { k: "youtubeChannelId", label: "YouTube channel ID for live (UC…)", kind: "text", placeholder: "UCxxxxxxxxxxxxxxxxxxxxxx" },
+    ],
+    default: { heading: "", youtubeChannelId: "" },
   },
   {
     type: "button",

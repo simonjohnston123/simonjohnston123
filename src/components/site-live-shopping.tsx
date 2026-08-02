@@ -41,8 +41,10 @@ const SHOWS: Show[] = [
 ];
 const DAY_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function SiteLiveShopping({ locationId, primaryColor }: { locationId: string; primaryColor: string }) {
+export function SiteLiveShopping({ locationId, primaryColor, youtubeChannelId }: { locationId: string; primaryColor: string; youtubeChannelId?: string }) {
   const accent = primaryColor || "#7c3aed";
+  const ytChannel = (youtubeChannelId ?? "").trim() || null;
+  const [wantBroadcast, setWantBroadcast] = useState(false);
   const [data, setData] = useState<{ channels: Channel[]; products: LiveProduct[] } | null>(null);
   const [view, setView] = useState<"schedule" | "live" | "shop" | "store">("schedule");
   const [show, setShow] = useState<Show | null>(null);
@@ -133,7 +135,8 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     <div className="w-full bg-slate-950 text-white">
       {view === "schedule" ? (
         <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent} channels={data?.channels ?? []}
-          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} onEnterStore={enterStore} onAssistant={enterAssistant} />
+          onWatch={(s) => { clearSearch(); setWantBroadcast(false); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} onEnterStore={enterStore} onAssistant={enterAssistant}
+          hasBroadcast={!!ytChannel} onWatchBroadcast={() => { clearSearch(); setShow(tonights); setWantBroadcast(true); setView("live"); }} />
       ) : view === "store" ? (
         <StoreExperience channel={storeChannel} products={products} accent={accent} locationId={locationId}
           addToCart={addToCart} openCart={() => setCartOpen(true)} onExit={() => setView("schedule")} onPlayLive={playList} cartButton={controls} />
@@ -142,7 +145,8 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
           addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show || searchShow ? "live" : "schedule")} cartButton={controls} />
       ) : (
         <LivePlayer products={searchResults ?? products} channels={data?.channels ?? []} show={searchShow ?? show} live={searchResults ? true : show ? isLiveNow(show) : false} accent={accent}
-          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => { clearSearch(); setView("schedule"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} locationId={locationId} />
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onSchedule={() => { clearSearch(); setWantBroadcast(false); setView("schedule"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} locationId={locationId}
+          youtubeChannelId={ytChannel} initialBroadcast={wantBroadcast} />
       )}
 
       {cartOpen ? (
@@ -188,9 +192,10 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
 }
 
 /* ---------------- Schedule / mall concourse ---------------- */
-function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels, onWatch, onShop, onSearch, searching, cartButton, onEnterStore, onAssistant }: {
+function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels, onWatch, onShop, onSearch, searching, cartButton, onEnterStore, onAssistant, hasBroadcast, onWatchBroadcast }: {
   shows: Show[]; isLiveNow: (s: Show) => boolean; isTonight: (s: Show) => boolean; tonights: Show | null; accent: string; channels: Channel[];
   onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; onEnterStore: (ch: Channel) => void; onAssistant: () => void;
+  hasBroadcast: boolean; onWatchBroadcast: () => void;
 }) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -204,6 +209,15 @@ function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels,
           <button onClick={onShop} className="rounded-full px-4 py-2 text-sm font-bold text-white" style={{ background: accent }}>🛍 Shop now →</button>
         </div>
       </div>
+
+      {/* Live broadcast — real YouTube stream */}
+      {hasBroadcast ? (
+        <button onClick={onWatchBroadcast} className="mb-4 flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-r from-red-600/30 to-slate-900 p-4 text-left transition hover:from-red-600/50">
+          <span className="animate-pulse rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white">● LIVE</span>
+          <div className="min-w-0 flex-1"><div className="text-base font-extrabold">Watch the live broadcast</div><div className="text-sm text-slate-300">Our host is on camera — shop the deals as they show them.</div></div>
+          <span className="hidden shrink-0 rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-900 sm:inline">▶ Watch</span>
+        </button>
+      ) : null}
 
       {/* Assistant — the star of the show, front and centre */}
       <button onClick={onAssistant} className="group mb-4 flex w-full items-center gap-4 overflow-hidden rounded-2xl p-4 text-left text-white shadow-lg transition hover:brightness-110"
@@ -333,12 +347,15 @@ function ShopView({ products, channels, accent, loading, addToCart, openCart, on
 }
 
 /* ---------------- Live player (immersive) ---------------- */
-function LivePlayer({ products, channels, show, live, accent, addToCart, openCart, onSchedule, onShop, onSearch, searching, cartButton }: {
+function LivePlayer({ products, channels, show, live, accent, addToCart, openCart, onSchedule, onShop, onSearch, searching, cartButton, youtubeChannelId, initialBroadcast }: {
   products: LiveProduct[]; channels: Channel[]; show: Show | null; live: boolean; accent: string;
   addToCart: (p: LiveProduct) => void; openCart: () => void; onSchedule: () => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; locationId: string;
+  youtubeChannelId?: string | null; initialBroadcast?: boolean;
 }) {
   const [activeCh, setActiveCh] = useState("all");
   const [idx, setIdx] = useState(0);
+  const [liveTab, setLiveTab] = useState<"products" | "broadcast">(initialBroadcast && youtubeChannelId ? "broadcast" : "products");
+  useEffect(() => { if (initialBroadcast && youtubeChannelId) setLiveTab("broadcast"); }, [initialBroadcast, youtubeChannelId]);
   const [panel, setPanel] = useState<null | "shelf" | "ai">(null);
   const [added, setAdded] = useState(false);
   const [viewers, setViewers] = useState(0);
@@ -405,15 +422,29 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
       {/* Show + search + channels */}
       <div className="relative z-10 px-4 pt-2">
         {show ? <div className="flex items-center gap-2"><span className="text-base">{show.emoji}</span><span className="truncate text-sm font-bold" style={{ color: show.color }}>{show.name}</span>{!live && show.day >= 0 ? <span className="shrink-0 text-[11px] text-slate-400">· airs {DAY_LABEL[show.day]} 6:00 PM</span> : null}</div> : null}
+        {youtubeChannelId ? (
+          <div className="mt-2 inline-flex rounded-full bg-black/40 p-0.5 text-xs backdrop-blur">
+            <button onClick={() => setLiveTab("broadcast")} className={`rounded-full px-3 py-1 font-bold transition ${liveTab === "broadcast" ? "bg-red-600 text-white" : "text-slate-200 hover:text-white"}`}>🔴 Live broadcast</button>
+            <button onClick={() => setLiveTab("products")} className={`rounded-full px-3 py-1 font-bold transition ${liveTab === "products" ? "bg-white text-slate-900" : "text-slate-200 hover:text-white"}`}>🛍 Products</button>
+          </div>
+        ) : null}
         <div className="mt-2"><SearchBar accent={accent} searching={searching} onSearch={onSearch} /></div>
         <div className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {pills.map((c) => <button key={c.slug} onClick={() => setActiveCh(c.slug)} className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold backdrop-blur transition ${activeCh === c.slug ? "border-white/0 bg-white text-slate-900" : "border-white/15 bg-black/30 text-white hover:bg-black/50"}`}>{c.icon ? `${c.icon} ` : ""}{c.label}</button>)}
         </div>
       </div>
 
-      {/* Stage — swipeable gallery contained in the remaining space */}
+      {/* Stage — live YouTube broadcast or swipeable product gallery */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-3">
-        <Gallery key={current.id} images={imagesOf(current)} name={current.name} accent={accent} />
+        {liveTab === "broadcast" && youtubeChannelId ? (
+          <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+            <div className="relative w-full max-w-3xl overflow-hidden rounded-2xl bg-black shadow-2xl" style={{ aspectRatio: "16 / 9" }}>
+              <iframe src={`https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(youtubeChannelId)}&autoplay=1`} className="absolute inset-0 h-full w-full" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen title="Live broadcast" />
+            </div>
+          </div>
+        ) : (
+          <Gallery key={current.id} images={imagesOf(current)} name={current.name} accent={accent} />
+        )}
       </div>
 
       {/* Bottom — product + actions (always visible) */}

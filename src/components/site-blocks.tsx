@@ -60,7 +60,7 @@ export function SiteBlocks({
             return (
               <section key={i} className="w-full">
                 {block.heading ? <h2 className="mb-3 mt-8 text-center text-2xl font-bold text-slate-900">{s("heading")}</h2> : null}
-                <SiteLiveShopping locationId={locationId} primaryColor={primaryColor} />
+                <SiteLiveShopping locationId={locationId} primaryColor={primaryColor} youtubeChannelId={s("youtubeChannelId")} />
               </section>
             );
           case "button":
