@@ -26,7 +26,7 @@ const DAY_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function SiteLiveShopping({ locationId, primaryColor }: { locationId: string; primaryColor: string }) {
   const accent = primaryColor || "#7c3aed";
   const [data, setData] = useState<{ channels: Channel[]; products: LiveProduct[] } | null>(null);
-  const [view, setView] = useState<"schedule" | "live" | "shop">("schedule");
+  const [view, setView] = useState<"schedule" | "live" | "shop" | "store">("schedule");
   const [show, setShow] = useState<Show | null>(null);
   const [searchResults, setSearchResults] = useState<LiveProduct[] | null>(null);
   const [searchShow, setSearchShow] = useState<Show | null>(null);
@@ -36,6 +36,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   const [cartOpen, setCartOpen] = useState(false);
   const [placed, setPlaced] = useState<{ number: number } | null>(null);
   const [checkoutErr, setCheckoutErr] = useState("");
+  const [storeChannel, setStoreChannel] = useState<Channel | null>(null);
   const { on: musicOn, toggle: toggleMusic } = useMallMusic();
 
   useEffect(() => {
@@ -83,6 +84,13 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     setSearching(false);
   }
   const clearSearch = () => { setSearchResults(null); setSearchShow(null); };
+  const playList = (list: LiveProduct[], title: string) => {
+    setSearchResults(list);
+    setSearchShow({ day: -1, name: title, emoji: "🎬", color: accent, tag: title });
+    setShow(null);
+    setView("live");
+  };
+  const enterStore = (ch: Channel) => { setStoreChannel(ch); setView("store"); };
 
   const todayDay = now ? now.getDay() : -1;
   const hour = now ? now.getHours() : 0;
@@ -105,8 +113,11 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   return (
     <div className="w-full bg-slate-950 text-white">
       {view === "schedule" ? (
-        <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent}
-          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} />
+        <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent} channels={data?.channels ?? []}
+          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} onEnterStore={enterStore} />
+      ) : view === "store" ? (
+        <StoreExperience channel={storeChannel} products={products} accent={accent} locationId={locationId}
+          addToCart={addToCart} openCart={() => setCartOpen(true)} onExit={() => setView("schedule")} onPlayLive={playList} cartButton={controls} />
       ) : view === "shop" ? (
         <ShopView products={products} channels={data?.channels ?? []} accent={accent} loading={!data}
           addToCart={addToCart} openCart={() => setCartOpen(true)} onBack={() => setView("schedule")} onLive={() => setView(show || searchShow ? "live" : "schedule")} cartButton={controls} />
@@ -157,10 +168,10 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
   );
 }
 
-/* ---------------- Schedule (TV guide) ---------------- */
-function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, onWatch, onShop, onSearch, searching, cartButton }: {
-  shows: Show[]; isLiveNow: (s: Show) => boolean; isTonight: (s: Show) => boolean; tonights: Show | null; accent: string;
-  onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode;
+/* ---------------- Schedule / mall concourse ---------------- */
+function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels, onWatch, onShop, onSearch, searching, cartButton, onEnterStore }: {
+  shows: Show[]; isLiveNow: (s: Show) => boolean; isTonight: (s: Show) => boolean; tonights: Show | null; accent: string; channels: Channel[];
+  onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; onEnterStore: (ch: Channel) => void;
 }) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -217,6 +228,24 @@ function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, onWatch, 
           );
         })}
       </div>
+
+      {/* Mall concourse — walk into a store and let the assistant run the show */}
+      {channels.length ? (
+        <div className="mt-10">
+          <div className="mb-1 flex items-center gap-2"><span className="text-lg">🏬</span><h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Stroll the mall</h3></div>
+          <p className="mb-3 text-sm text-slate-400">Walk into a store — our assistant asks a couple of questions and hands you the best 3.</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {channels.map((c) => (
+              <button key={c.slug} onClick={() => onEnterStore(c)} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-4 text-left transition hover:from-white/[0.12]">
+                <div className="text-3xl transition-transform group-hover:scale-110">{c.icon ?? "🛍️"}</div>
+                <div className="mt-2 text-sm font-bold leading-tight">{c.label}</div>
+                <div className="text-xs text-slate-400">{c.count} on the shelf</div>
+                <div className="mt-3 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-white" style={{ background: accent }}>Walk in →</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -412,6 +441,227 @@ function LivePlayer({ products, channels, show, live, accent, addToCart, openCar
         </Drawer>
       ) : null}
     </div>
+  );
+}
+
+/* ---------------- Store experience: walk-in → shelf → assistant → top 3 ---------------- */
+type TopPick = { id: string; name: string; priceCents: number; imageUrl: string | null; pitch: string };
+type Stage = "walkin" | "shelf" | "ask" | "picks";
+
+const Q_WHO = { key: "who" as const, q: "Who are we shopping for?", opts: ["For myself", "A gift", "For my home", "For the kids"] };
+const Q_PRIORITY = { key: "priority" as const, q: "What matters most to you?", opts: ["Best price", "Top quality", "Something fun", "A specific feature"] };
+const Q_BUDGET = { key: "budget" as const, q: "What's your budget?", opts: [["Under $25", "under-25"], ["$25–75", "25-75"], ["$75–200", "75-200"], ["Money's no object", "any"]] as const };
+
+function StoreExperience({ channel, products, accent, locationId, addToCart, openCart, onExit, onPlayLive, cartButton }: {
+  channel: Channel | null; products: LiveProduct[]; accent: string; locationId: string;
+  addToCart: (p: LiveProduct) => void; openCart: () => void; onExit: () => void; onPlayLive: (list: LiveProduct[], title: string) => void; cartButton: React.ReactNode;
+}) {
+  const [stage, setStage] = useState<Stage>("walkin");
+  const [answers, setAnswers] = useState<{ who?: string; priority?: string; budget?: string }>({});
+  const [note, setNote] = useState("");
+  const [picks, setPicks] = useState<TopPick[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
+
+  const shelf = useMemo(() => (channel ? products.filter((p) => p.channel === channel.slug).slice(0, 30) : []), [channel, products]);
+  const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const slug = channel?.slug;
+
+  useEffect(() => { setStage("walkin"); setAnswers({}); setNote(""); setPicks(null); }, [slug]);
+  useEffect(() => {
+    if (stage !== "walkin") return;
+    const t = setTimeout(() => setStage("shelf"), 2400);
+    return () => clearTimeout(t);
+  }, [stage, slug]);
+
+  function bump(p: LiveProduct) { addToCart(p); setAdded(p.id); setTimeout(() => setAdded((x) => (x === p.id ? null : x)), 1100); }
+  async function findTop3() {
+    setLoading(true); setStage("picks"); setPicks(null);
+    try {
+      const res = await fetch("/api/live/assistant", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locationId, answers: { ...answers, note: note.trim() || undefined }, candidateIds: shelf.map((p) => p.id) }),
+      });
+      const j = await res.json();
+      setPicks(j.picks ?? []);
+    } catch { setPicks([]); }
+    setLoading(false);
+  }
+
+  if (!channel) return <div className="grid h-[60vh] place-items-center bg-slate-950 text-slate-300"><button onClick={onExit} className="rounded-full bg-white/10 px-4 py-2 text-sm">‹ Back to the mall</button></div>;
+
+  const header = (
+    <div className="relative z-20 flex items-center justify-between gap-2 px-4 py-3">
+      <button onClick={onExit} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20">‹ Mall</button>
+      <div className="flex items-center gap-2 text-sm font-bold text-white"><span className="text-lg">{channel.icon ?? "🛍️"}</span><span className="truncate">{channel.label}</span></div>
+      <div className="flex items-center gap-2">{cartButton}</div>
+    </div>
+  );
+
+  return (
+    <div className="relative min-h-[88vh] w-full overflow-hidden bg-slate-950 text-white">
+      <style>{`
+        @keyframes pdWalkIn { 0% { transform: translateZ(0) scale(.82); opacity: 0 } 55% { opacity: 1 } 100% { transform: translateZ(0) scale(1.06); opacity: 1 } }
+        @keyframes pdFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
+        @keyframes pdScroll { from { transform: translateY(-50%) } to { transform: translateY(0) } }
+        @keyframes pdRise { from { transform: translateY(14px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+      `}</style>
+
+      {stage === "walkin" ? (
+        <div className="relative flex h-[88vh] min-h-[560px] cursor-pointer items-center justify-center overflow-hidden" onClick={() => setStage("shelf")}
+          style={{ background: `radial-gradient(120% 90% at 50% 120%, ${accent}22, #020617 60%)` }}>
+          {/* Shelves rushing past on both sides — the walk-in */}
+          {[0, 1].map((side) => (
+            <div key={side} className="pointer-events-none absolute top-0 h-full w-[26%] overflow-hidden opacity-40 blur-[2px]" style={{ [side === 0 ? "left" : "right"]: 0 } as React.CSSProperties}>
+              <div className="flex flex-col gap-3 p-2" style={{ animation: `pdScroll ${7 + side}s linear infinite` }}>
+                {[...shelf, ...shelf].slice(0, 14).map((p, i) => (
+                  p.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img key={i} src={p.imageUrl} alt="" className="h-28 w-full rounded-lg object-cover" />) : <div key={i} className="h-28 w-full rounded-lg bg-white/5" />
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="relative z-10 px-6 text-center" style={{ animation: "pdWalkIn 2.3s cubic-bezier(.2,.7,.3,1) both" }}>
+            <div className="text-7xl" style={{ animation: "pdFloat 3s ease-in-out infinite" }}>{channel.icon ?? "🛍️"}</div>
+            <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-400">Now entering</div>
+            <div className="text-4xl font-black sm:text-5xl" style={{ textShadow: `0 0 34px ${accent}` }}>{channel.label}</div>
+            <div className="mt-1 text-sm text-slate-400">{shelf.length} products on the shelf</div>
+            <div className="mt-8 animate-pulse text-xs text-slate-500">tap to walk in →</div>
+          </div>
+          <div className="absolute right-4 top-3 z-20"><button onClick={(e) => { e.stopPropagation(); onExit(); }} className="rounded-full bg-white/10 px-3 py-1.5 text-xs text-white backdrop-blur">✕</button></div>
+        </div>
+      ) : stage === "shelf" ? (
+        <>
+          {header}
+          <div className="mx-auto max-w-6xl px-4 pb-10">
+            <div className="mb-4 rounded-2xl border border-white/10 bg-gradient-to-r p-4" style={{ backgroundImage: `linear-gradient(90deg, ${accent}22, transparent)` }}>
+              <div className="text-lg font-extrabold">You&apos;re in {channel.icon} {channel.label}</div>
+              <p className="mt-0.5 text-sm text-slate-300">Take a look at the shelf — or let our assistant find your top 3.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => setStage("ask")} className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: accent }}>🎤 Start the show — find my top 3</button>
+                <button onClick={() => onPlayLive(shelf, `${channel.label} · live`)} className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20">▶ Watch the whole store live</button>
+              </div>
+            </div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">The shelf · {shelf.length} on display</div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+              {shelf.map((p) => (
+                <div key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] shadow-[0_6px_16px_-8px_rgba(0,0,0,0.8)]">
+                  {p.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={p.imageUrl} alt={p.name} className="h-28 w-full object-cover" />) : <div className="grid h-28 w-full place-items-center bg-white/5 text-2xl">🛍</div>}
+                  <div className="border-t-2 border-white/10 p-2">
+                    <div className="line-clamp-2 text-[11px] font-medium text-slate-200">{p.name}</div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-xs font-bold" style={{ color: accent }}>{money(p.priceCents)}</span>
+                      <button onClick={() => bump(p)} className="rounded-full px-2 py-1 text-[11px] font-semibold text-white" style={{ background: added === p.id ? "#22c55e" : accent }}>{added === p.id ? "✓" : "+ Cart"}</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : stage === "ask" ? (
+        <>
+          {header}
+          <div className="mx-auto max-w-xl px-4 pb-16">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-2xl" style={{ background: `${accent}33` }}>{channel.icon ?? "🛍️"}</div>
+              <div><div className="text-sm font-bold">Your shopping assistant</div><div className="text-xs text-slate-400">Answer a couple of quick questions and I&apos;ll pick your top 3.</div></div>
+            </div>
+
+            <Question show label={Q_WHO.q}>
+              {Q_WHO.opts.map((o) => <Chip key={o} on={answers.who === o} accent={accent} onClick={() => setAnswers((a) => ({ ...a, who: o }))}>{o}</Chip>)}
+            </Question>
+            {answers.who ? (
+              <Question show label={Q_PRIORITY.q}>
+                {Q_PRIORITY.opts.map((o) => <Chip key={o} on={answers.priority === o} accent={accent} onClick={() => setAnswers((a) => ({ ...a, priority: o }))}>{o}</Chip>)}
+              </Question>
+            ) : null}
+            {answers.priority ? (
+              <Question show label={Q_BUDGET.q}>
+                {Q_BUDGET.opts.map(([label, val]) => <Chip key={val} on={answers.budget === val} accent={accent} onClick={() => setAnswers((a) => ({ ...a, budget: val }))}>{label}</Chip>)}
+              </Question>
+            ) : null}
+            {answers.budget ? (
+              <div style={{ animation: "pdRise .35s ease both" }} className="mt-4">
+                <div className="mb-1 text-sm font-semibold text-slate-200">Anything specific? <span className="font-normal text-slate-400">(optional)</span></div>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. lightweight, for a 6-year-old, blue…" className="w-full rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-slate-400" />
+                <button onClick={findTop3} className="mt-4 w-full rounded-xl py-3 text-sm font-bold text-white" style={{ background: accent }}>🎯 Find my top 3</button>
+                <button onClick={() => setStage("shelf")} className="mt-2 w-full rounded-xl bg-white/5 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/10">‹ Back to the shelf</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <>
+          {header}
+          <div className="mx-auto max-w-2xl px-4 pb-16">
+            {loading || picks === null ? (
+              <div className="grid h-[50vh] place-items-center text-center">
+                <div>
+                  <div className="text-5xl" style={{ animation: "pdFloat 1.6s ease-in-out infinite" }}>{channel.icon ?? "🛍️"}</div>
+                  <p className="mt-4 text-sm text-slate-300">Your assistant is picking your top 3…</p>
+                </div>
+              </div>
+            ) : picks.length === 0 ? (
+              <div className="grid h-[50vh] place-items-center text-center text-slate-300">
+                <div><p className="text-sm">Couldn&apos;t find a match — let&apos;s try the shelf.</p><button onClick={() => setStage("shelf")} className="mt-3 rounded-full bg-white/10 px-4 py-2 text-sm">‹ Back to the shelf</button></div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 text-center">
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Your assistant recommends</div>
+                  <h2 className="text-2xl font-black">Top 3 in {channel.label}</h2>
+                </div>
+                <div className="space-y-3">
+                  {picks.map((pk, i) => {
+                    const p = byId.get(pk.id);
+                    return (
+                      <div key={pk.id} style={{ animation: `pdRise .4s ease both`, animationDelay: `${i * 90}ms` }} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                        <div className="flex gap-3 p-3">
+                          <div className="relative shrink-0">
+                            {pk.imageUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={pk.imageUrl} alt={pk.name} className="h-24 w-24 rounded-xl object-cover" />) : <div className="grid h-24 w-24 place-items-center rounded-xl bg-white/5 text-2xl">🛍</div>}
+                            <span className="absolute -left-2 -top-2 grid h-6 w-6 place-items-center rounded-full text-xs font-black text-white" style={{ background: accent }}>{i + 1}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-2 text-sm font-bold">{pk.name}</div>
+                            <div className="text-lg font-extrabold" style={{ color: accent }}>{money(pk.priceCents)}</div>
+                            <div className="mt-1 rounded-lg bg-white/[0.06] px-2 py-1 text-xs italic text-slate-200">“{pk.pitch}”</div>
+                          </div>
+                        </div>
+                        {p ? (
+                          <div className="flex gap-2 border-t border-white/10 p-2">
+                            <button onClick={() => bump(p)} className="flex-1 rounded-lg py-2 text-xs font-bold text-white" style={{ background: added === p.id ? "#22c55e" : accent }}>{added === p.id ? "✓ Added" : "🛒 Add to cart"}</button>
+                            <button onClick={() => { addToCart(p); openCart(); }} className="flex-1 rounded-lg bg-white py-2 text-xs font-bold text-slate-900 hover:bg-slate-100">Buy now</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button onClick={() => onPlayLive(picks.map((pk) => byId.get(pk.id)).filter(Boolean) as LiveProduct[], `${channel.label} · your top 3`)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-white" style={{ background: accent }}>▶ Play these live</button>
+                  <button onClick={() => { setAnswers({}); setNote(""); setStage("ask"); }} className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/20">↺ Ask again</button>
+                  <button onClick={() => setStage("shelf")} className="rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/10">‹ The shelf</button>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Question({ label, show, children }: { label: string; show?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={show ? { animation: "pdRise .35s ease both" } : undefined} className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+      <div className="mb-2 text-sm font-semibold text-slate-100">{label}</div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+function Chip({ on, accent, onClick, children }: { on: boolean; accent: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${on ? "border-transparent text-white" : "border-white/15 bg-white/[0.03] text-slate-200 hover:bg-white/10"}`} style={on ? { background: accent } : undefined}>{children}</button>
   );
 }
 
