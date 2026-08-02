@@ -91,6 +91,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     setView("live");
   };
   const enterStore = (ch: Channel) => { setStoreChannel(ch); setView("store"); };
+  const enterAssistant = () => enterStore({ slug: "__all__", label: "Placid Deals", count: products.length, icon: "🎯" });
 
   const todayDay = now ? now.getDay() : -1;
   const hour = now ? now.getHours() : 0;
@@ -114,7 +115,7 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
     <div className="w-full bg-slate-950 text-white">
       {view === "schedule" ? (
         <ScheduleView shows={SHOWS} isLiveNow={isLiveNow} isTonight={isTonight} tonights={tonights} accent={accent} channels={data?.channels ?? []}
-          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} onEnterStore={enterStore} />
+          onWatch={(s) => { clearSearch(); setShow(s); setView("live"); }} onShop={() => setView("shop")} onSearch={runSearch} searching={searching} cartButton={controls} onEnterStore={enterStore} onAssistant={enterAssistant} />
       ) : view === "store" ? (
         <StoreExperience channel={storeChannel} products={products} accent={accent} locationId={locationId}
           addToCart={addToCart} openCart={() => setCartOpen(true)} onExit={() => setView("schedule")} onPlayLive={playList} cartButton={controls} />
@@ -169,9 +170,9 @@ export function SiteLiveShopping({ locationId, primaryColor }: { locationId: str
 }
 
 /* ---------------- Schedule / mall concourse ---------------- */
-function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels, onWatch, onShop, onSearch, searching, cartButton, onEnterStore }: {
+function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels, onWatch, onShop, onSearch, searching, cartButton, onEnterStore, onAssistant }: {
   shows: Show[]; isLiveNow: (s: Show) => boolean; isTonight: (s: Show) => boolean; tonights: Show | null; accent: string; channels: Channel[];
-  onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; onEnterStore: (ch: Channel) => void;
+  onWatch: (s: Show) => void; onShop: () => void; onSearch: (q: string) => void; searching: boolean; cartButton: React.ReactNode; onEnterStore: (ch: Channel) => void; onAssistant: () => void;
 }) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -185,6 +186,17 @@ function ScheduleView({ shows, isLiveNow, isTonight, tonights, accent, channels,
           <button onClick={onShop} className="rounded-full px-4 py-2 text-sm font-bold text-white" style={{ background: accent }}>🛍 Shop now →</button>
         </div>
       </div>
+
+      {/* Assistant — the star of the show, front and centre */}
+      <button onClick={onAssistant} className="group mb-4 flex w-full items-center gap-4 overflow-hidden rounded-2xl p-4 text-left text-white shadow-lg transition hover:brightness-110"
+        style={{ background: `linear-gradient(120deg, ${accent}, #0f172a)` }}>
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-white/15 text-3xl transition-transform group-hover:scale-110">🎤</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-lg font-extrabold leading-tight">Meet your shopping assistant</div>
+          <div className="text-sm text-white/80">Answer 3 quick questions and I&apos;ll hand you your top 3 deals.</div>
+        </div>
+        <span className="hidden shrink-0 rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-900 sm:inline">Start →</span>
+      </button>
 
       {/* Intent search — spin up a live channel of exactly what they want */}
       <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -463,7 +475,19 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
 
-  const shelf = useMemo(() => (channel ? products.filter((p) => p.channel === channel.slug).slice(0, 30) : []), [channel, products]);
+  const shelf = useMemo(() => {
+    if (!channel) return [];
+    if (channel.slug !== "__all__") return products.filter((p) => p.channel === channel.slug).slice(0, 30);
+    // Whole-store assistant: round-robin across channels for a diverse shelf.
+    const byCh = new Map<string, LiveProduct[]>();
+    for (const p of products) { const a = byCh.get(p.channel) ?? []; if (a.length < 6) { a.push(p); byCh.set(p.channel, a); } }
+    const cols = [...byCh.values()];
+    const out: LiveProduct[] = [];
+    for (let i = 0; out.length < 30 && cols.some((c) => c.length); i++) {
+      for (const c of cols) { const p = c.shift(); if (p) { out.push(p); if (out.length >= 30) break; } }
+    }
+    return out;
+  }, [channel, products]);
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const slug = channel?.slug;
 
