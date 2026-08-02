@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMallMusic, MusicButton } from "./mall-music";
+import { useVoice, HostAvatar, VoiceButton } from "./live-host";
 
 type LiveProduct = { id: string; name: string; priceCents: number; imageUrl: string | null; description: string | null; channel: string; stock: number | null };
 type Channel = { slug: string; label: string; count: number; icon?: string };
@@ -498,6 +499,17 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
     return () => clearTimeout(t);
   }, [stage, slug]);
 
+  // The talking host — speaks the greeting, each question, and the results.
+  const voice = useVoice();
+  const speakRef = useRef(voice.speak);
+  speakRef.current = voice.speak;
+  const greetedRef = useRef(false);
+  useEffect(() => { greetedRef.current = false; }, [slug]);
+  useEffect(() => { if (stage === "ask" && !greetedRef.current) { greetedRef.current = true; speakRef.current(`Hi! I'm your Placid Deals shopping assistant. Let's find your top three. ${Q_WHO.q}`); } }, [stage]);
+  useEffect(() => { if (stage === "ask" && answers.who) speakRef.current(Q_PRIORITY.q); }, [answers.who, stage]);
+  useEffect(() => { if (stage === "ask" && answers.priority) speakRef.current(Q_BUDGET.q); }, [answers.priority, stage]);
+  useEffect(() => { if (stage === "picks" && picks && picks.length) speakRef.current(`Here are my top ${picks.length} picks for you. My top choice is ${picks[0].name}. ${picks[0].pitch}`); }, [stage, picks]);
+
   function bump(p: LiveProduct) { addToCart(p); setAdded(p.id); setTimeout(() => setAdded((x) => (x === p.id ? null : x)), 1100); }
   async function findTop3() {
     setLoading(true); setStage("picks"); setPicks(null);
@@ -514,11 +526,12 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
 
   if (!channel) return <div className="grid h-[60vh] place-items-center bg-slate-950 text-slate-300"><button onClick={onExit} className="rounded-full bg-white/10 px-4 py-2 text-sm">‹ Back to the mall</button></div>;
 
+  const leave = () => { voice.stop(); onExit(); };
   const header = (
     <div className="relative z-20 flex items-center justify-between gap-2 px-4 py-3">
-      <button onClick={onExit} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20">‹ Mall</button>
+      <button onClick={leave} className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-white/20">‹ Mall</button>
       <div className="flex items-center gap-2 text-sm font-bold text-white"><span className="text-lg">{channel.icon ?? "🛍️"}</span><span className="truncate">{channel.label}</span></div>
-      <div className="flex items-center gap-2">{cartButton}</div>
+      <div className="flex items-center gap-2">{voice.supported ? <VoiceButton muted={voice.muted} toggle={voice.toggleMute} accent={accent} /> : null}{cartButton}</div>
     </div>
   );
 
@@ -587,8 +600,8 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
           {header}
           <div className="mx-auto max-w-xl px-4 pb-16">
             <div className="mb-4 flex items-center gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-2xl" style={{ background: `${accent}33` }}>{channel.icon ?? "🛍️"}</div>
-              <div><div className="text-sm font-bold">Your shopping assistant</div><div className="text-xs text-slate-400">Answer a couple of quick questions and I&apos;ll pick your top 3.</div></div>
+              <HostAvatar speaking={voice.speaking} accent={accent} size={52} />
+              <div><div className="text-sm font-bold">Your shopping assistant {voice.speaking ? <span className="text-slate-400">· speaking…</span> : null}</div><div className="text-xs text-slate-400">Answer a couple of quick questions and I&apos;ll pick your top 3.</div></div>
             </div>
 
             <Question show label={Q_WHO.q}>
@@ -620,8 +633,8 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
           <div className="mx-auto max-w-2xl px-4 pb-16">
             {loading || picks === null ? (
               <div className="grid h-[50vh] place-items-center text-center">
-                <div>
-                  <div className="text-5xl" style={{ animation: "pdFloat 1.6s ease-in-out infinite" }}>{channel.icon ?? "🛍️"}</div>
+                <div className="flex flex-col items-center">
+                  <HostAvatar speaking accent={accent} size={72} />
                   <p className="mt-4 text-sm text-slate-300">Your assistant is picking your top 3…</p>
                 </div>
               </div>
@@ -631,8 +644,9 @@ function StoreExperience({ channel, products, accent, locationId, addToCart, ope
               </div>
             ) : (
               <>
-                <div className="mb-4 text-center">
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Your assistant recommends</div>
+                <div className="mb-4 flex flex-col items-center text-center">
+                  <HostAvatar speaking={voice.speaking} accent={accent} size={56} />
+                  <div className="mt-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Your assistant recommends</div>
                   <h2 className="text-2xl font-black">Top 3 in {channel.label}</h2>
                 </div>
                 <div className="space-y-3">
