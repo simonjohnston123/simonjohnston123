@@ -106,19 +106,37 @@ function heuristicPick(answers: Answers, cands: Cand[]) {
   });
   scored.sort((a, b) => b.s - a.s || a.c.priceCents - b.c.priceCents);
 
-  return scored.slice(0, 3).map(({ c, inBudget }, i) => ({
+  // Pick 3 genuinely different products — skip near-duplicate size/colour variants
+  // (same product family) so the shopper doesn't get "the same thing" three times.
+  const seen = new Set<string>();
+  const chosen: typeof scored = [];
+  for (const item of scored) {
+    const fam = famKey(item.c.name);
+    if (seen.has(fam)) continue;
+    seen.add(fam);
+    chosen.push(item);
+    if (chosen.length === 3) break;
+  }
+  if (chosen.length < 3) for (const item of scored) { if (!chosen.includes(item)) { chosen.push(item); if (chosen.length === 3) break; } }
+
+  return chosen.map(({ c, inBudget }, i) => ({
     id: c.id, name: c.name, priceCents: c.priceCents, imageUrl: c.imageUrl,
     pitch: pitchFor(i, c, inBudget, priceFocus, qualityFocus, words),
   }));
+}
+
+// A coarse product-family key so size/colour variants collapse together.
+function famKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 5).join(" ");
 }
 
 function pitchFor(i: number, c: Cand, inBudget: boolean, price: boolean, quality: boolean, words: string[]): string {
   const matched = words.find((w) => `${c.name} ${c.description ?? ""}`.toLowerCase().includes(w));
   if (matched) return `Matches what you asked for — and it's ${money(c.priceCents)}.`;
   if (price && i === 0) return `Best value on the shelf at ${money(c.priceCents)}.`;
-  if (quality) return `A premium pick — ${money(c.priceCents)}, built to last.`;
+  if (quality && c.priceCents >= 3000) return `A premium pick — ${money(c.priceCents)}, built to last.`;
   if (inBudget) return `Right in your budget at ${money(c.priceCents)}.`;
-  return `A top pick from this store — ${money(c.priceCents)}.`;
+  return `A crowd favourite from this store — ${money(c.priceCents)}.`;
 }
 
 function money(cents: number): string {
