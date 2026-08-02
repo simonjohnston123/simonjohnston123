@@ -78,9 +78,9 @@ async function aiPick(key: string, answers: Answers, cands: Cand[]) {
     const picks = (parsed.picks ?? [])
       .map((p) => ({ c: cands[(p.n ?? 0) - 1], pitch: String(p.pitch ?? "").slice(0, 140) }))
       .filter((x) => x.c)
-      .slice(0, 3)
       .map(({ c, pitch }) => ({ id: c.id, name: c.name, priceCents: c.priceCents, imageUrl: c.imageUrl, pitch: pitch || "A great match for you." }));
-    return picks.length ? picks : null;
+    if (!picks.length) return null;
+    return diversifyPicks(picks, cands);
   } catch {
     return null;
   }
@@ -128,6 +128,29 @@ function heuristicPick(answers: Answers, cands: Cand[]) {
 // A coarse product-family key so size/colour variants collapse together.
 function famKey(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").slice(0, 5).join(" ");
+}
+
+type Pk = { id: string; name: string; priceCents: number; imageUrl: string | null; pitch: string };
+// Ensure the final 3 are distinct product families; backfill from the shelf if
+// dedupe drops below 3 (e.g. the AI picked two colours of the same item).
+function diversifyPicks(picks: Pk[], cands: Cand[]): Pk[] {
+  const fams = new Set<string>();
+  const usedIds = new Set<string>();
+  const out: Pk[] = [];
+  for (const p of picks) {
+    const f = famKey(p.name);
+    if (fams.has(f) || usedIds.has(p.id)) continue;
+    fams.add(f); usedIds.add(p.id); out.push(p);
+    if (out.length === 3) return out;
+  }
+  for (const c of cands) {
+    const f = famKey(c.name);
+    if (usedIds.has(c.id) || fams.has(f)) continue;
+    fams.add(f); usedIds.add(c.id);
+    out.push({ id: c.id, name: c.name, priceCents: c.priceCents, imageUrl: c.imageUrl, pitch: `A great pick from this store — ${money(c.priceCents)}.` });
+    if (out.length === 3) break;
+  }
+  return out;
 }
 
 function pitchFor(i: number, c: Cand, inBudget: boolean, price: boolean, quality: boolean, words: string[]): string {
