@@ -808,6 +808,9 @@ enum ConnectionProvider {
   GOOGLE_CALENDAR
   YOUTUBE
   SNAPCHAT
+  // One Google connection per business covers every Google service they grant
+  // (Gmail, Calendar, Business Profile, Merchant, Sheets, Drive, Contacts).
+  GOOGLE
 }
 
 enum ConnectionStatus {

@@ -32,6 +32,7 @@ export const STUDIO_BASE: NavItem[] = [
   { key: "automations", label: "Automations", icon: "⚡" },
   { key: "orders", label: "Orders", icon: "🧾" },
   { key: "payments", label: "Payments", icon: "💳" },
+  { key: "google", label: "Google", icon: "🔵" },
   { key: "integrations", label: "Integrations", icon: "🔌" },
   { key: "settings", label: "Settings", icon: "⚙" },
 ];
