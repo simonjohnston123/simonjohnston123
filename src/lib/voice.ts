@@ -86,20 +86,32 @@ async function businessContext(locationId: string): Promise<string> {
  *  inventory instead of trusting the tiny context sample (the "air fryer"
  *  lesson — never deny stocking something without checking). */
 async function productLookup(locationId: string, callerText: string): Promise<string> {
-  const raw = callerText.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
-  // Singular + plural variants so "fryers" finds "Air Fryer" and vice versa.
-  const words = Array.from(new Set(raw.flatMap((w) => [w, w.replace(/s$/, ""), `${w}s`]))).filter((w) => w.length >= 3);
-  if (!words.length) return "";
-  const STOP = new Set(["the", "and", "you", "your", "yous", "how", "hows", "much", "muchs", "many", "have", "haves", "sell", "sells", "sale", "sales", "stock", "stocks", "got", "gots", "does", "doe", "doess", "what", "whats", "price", "prices", "cost", "costs", "they", "theys", "them", "for", "fors", "can", "cans", "with", "withs"]);
-  const terms = words.filter((w) => !STOP.has(w));
-  if (!terms.length) return "";
-  const OR = terms.map((w) => ({ name: { contains: w, mode: "insensitive" as const } }));
-  const hits = await prisma.product.findMany({
-    where: { locationId, active: true, OR },
-    orderBy: { inventory: "desc" },
-    take: 5,
-    select: { name: true, priceCents: true, price: true, inventory: true },
-  });
+  const STOP = new Set(["the", "and", "you", "your", "how", "much", "many", "have", "has", "are", "was", "sell", "sale", "sales", "stock", "got", "does", "do", "what", "price", "cost", "they", "them", "there", "for", "can", "with", "any", "some", "get", "buy", "want", "need", "looking", "about", "please", "hello", "thanks", "that", "this", "just"]);
+  const raw = callerText.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w));
+  if (!raw.length) return "";
+  const depl = (w: string) => w.replace(/s$/, "");
+
+  const select = { name: true, priceCents: true, price: true, inventory: true };
+  // 1) Phrases first: adjacent word pairs ("air fryers" → "air fryer") are far
+  //    more precise than single words and win when they hit anything.
+  const bigrams: string[] = [];
+  for (let i = 0; i < raw.length - 1; i++) bigrams.push(`${depl(raw[i])} ${depl(raw[i + 1])}`);
+  let hits: { name: string; priceCents: number | null; price: number | null; inventory: number | null }[] = [];
+  if (bigrams.length) {
+    hits = await prisma.product.findMany({
+      where: { locationId, active: true, OR: bigrams.map((b) => ({ name: { contains: b, mode: "insensitive" as const } })) },
+      orderBy: { inventory: "desc" }, take: 5, select,
+    });
+  }
+  // 2) Fall back to the most specific single words (longest first).
+  if (!hits.length) {
+    const words = Array.from(new Set(raw.flatMap((w) => [depl(w), w]))).filter((w) => w.length >= 4).sort((a, b) => b.length - a.length).slice(0, 4);
+    if (!words.length) return "";
+    hits = await prisma.product.findMany({
+      where: { locationId, active: true, OR: words.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })) },
+      orderBy: { inventory: "desc" }, take: 5, select,
+    });
+  }
   if (!hits.length) return "";
   return (
     "Live catalogue matches for what the caller mentioned (these ARE in stock unless qty 0):\n" +
