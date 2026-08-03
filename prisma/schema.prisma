@@ -617,6 +617,9 @@ model Site {
   primaryColor String     @default("#1d5df5")
   logoText     String?
   tagline      String?
+  // Added by the parallel website-builder session (theme system) — kept in
+  // sync here so cross-session deploys never try to drop it.
+  theme        String     @default("light")
   customDomain String?    @unique
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
