@@ -78,6 +78,10 @@ services:
       VOICE_RATE_CENTS: ${VOICE_RATE_CENTS:-25}
       # Reel Studio retail price per AI video render (cents).
       REEL_RATE_CENTS: ${REEL_RATE_CENTS:-1500}
+      # Product Sourcing supplier (white-labelled Dropshipzone) — read-only browse/import.
+      DZ_EMAIL: ${DZ_EMAIL:-}
+      DZ_PASSWORD: ${DZ_PASSWORD:-}
+      DZ_API_BASE: ${DZ_API_BASE:-https://api.dropshipzone.com.au}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
