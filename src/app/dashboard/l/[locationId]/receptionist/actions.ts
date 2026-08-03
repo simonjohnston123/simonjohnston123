@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
+import { buyReceptionistNumber, twilioReady } from "@/lib/twilio";
 
 function e164(raw: string): string | null {
   const t = raw.trim().replace(/[\s()-]/g, "");
@@ -34,4 +35,35 @@ export async function saveVoiceAgentAction(formData: FormData) {
     update: data,
   });
   revalidatePath(`/dashboard/l/${locationId}/receptionist`);
+}
+
+export type ActivateResult = { ok?: true; number?: string; error?: string };
+
+/** One-click activation: buy a number under the platform's master account,
+ *  point it at the receptionist webhooks, and start metering. */
+export async function activateReceptionistAction(locationId: string): Promise<ActivateResult> {
+  await requireLocationAccess(locationId);
+  if (!twilioReady()) return { error: "The phone platform isn't connected yet — the platform owner is finishing setup." };
+
+  const existing = await prisma.voiceAgent.findUnique({ where: { locationId } });
+  if (existing?.phoneNumber) return { ok: true, number: existing.phoneNumber };
+
+  const location = await prisma.location.findUnique({ where: { id: locationId }, select: { name: true } });
+  try {
+    const { number } = await buyReceptionistNumber(`${location?.name ?? "Business"} AI Receptionist`);
+    await prisma.voiceAgent.upsert({
+      where: { locationId },
+      create: { locationId, phoneNumber: number, enabled: true },
+      update: { phoneNumber: number, enabled: true },
+    });
+    // Ledger: number activation (rental is rolled up monthly).
+    const setupCents = parseInt(process.env.NUMBER_SETUP_CENTS ?? "", 10) || 0;
+    if (setupCents > 0) {
+      await prisma.usageEvent.create({ data: { locationId, kind: "number_setup", qty: 1, unitCents: setupCents, totalCents: setupCents, ref: number } }).catch(() => {});
+    }
+    revalidatePath(`/dashboard/l/${locationId}/receptionist`);
+    return { ok: true, number };
+  } catch (e) {
+    return { error: String(e instanceof Error ? e.message : e).slice(0, 200) };
+  }
 }

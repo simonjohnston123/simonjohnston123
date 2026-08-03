@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { PageHeader, Badge } from "@/components/ui";
 import { saveVoiceAgentAction } from "./actions";
+import { ActivateButton } from "@/components/receptionist-activate";
 import type { Turn } from "@/lib/voice";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +18,17 @@ export default async function ReceptionistPage({ params }: { params: { locationI
   const locationId = params.locationId;
   await requireLocationAccess(locationId);
 
-  const [agent, calls, location] = await Promise.all([
+  const monthStart = new Date();
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const [agent, calls, location, usage] = await Promise.all([
     prisma.voiceAgent.findUnique({ where: { locationId } }),
     prisma.callLog.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.location.findUnique({ where: { id: locationId }, select: { name: true } }),
+    prisma.usageEvent.groupBy({ by: ["kind"], where: { locationId, createdAt: { gte: monthStart } }, _sum: { qty: true, totalCents: true } }),
   ]);
   const base = process.env.APP_URL || "https://placidcrm.com";
-  const twilioReady = !!process.env.TWILIO_ACCOUNT_SID;
+  const twilioReady = !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN;
+  const monthTotal = usage.reduce((n, u) => n + (u._sum.totalCents ?? 0), 0);
 
   return (
     <div>
@@ -34,6 +39,41 @@ export default async function ReceptionistPage({ params }: { params: { locationI
           <strong className="text-slate-900">Phone platform not connected yet.</strong> The platform owner needs to add the master telephony credentials before numbers go live. You can configure everything below now — it activates the moment the platform is connected.
         </div>
       ) : null}
+
+      {/* Activation + this month's usage */}
+      <div className="mb-4 grid gap-4 lg:grid-cols-2">
+        <div className="card p-5">
+          {agent?.phoneNumber ? (
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Your receptionist number</div>
+              <div className="mt-1 text-2xl font-black text-slate-900">{agent.phoneNumber}</div>
+              <p className="mt-1 text-sm text-slate-500">Answering 24/7 as {location?.name ?? "your business"} — every call lands in your Inbox.</p>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-2 text-sm text-slate-600">Get a dedicated phone number answered by your AI, 24/7. Calls are billed per minute from your included allowance.</div>
+              <ActivateButton locationId={locationId} ready={twilioReady} />
+            </div>
+          )}
+        </div>
+        <div className="card p-5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">This month&apos;s usage</div>
+          {usage.length === 0 ? <p className="mt-2 text-sm text-slate-400">No usage yet.</p> : (
+            <div className="mt-2 space-y-1 text-sm">
+              {usage.map((u) => (
+                <div key={u.kind} className="flex items-center justify-between">
+                  <span className="capitalize text-slate-600">{u.kind.replace("_", " ")} × {u._sum.qty ?? 0}</span>
+                  <span className="font-semibold text-slate-900">${(((u._sum.totalCents ?? 0)) / 100).toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-slate-100 pt-1">
+                <span className="font-semibold text-slate-700">Total</span>
+                <span className="font-bold text-slate-900">${(monthTotal / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Config */}
