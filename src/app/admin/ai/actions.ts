@@ -18,7 +18,7 @@ export async function saveAiKeyAction(_prev: SaveState, formData: FormData): Pro
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-3-5-haiku-latest", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
     });
     if (res.status === 401) return { error: "Anthropic rejected that key (401) — double-check you copied it correctly." };
   } catch {

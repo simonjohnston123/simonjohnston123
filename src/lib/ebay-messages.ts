@@ -226,7 +226,7 @@ export async function syncAllEbayMessages(): Promise<{ locations: number; import
 // --- AI answer -------------------------------------------------------------
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
 type ProductFacts = {
   name: string;
