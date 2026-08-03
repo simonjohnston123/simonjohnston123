@@ -75,17 +75,36 @@ export async function deleteSocialPostAction(locationId: string, postId: string)
 
 export async function searchReelProductsAction(locationId: string, q: string) {
   await requireLocationAccess(locationId);
-  const query = q.trim();
+  const query = q.trim().slice(0, 80);
+
   // Empty query = auto-feed the newest products so the picker is never blank.
+  if (query.length < 2) {
+    const rows = await prisma.product.findMany({
+      where: { locationId, active: true, imageUrl: { not: null } },
+      orderBy: { updatedAt: "desc" }, take: 24,
+      select: { id: true, name: true, imageUrl: true, priceCents: true },
+    });
+    return rows.map((p) => ({ id: p.id, name: p.name, imageUrl: p.imageUrl!, priceCents: p.priceCents ?? 0 }));
+  }
+
+  // Forgiving search — singular/plural variants + each word, across name,
+  // category AND description (same approach as the live-shop intent search).
+  const base = Array.from(new Set([query, query.replace(/s$/i, ""), query.endsWith("s") ? query : `${query}s`]));
+  const words = query.split(/\s+/).filter((w) => w.length >= 3).flatMap((w) => [w, w.replace(/s$/i, "")]);
+  const terms = Array.from(new Set([...base, ...words])).filter((t) => t.length >= 2);
+  const OR = terms.flatMap((t) => [
+    { name: { contains: t, mode: "insensitive" as const } },
+    { category: { contains: t, mode: "insensitive" as const } },
+  ]);
   const rows = await prisma.product.findMany({
-    where: {
-      locationId, active: true, imageUrl: { not: null },
-      ...(query.length >= 2 ? { name: { contains: query, mode: "insensitive" as const } } : {}),
-    },
-    orderBy: query.length >= 2 ? { inventory: "desc" } : { updatedAt: "desc" },
-    take: 18,
+    where: { locationId, active: true, imageUrl: { not: null }, OR },
+    orderBy: { inventory: "desc" },
+    take: 30,
     select: { id: true, name: true, imageUrl: true, priceCents: true },
   });
+  // Rank exact-phrase name matches first so precise hits top the grid.
+  const ql = query.toLowerCase();
+  rows.sort((a, b) => Number(b.name.toLowerCase().includes(ql)) - Number(a.name.toLowerCase().includes(ql)));
   return rows.map((p) => ({ id: p.id, name: p.name, imageUrl: p.imageUrl!, priceCents: p.priceCents ?? 0 }));
 }
 
