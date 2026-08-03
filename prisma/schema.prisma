@@ -105,6 +105,8 @@ model Location {
   products          Product[]
   socialPosts       SocialPost[]
   mediaAssets       MediaAsset[]
+  voiceAgent        VoiceAgent?
+  callLogs          CallLog[]
   inboxFolders      InboxFolder[]
   // Provider keys this business chose to use (set at onboarding) — drives which
   // integrations we surface first.
@@ -338,11 +340,52 @@ enum Channel {
   NOTE
   FACEBOOK
   INSTAGRAM
+  PHONE
 }
 
 enum MessageDirection {
   INBOUND
   OUTBOUND
+}
+
+// ---------------------------------------------------------------------------
+// AI call centre — one AI receptionist per business. Inbound calls hit
+// /api/voice/inbound, converse via the gather loop, and land in the inbox.
+// ---------------------------------------------------------------------------
+
+model VoiceAgent {
+  id          String   @id @default(cuid())
+  locationId  String   @unique
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  phoneNumber String?  @unique // the business's Twilio number, E.164
+  enabled     Boolean  @default(true)
+  greeting    String?  @db.Text // opening line; sensible default if empty
+  hours       String?  // free text, e.g. "Mon–Fri 9am–5pm, Sat 9–12"
+  knowledge   String?  @db.Text // FAQs / anything the AI should know
+  transferTo  String?  // owner's mobile for live transfer, E.164
+  voice       String   @default("Polly.Olivia-Neural") // AU neural voice
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CallLog {
+  id          String   @id @default(cuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  callSid     String   @unique
+  direction   String   @default("inbound")
+  fromNumber  String
+  toNumber    String
+  status      String   @default("in-progress") // in-progress | completed | transferred | failed
+  transcript  Json     @default("[]") // [{role:"caller"|"ai", text, at}]
+  summary     String?  @db.Text
+  contactId   String?
+  durationSec Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([locationId])
+  @@index([locationId, createdAt])
 }
 
 model Conversation {
