@@ -3,6 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { PageHeader, Badge } from "@/components/ui";
 import { saveVoiceAgentAction } from "./actions";
 import { ActivateButton } from "@/components/receptionist-activate";
+import { ReceptionistTrainer } from "@/components/receptionist-trainer";
 import type { Turn } from "@/lib/voice";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +149,14 @@ export default async function ReceptionistPage({ params }: { params: { locationI
             </div>
           )}
         </div>
+      </div>
+
+      {/* Train it like a staff member — same brain as the real phone line */}
+      <div className="mt-4">
+        <ReceptionistTrainer
+          locationId={locationId}
+          greeting={(agent?.greeting ?? "").trim() || `Thanks for calling ${location?.name ?? "us"}! I'm the receptionist — how can I help you today?`}
+        />
       </div>
 
       {/* Platform wiring reference (visible to whoever configures the number) */}
