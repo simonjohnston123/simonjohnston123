@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { disconnectGoogleAction, syncGmailAction, syncReviewsAction, syncCalendarAction } from "@/app/dashboard/l/[locationId]/google/actions";
 
-export type Service = { key: string; label: string; icon: string; blurb: string; tier: string; granted: boolean };
+export type Service = {
+  key: string; label: string; icon: string; blurb: string; tier: string; granted: boolean;
+  /** Connects on its own consent screen (Google refuses some scope combinations). */
+  separate?: boolean;
+  connectHref?: string;
+};
 
 export function GoogleConnect({
   locationId, connected, email, services, ready, status,
@@ -12,7 +17,10 @@ export function GoogleConnect({
   locationId: string; connected: boolean; email?: string; services: Service[]; ready: boolean; status?: string;
 }) {
   const router = useRouter();
-  const [picked, setPicked] = useState<Set<string>>(new Set(services.filter((s) => s.granted || !connected).map((s) => s.key)));
+  // Separately-connected services must never enter the combined grant.
+  const [picked, setPicked] = useState<Set<string>>(
+    new Set(services.filter((s) => !s.separate && (s.granted || !connected)).map((s) => s.key)),
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -55,15 +63,12 @@ export function GoogleConnect({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((s) => {
           const on = picked.has(s.key);
-          return (
-            <button
-              key={s.key}
-              onClick={() => toggle(s.key)}
-              className={`card p-4 text-left transition ${on ? "ring-2 ring-brand-400" : "hover:border-slate-300"}`}
-            >
+          const body = (
+            <>
               <div className="flex items-center justify-between">
                 <span className="text-2xl">{s.icon}</span>
-                {s.granted ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Granted</span>
+                {s.granted ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Connected</span>
+                  : s.separate ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">Connect separately</span>
                   : on ? <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-bold text-brand-700">Selected</span> : null}
               </div>
               <div className="mt-1 font-semibold text-slate-900">{s.label}</div>
@@ -71,6 +76,23 @@ export function GoogleConnect({
               {s.tier === "restricted" ? (
                 <div className="mt-1 text-[11px] text-amber-600">Needs Google security review before 100+ customers</div>
               ) : null}
+            </>
+          );
+
+          // Its own consent screen — a link, not a tick-box, so it can never be
+          // folded into the combined grant Google would reject.
+          return s.separate ? (
+            <a key={s.key} href={s.connectHref} className="card p-4 text-left transition hover:border-slate-300">
+              {body}
+              <div className="mt-2 text-xs font-semibold text-brand-600">{s.granted ? "Reconnect →" : "Connect →"}</div>
+            </a>
+          ) : (
+            <button
+              key={s.key}
+              onClick={() => toggle(s.key)}
+              className={`card p-4 text-left transition ${on ? "ring-2 ring-brand-400" : "hover:border-slate-300"}`}
+            >
+              {body}
             </button>
           );
         })}

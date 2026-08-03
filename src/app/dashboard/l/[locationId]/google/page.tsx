@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
 import { GoogleConnect } from "@/components/google-connect";
@@ -21,9 +22,20 @@ export default async function GooglePage({
   const status = await googleStatus(params.locationId);
   const note = searchParams.g ? NOTE[searchParams.g] : null;
 
+  // YouTube is granted by its own connection (a separate Connection row), not
+  // by the unified Google grant — so its "granted" comes from that row.
+  const youtube = await prisma.connection.findFirst({
+    where: { locationId: params.locationId, provider: "YOUTUBE", status: "CONNECTED" },
+    select: { id: true },
+  });
+
   const services = GOOGLE_SERVICES.map((s) => ({
     key: s.key, label: s.label, icon: s.icon, blurb: s.blurb, tier: s.tier,
-    granted: status.connected && status.services.includes(s.key),
+    granted: s.separate
+      ? s.key === "youtube" && !!youtube
+      : status.connected && status.services.includes(s.key),
+    separate: s.separate ?? false,
+    connectHref: s.connectPath ? `${s.connectPath}?locationId=${params.locationId}` : undefined,
   }));
 
   return (

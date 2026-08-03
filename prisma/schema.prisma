@@ -344,6 +344,7 @@ enum Channel {
   FACEBOOK
   INSTAGRAM
   PHONE
+  EBAY
 }
 
 enum MessageDirection {
@@ -444,12 +445,20 @@ model Conversation {
   // Auto-detected "folder" — the source of the conversation (eBay, Temu, …),
   // derived from the sender for email. Null = General.
   sourceLabel String?
+  // Marketplace thread linkage. For eBay: the listing the buyer is asking about
+  // and their marketplace username — both are required to send the reply back,
+  // since eBay masks the buyer's real email address.
+  externalId   String?
+  externalUser String?
+  // AI-suggested reply awaiting a human to approve and send.
+  draftReply   String?  @db.Text
   createdAt  DateTime  @default(now())
   messages   Message[]
 
   @@index([locationId])
   @@index([locationId, lastMessageAt])
   @@index([locationId, sourceLabel])
+  @@index([locationId, externalId])
 }
 
 model Message {

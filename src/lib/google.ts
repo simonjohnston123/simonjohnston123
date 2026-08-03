@@ -12,6 +12,12 @@ export type GoogleServiceKey = "gmail" | "calendar" | "contacts" | "business" | 
 
 export const GOOGLE_SERVICES: {
   key: GoogleServiceKey; label: string; icon: string; blurb: string; scopes: string[]; tier: "basic" | "sensitive" | "restricted";
+  /** Google refuses to issue YouTube scopes in the same consent as Drive
+   *  ("scopes that cannot be requested together", error 400 invalid_request).
+   *  Services flagged here get their own one-click connection instead of a
+   *  tick-box in the combined grant, and never contribute to scopesFor(). */
+  separate?: true;
+  connectPath?: string;
 }[] = [
   {
     key: "gmail", label: "Gmail", icon: "✉️", blurb: "Send and receive email in your CRM inbox.",
@@ -49,9 +55,11 @@ export const GOOGLE_SERVICES: {
     tier: "restricted",
   },
   {
-    key: "youtube", label: "YouTube", icon: "▶️", blurb: "Publish videos straight from the Social Poster.",
+    key: "youtube", label: "YouTube", icon: "▶️", blurb: "Publish videos straight from the Social Poster. Connects separately — Google won't grant YouTube alongside Drive.",
     scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
     tier: "sensitive",
+    separate: true,
+    connectPath: "/api/integrations/youtube/connect",
   },
 ];
 
@@ -61,7 +69,9 @@ export const googleReady = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.
 
 export function scopesFor(services: GoogleServiceKey[]): string[] {
   const set = new Set(BASE_SCOPES);
-  for (const s of GOOGLE_SERVICES) if (services.includes(s.key)) s.scopes.forEach((x) => set.add(x));
+  // `separate` services are deliberately excluded even if asked for: mixing them
+  // into this grant makes Google reject the whole consent request.
+  for (const s of GOOGLE_SERVICES) if (!s.separate && services.includes(s.key)) s.scopes.forEach((x) => set.add(x));
   return [...set];
 }
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { NewConversationButton } from "@/components/new-conversation";
 import { EmailSyncButton } from "@/components/email-sync-button";
+import { EbaySyncButton, EbayReplyBox } from "@/components/ebay-inbox";
 import { DeleteConversationButton } from "@/components/delete-conversation-button";
 import { SelectionProvider, RowCheckbox, SelectAllCheckbox, BulkActionBar } from "@/components/inbox-selection";
 import { locationSendStatus } from "@/lib/comms-location";
@@ -33,6 +34,8 @@ const CHANNEL_META: Record<string, { icon: string; label: string }> = {
   INSTAGRAM: { icon: "📷", label: "Instagram" },
   WEBCHAT: { icon: "💻", label: "Web chat" },
   NOTE: { icon: "📝", label: "Note" },
+  PHONE: { icon: "📞", label: "Phone" },
+  EBAY: { icon: "🏷️", label: "eBay" },
 };
 function channelMeta(channel: string) {
   return CHANNEL_META[channel] ?? { icon: "💬", label: channel };
@@ -79,7 +82,7 @@ export default async function ConversationsPage({
     };
   }
 
-  const [conversations, contacts, unreadCount, starredCount, allCount, emailConn] = await Promise.all([
+  const [conversations, contacts, unreadCount, starredCount, allCount, emailConn, ebayConn] = await Promise.all([
     prisma.conversation.findMany({
       where: listWhere,
       include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
@@ -91,6 +94,7 @@ export default async function ConversationsPage({
     prisma.conversation.count({ where: { locationId, starred: true } }),
     prisma.conversation.count({ where: { locationId } }),
     prisma.connection.findFirst({ where: { locationId, provider: "SMTP", status: "CONNECTED" }, select: { id: true } }),
+    prisma.connection.findFirst({ where: { locationId, provider: "EBAY", status: "CONNECTED" }, select: { id: true } }),
   ]);
 
   // Source "folders" — one per distinct sender source, with a count.
@@ -108,6 +112,7 @@ export default async function ConversationsPage({
 
   const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c), email: c.email, phone: c.phone }));
   const hasEmail = Boolean(emailConn);
+  const hasEbay = Boolean(ebayConn);
 
   const active = activeId
     ? await prisma.conversation.findFirst({
@@ -188,6 +193,7 @@ export default async function ConversationsPage({
           action={
             <div className="flex items-center gap-2">
               {hasEmail ? <EmailSyncButton locationId={locationId} /> : null}
+              {hasEbay ? <EbaySyncButton locationId={locationId} /> : null}
               <NewConversationButton locationId={locationId} contacts={contactOptions} />
             </div>
           }
@@ -206,6 +212,7 @@ export default async function ConversationsPage({
           action={
             <div className="flex items-center gap-2">
               {hasEmail ? <EmailSyncButton locationId={locationId} /> : null}
+              {hasEbay ? <EbaySyncButton locationId={locationId} /> : null}
               <NewConversationButton locationId={locationId} contacts={contactOptions} />
             </div>
           }
@@ -445,13 +452,24 @@ export default async function ConversationsPage({
                   </a>
                 </div>
               ) : null}
-              <form action={sendMessageAction} className="flex items-center gap-2 border-t border-slate-100 p-3">
-                <input type="hidden" name="locationId" value={locationId} />
-                <input type="hidden" name="conversationId" value={active.id} />
-                <input type="hidden" name="direction" value="OUTBOUND" />
-                <input name="body" placeholder="Type a message…" className="input flex-1" autoComplete="off" required />
-                <button className="btn-primary shrink-0" aria-label="Send">Send</button>
-              </form>
+              {active.channel === "EBAY" ? (
+                // eBay replies go back through the Trading API, not the generic
+                // composer — and always via a human clicking send.
+                <EbayReplyBox
+                  locationId={locationId}
+                  conversationId={active.id}
+                  initialDraft={active.draftReply}
+                  itemUrl={active.externalId ? `https://www.ebay.com.au/itm/${active.externalId}` : null}
+                />
+              ) : (
+                <form action={sendMessageAction} className="flex items-center gap-2 border-t border-slate-100 p-3">
+                  <input type="hidden" name="locationId" value={locationId} />
+                  <input type="hidden" name="conversationId" value={active.id} />
+                  <input type="hidden" name="direction" value="OUTBOUND" />
+                  <input name="body" placeholder="Type a message…" className="input flex-1" autoComplete="off" required />
+                  <button className="btn-primary shrink-0" aria-label="Send">Send</button>
+                </form>
+              )}
             </>
           )}
         </div>
