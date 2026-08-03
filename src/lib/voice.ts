@@ -96,21 +96,26 @@ async function productLookup(locationId: string, callerText: string): Promise<st
   //    more precise than single words and win when they hit anything.
   const bigrams: string[] = [];
   for (let i = 0; i < raw.length - 1; i++) bigrams.push(`${depl(raw[i])} ${depl(raw[i + 1])}`);
+  // Fetch both ends of the range: highest-stock AND highest-price matches, so
+  // a $126 appliance isn't buried under 500-stock $6 accessories.
+  async function fetchBoth(where: object) {
+    const [byStock, byPrice] = await Promise.all([
+      prisma.product.findMany({ where: where as never, orderBy: { inventory: "desc" }, take: 4, select }),
+      prisma.product.findMany({ where: where as never, orderBy: { priceCents: "desc" }, take: 4, select }),
+    ]);
+    const seen = new Set<string>();
+    return [...byPrice, ...byStock].filter((p) => { const k = p.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 7);
+  }
+
   let hits: { name: string; priceCents: number | null; price: number | null; inventory: number | null }[] = [];
   if (bigrams.length) {
-    hits = await prisma.product.findMany({
-      where: { locationId, active: true, OR: bigrams.map((b) => ({ name: { contains: b, mode: "insensitive" as const } })) },
-      orderBy: { inventory: "desc" }, take: 5, select,
-    });
+    hits = await fetchBoth({ locationId, active: true, OR: bigrams.map((b) => ({ name: { contains: b, mode: "insensitive" as const } })) });
   }
   // 2) Fall back to the most specific single words (longest first).
   if (!hits.length) {
     const words = Array.from(new Set(raw.flatMap((w) => [depl(w), w]))).filter((w) => w.length >= 4).sort((a, b) => b.length - a.length).slice(0, 4);
     if (!words.length) return "";
-    hits = await prisma.product.findMany({
-      where: { locationId, active: true, OR: words.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })) },
-      orderBy: { inventory: "desc" }, take: 5, select,
-    });
+    hits = await fetchBoth({ locationId, active: true, OR: words.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })) });
   }
   if (!hits.length) return "";
   return (
