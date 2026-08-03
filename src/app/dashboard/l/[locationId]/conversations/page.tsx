@@ -106,7 +106,7 @@ export default async function ConversationsPage({
     count: g._count._all,
   }));
 
-  const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c) }));
+  const contactOptions = contacts.map((c) => ({ id: c.id, label: contactName(c), email: c.email, phone: c.phone }));
   const hasEmail = Boolean(emailConn);
 
   const active = activeId

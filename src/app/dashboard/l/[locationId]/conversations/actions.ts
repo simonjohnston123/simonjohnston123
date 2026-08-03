@@ -15,13 +15,58 @@ function threadUrl(locationId: string, conversationId: string, failDetail?: stri
   return failDetail ? `${base}&sendfail=${encodeURIComponent(failDetail)}` : base;
 }
 
+/** Normalise a typed recipient into {email|phone}. Accepts "Name <a@b.com>". */
+function parseRecipient(raw: string): { email?: string; phone?: string; name?: string } | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const angle = t.match(/^(.*?)<([^>]+)>$/);
+  const name = angle ? angle[1].trim().replace(/^["']|["']$/g, "") : undefined;
+  const value = (angle ? angle[2] : t).trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { email: value.toLowerCase(), name };
+  const digits = value.replace(/[\s()-]/g, "");
+  if (/^\+?\d{7,15}$/.test(digits)) {
+    const phone = /^0\d{8,9}$/.test(digits) ? "+61" + digits.slice(1) : digits;
+    return { phone, name };
+  }
+  return null;
+}
+
 export async function startConversationAction(formData: FormData) {
   const locationId = String(formData.get("locationId") ?? "");
-  const contactId = String(formData.get("contactId") ?? "");
+  let contactId = String(formData.get("contactId") ?? "");
+  const to = String(formData.get("to") ?? "").trim();
   const channel = (String(formData.get("channel") ?? "SMS") as ChannelValue) || "SMS";
   const subject = String(formData.get("subject") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   await requireLocationAccess(locationId);
+
+  // Typed/pasted recipient wins: find a matching contact or create one on the fly
+  // so you never have to leave the inbox to message someone new.
+  if (!contactId && to) {
+    const parsed = parseRecipient(to);
+    if (!parsed) {
+      redirect(`/dashboard/l/${locationId}/conversations?error=${encodeURIComponent("Enter a valid email address or phone number.")}`);
+    }
+    const existing = await prisma.contact.findFirst({
+      where: { locationId, ...(parsed.email ? { email: parsed.email } : { phone: parsed.phone }) },
+      select: { id: true },
+    });
+    if (existing) contactId = existing.id;
+    else {
+      const [first, ...rest] = (parsed.name ?? "").split(/\s+/).filter(Boolean);
+      const created = await prisma.contact.create({
+        data: {
+          locationId,
+          firstName: first || (parsed.email ? parsed.email.split("@")[0] : "New"),
+          lastName: rest.join(" ") || null,
+          email: parsed.email ?? null,
+          phone: parsed.phone ?? null,
+          source: "Inbox",
+        },
+      });
+      contactId = created.id;
+    }
+  }
   if (!contactId) return;
 
   const [contact, location] = await Promise.all([

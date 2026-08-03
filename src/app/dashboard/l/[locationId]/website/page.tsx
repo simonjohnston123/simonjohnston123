@@ -3,6 +3,8 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { WebsiteWorkspace } from "@/components/website-workspace";
+import { AiSiteEditor } from "@/components/ai-site-editor";
+import { DomainManager } from "@/components/domain-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,22 @@ export default async function WebsitePage({ params }: { params: { locationId: st
           <div className="flex items-center gap-2"><span className="text-xl">🛍️</span><h3 className="font-semibold text-slate-900">Products</h3></div>
           <p className="mt-2 text-sm text-slate-600">Build your catalogue with AI-written descriptions, shown on your public shop page.</p>
         </Link>
+      </div>
+
+      {/* AI website editor — describe a change, watch it apply on the live preview. */}
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">AI editor</h2>
+      <div className="mb-8">
+        <AiSiteEditor
+          locationId={params.locationId}
+          previewUrl={site.customDomain ? `https://${site.customDomain}` : publicUrl}
+          mode={site.customDomain ? "external" : "builder"}
+        />
+      </div>
+
+      {/* Buy or connect a custom domain for this business. */}
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Domain</h2>
+      <div className="mb-8">
+        <DomainManager locationId={params.locationId} />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Pages</h2>
