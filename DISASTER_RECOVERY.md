@@ -94,5 +94,13 @@ docker rm -f rtest-db
 - **Both droplets are in the same DigitalOcean account.** Protects against
   server loss, not account loss. A monthly bundle pulled to local disk or
   another provider would close that.
-- **Prod schema is applied with `prisma db push`**, which has already come close
-  to dropping a live column. Move to reviewed migrations before launch.
+## Schema changes
+
+Production applies schema with `prisma migrate deploy` (see
+`docker-entrypoint.sh`), **not** `db push`. Only committed `.sql` files in
+`prisma/migrations` can alter production data, so an image built from a stale
+branch can no longer silently drop a column. The existing database was
+baselined as `0_init` on 2026-08-03.
+
+To change the schema: edit `prisma/schema.prisma`, run `npx prisma migrate dev
+--name <what-changed>` locally, review the generated SQL, commit it, deploy.
