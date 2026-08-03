@@ -86,9 +86,14 @@ async function businessContext(locationId: string): Promise<string> {
  *  inventory instead of trusting the tiny context sample (the "air fryer"
  *  lesson — never deny stocking something without checking). */
 async function productLookup(locationId: string, callerText: string): Promise<string> {
-  const words = Array.from(new Set(callerText.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4)));
+  const raw = callerText.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  // Singular + plural variants so "fryers" finds "Air Fryer" and vice versa.
+  const words = Array.from(new Set(raw.flatMap((w) => [w, w.replace(/s$/, ""), `${w}s`]))).filter((w) => w.length >= 3);
   if (!words.length) return "";
-  const OR = words.flatMap((w) => [{ name: { contains: w, mode: "insensitive" as const } }]);
+  const STOP = new Set(["the", "and", "you", "your", "yous", "how", "hows", "much", "muchs", "many", "have", "haves", "sell", "sells", "sale", "sales", "stock", "stocks", "got", "gots", "does", "doe", "doess", "what", "whats", "price", "prices", "cost", "costs", "they", "theys", "them", "for", "fors", "can", "cans", "with", "withs"]);
+  const terms = words.filter((w) => !STOP.has(w));
+  if (!terms.length) return "";
+  const OR = terms.map((w) => ({ name: { contains: w, mode: "insensitive" as const } }));
   const hits = await prisma.product.findMany({
     where: { locationId, active: true, OR },
     orderBy: { inventory: "desc" },
