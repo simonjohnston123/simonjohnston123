@@ -261,22 +261,49 @@ function significantWords(title: string): string[] {
   ];
 }
 
+/** The SKU eBay holds against a listing — the reliable link to our catalogue. */
+async function skuForItem(locationId: string, itemId: string): Promise<string | null> {
+  const token = await getValidToken(locationId);
+  if (!token) return null;
+  try {
+    const xml = await trading(
+      token,
+      "GetItem",
+      `<ItemID>${escapeXml(itemId)}</ItemID><DetailLevel>ReturnAll</DetailLevel><OutputSelector>Item.SKU</OutputSelector>`,
+    );
+    if (ackFailed(xml)) return null;
+    return tag(xml, "SKU");
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Match an eBay listing title to a catalogue product.
+ * Match an eBay listing to a catalogue product.
  *
- * eBay truncates titles to 80 characters and sellers keyword-stuff them, so an
- * exact match only lands about 40% of the time. The fallback scores candidates
- * on how much of the title they actually cover and REFUSES a weak match —
- * giving the AI no facts (so it offers to confirm) is far safer than giving it
+ * Preferred path is the listing's SKU: eBay reports the same supplier SKU we
+ * store on the product, so it's an exact link. Title matching is only the
+ * fallback — eBay truncates titles to 80 characters and sellers keyword-stuff
+ * them, so an exact title match lands barely 40% of the time. That fallback
+ * scores candidates on how much of the title they cover and REFUSES a weak
+ * match: giving the AI no facts (so it offers to confirm) is far safer than
  * facts from a different product, which becomes a wrong answer to a customer.
  */
-async function matchProduct(locationId: string, title: string | null): Promise<ProductFacts | null> {
-  if (!title) return null;
+async function matchProduct(locationId: string, title: string | null, itemId?: string | null): Promise<ProductFacts | null> {
   const select = {
     name: true, priceCents: true, price: true, description: true, inventory: true,
     freightCents: true, colour: true, supplier: true, warehouse: true, shipCountries: true, category: true,
   } as const;
 
+  if (itemId) {
+    const sku = await skuForItem(locationId, itemId);
+    if (sku) {
+      const bySku = await prisma.product.findFirst({ where: { locationId, sku }, select });
+      if (bySku) return bySku;
+    }
+  }
+
+  if (!title) return null;
   const exact = await prisma.product.findFirst({ where: { locationId, name: title }, select });
   if (exact) return exact;
 
@@ -362,7 +389,7 @@ export async function draftEbayAnswer(conversationId: string): Promise<DraftResu
   const convo = await prisma.conversation.findUnique({
     where: { id: conversationId },
     select: {
-      id: true, locationId: true, subject: true, externalUser: true,
+      id: true, locationId: true, subject: true, externalUser: true, externalId: true,
       messages: { orderBy: { createdAt: "asc" }, take: 12, select: { direction: true, body: true } },
     },
   });
@@ -371,7 +398,7 @@ export async function draftEbayAnswer(conversationId: string): Promise<DraftResu
   const apiKey = (await getSetting(SETTING_KEYS.anthropicApiKey)) || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { ok: false, error: "No Anthropic API key set (Admin → Integrations)." };
 
-  const product = await matchProduct(convo.locationId, convo.subject);
+  const product = await matchProduct(convo.locationId, convo.subject, convo.externalId);
   const alts = await alternatives(convo.locationId, product);
 
   const context = [
