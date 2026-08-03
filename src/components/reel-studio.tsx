@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchReelProductsAction, generateReelScriptAction, createRenderJobAction } from "@/app/dashboard/l/[locationId]/social/actions";
 import type { ReelScript } from "@/lib/reels";
@@ -28,6 +28,13 @@ export function ReelWizard({ locationId, priceLabel, onClose }: { locationId: st
   function search() {
     start(async () => setResults(await searchReelProductsAction(locationId, q)));
   }
+
+  // Auto-feed the newest products the moment the wizard opens.
+  useEffect(() => {
+    let live = true;
+    searchReelProductsAction(locationId, "").then((r) => { if (live) setResults(r); });
+    return () => { live = false; };
+  }, [locationId]);
 
   function pickProduct(p: Prod) {
     setProduct(p); setStep(2);
@@ -84,7 +91,7 @@ export function ReelWizard({ locationId, priceLabel, onClose }: { locationId: st
                     <div className="text-xs font-bold text-slate-500">${(p.priceCents / 100).toFixed(2)}</div></div>
                 </button>
               ))}
-              {!results.length ? <p className="col-span-full py-8 text-center text-sm text-slate-400">Search to pick a product.</p> : null}
+              {!results.length ? <p className="col-span-full py-8 text-center text-sm text-slate-400">Loading your products…</p> : null}
             </div>
           </div>
         ) : step === 2 ? (

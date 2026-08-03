@@ -76,11 +76,14 @@ export async function deleteSocialPostAction(locationId: string, postId: string)
 export async function searchReelProductsAction(locationId: string, q: string) {
   await requireLocationAccess(locationId);
   const query = q.trim();
-  if (query.length < 2) return [];
+  // Empty query = auto-feed the newest products so the picker is never blank.
   const rows = await prisma.product.findMany({
-    where: { locationId, active: true, imageUrl: { not: null }, name: { contains: query, mode: "insensitive" } },
-    orderBy: { inventory: "desc" },
-    take: 12,
+    where: {
+      locationId, active: true, imageUrl: { not: null },
+      ...(query.length >= 2 ? { name: { contains: query, mode: "insensitive" as const } } : {}),
+    },
+    orderBy: query.length >= 2 ? { inventory: "desc" } : { updatedAt: "desc" },
+    take: 18,
     select: { id: true, name: true, imageUrl: true, priceCents: true },
   });
   return rows.map((p) => ({ id: p.id, name: p.name, imageUrl: p.imageUrl!, priceCents: p.priceCents ?? 0 }));
