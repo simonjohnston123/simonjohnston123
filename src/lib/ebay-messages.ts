@@ -154,7 +154,11 @@ export async function syncEbayMessages(locationId: string, days = 30): Promise<E
   let imported = 0;
   let skipped = 0;
 
-  for (const t of threads) {
+  // Import oldest first: messages are displayed in insertion order, so a
+  // newest-first page from eBay would show a conversation back to front.
+  const ordered = [...threads].sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+
+  for (const t of ordered) {
     if (!t.messageId || !t.sender) continue;
     const messageId = `ebay:${t.messageId}`;
 
@@ -183,22 +187,50 @@ export async function syncEbayMessages(locationId: string, days = 30): Promise<E
     }
 
     const when = t.createdAt ?? new Date();
-    await prisma.conversation.create({
-      data: {
-        locationId,
-        contactId: contact.id,
-        channel: "EBAY",
-        subject: t.title ? `${t.title}` : (t.subject ?? "eBay message"),
-        sourceLabel: "eBay",
-        externalId: t.itemId,
-        externalUser: t.sender,
-        unread: !t.answered,
-        lastMessageAt: when,
-        messages: {
-          create: { direction: "INBOUND", channel: "EBAY", body: t.body, messageId, receivedAt: when },
+
+    // One thread per buyer per listing. eBay sends each reply as its own
+    // message, so without this a single back-and-forth becomes several
+    // separate inbox rows — and the AI loses the context of what was already
+    // asked and answered.
+    const existing = t.itemId
+      ? await prisma.conversation.findFirst({
+          where: { locationId, channel: "EBAY", externalUser: t.sender, externalId: t.itemId },
+          select: { id: true, lastMessageAt: true },
+        })
+      : null;
+
+    if (existing) {
+      await prisma.message.create({
+        data: { conversationId: existing.id, direction: "INBOUND", channel: "EBAY", body: t.body, messageId, receivedAt: when },
+      });
+      await prisma.conversation.update({
+        where: { id: existing.id },
+        data: {
+          unread: !t.answered,
+          // A newly arrived question invalidates any draft written for the
+          // previous one.
+          draftReply: null,
+          ...(when > existing.lastMessageAt ? { lastMessageAt: when } : {}),
         },
-      },
-    });
+      });
+    } else {
+      await prisma.conversation.create({
+        data: {
+          locationId,
+          contactId: contact.id,
+          channel: "EBAY",
+          subject: t.title ? `${t.title}` : (t.subject ?? "eBay message"),
+          sourceLabel: "eBay",
+          externalId: t.itemId,
+          externalUser: t.sender,
+          unread: !t.answered,
+          lastMessageAt: when,
+          messages: {
+            create: { direction: "INBOUND", channel: "EBAY", body: t.body, messageId, receivedAt: when },
+          },
+        },
+      });
+    }
     imported++;
   }
 
