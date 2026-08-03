@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveSocialPostAction, retrySocialPostAction, deleteSocialPostAction } from "@/app/dashboard/l/[locationId]/social/actions";
+import { ReelWizard } from "./reel-studio";
 
 export type NetworkStatus = { key: string; label: string; icon: string; ready: boolean; detail: string; connectHref?: string; never?: boolean };
 export type QueuePost = {
@@ -29,8 +30,11 @@ const ADS = [
   { icon: "🎧", name: "Spotify Ads", href: "https://ads.spotify.com", state: "Runs via Spotify Ad Studio — no public posting/ads API to integrate." },
 ];
 
-export function SocialStudio({ locationId, networks, fbPages, queue, productImages }: {
+export type ReelJob = { id: string; productName: string; presenter: string; status: string; note: string | null; createdAt: string };
+
+export function SocialStudio({ locationId, networks, fbPages, queue, productImages, reelJobs, reelPrice }: {
   locationId: string; networks: NetworkStatus[]; fbPages: { id: string; name: string }[]; queue: QueuePost[]; productImages: { id: string; name: string; url: string }[];
+  reelJobs: ReelJob[]; reelPrice: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"compose" | "queue" | "ads">("compose");
@@ -45,6 +49,7 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
   const [urlDraft, setUrlDraft] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showReel, setShowReel] = useState(false);
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -156,6 +161,7 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
               <button onClick={() => fileRef.current?.click()} disabled={uploading} className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">{uploading ? "Uploading…" : "📁 Upload"}</button>
               <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple hidden onChange={(e) => uploadFiles(e.target.files)} />
               <button onClick={() => setShowProducts((v) => !v)} className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">🛍 From products</button>
+              <button onClick={() => setShowReel(true)} className="rounded-lg bg-slate-900 px-3 py-1.5 font-bold text-white hover:bg-slate-800">🎬 Create AI video</button>
               <input value={urlDraft} onChange={(e) => setUrlDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addUrl()} placeholder="…or paste a media URL"
                 className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 outline-none focus:border-brand-400" />
               <button onClick={addUrl} className="rounded-lg bg-slate-100 px-3 py-1.5 font-medium text-slate-700">Add</button>
@@ -170,6 +176,21 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
               </div>
             ) : null}
           </div>
+
+          {/* Renders in progress / done */}
+          {reelJobs.length ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">🎬 Your AI videos</div>
+              <div className="space-y-1">
+                {reelJobs.map((j) => (
+                  <div key={j.id} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="min-w-0 truncate text-slate-700"><strong className="capitalize">{j.presenter}</strong> · {j.productName}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 font-bold ${j.status === "DONE" ? "bg-emerald-100 text-emerald-700" : j.status === "FAILED" ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-700"}`}>{j.status === "QUEUED" ? "⏳ queued" : j.status === "RENDERING" ? "🎥 rendering" : j.status.toLowerCase()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {/* Networks */}
           <div className="mt-4">
@@ -266,6 +287,8 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
           ))}
         </div>
       )}
+
+      {showReel ? <ReelWizard locationId={locationId} priceLabel={reelPrice} onClose={() => setShowReel(false)} /> : null}
     </div>
   );
 }

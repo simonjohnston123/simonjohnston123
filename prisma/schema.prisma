@@ -108,6 +108,7 @@ model Location {
   voiceAgent        VoiceAgent?
   callLogs          CallLog[]
   usageEvents       UsageEvent[]
+  renderJobs        RenderJob[]
   inboxFolders      InboxFolder[]
   // Provider keys this business chose to use (set at onboarding) — drives which
   // integrations we surface first.
@@ -385,6 +386,27 @@ model UsageEvent {
 
   @@index([locationId, createdAt])
   @@index([locationId, kind])
+}
+
+// AI marketing-video render jobs (Reel Studio). Rendered on Placid's own GPU
+// video factory; each render is billed via UsageEvent (kind "reel").
+model RenderJob {
+  id           String   @id @default(cuid())
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  productId    String?
+  productName  String
+  presenter    String   @default("dave") // dave | dick (voice locked to presenter)
+  script       Json     // {overlay_title, rrp_line, now_line, ticker, images[], chunks[]}
+  status       String   @default("QUEUED") // QUEUED | RENDERING | DONE | FAILED
+  note         String?  // human-readable progress/errata
+  mediaAssetId String?  // finished mp4 as a MediaAsset (attachable to posts)
+  priceCents   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([locationId, createdAt])
+  @@index([status])
 }
 
 model CallLog {

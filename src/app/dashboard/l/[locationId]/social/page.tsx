@@ -10,7 +10,7 @@ export default async function SocialPage({ params }: { params: { locationId: str
   const locationId = params.locationId;
   await requireLocationAccess(locationId);
 
-  const [connections, posts, products] = await Promise.all([
+  const [connections, posts, products, renders] = await Promise.all([
     prisma.connection.findMany({ where: { locationId, provider: { in: ["FACEBOOK", "YOUTUBE"] } }, select: { provider: true, status: true, accountLabel: true, meta: true } }),
     prisma.socialPost.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 40 }),
     prisma.product.findMany({
@@ -18,7 +18,9 @@ export default async function SocialPage({ params }: { params: { locationId: str
       orderBy: { updatedAt: "desc" }, take: 24,
       select: { id: true, name: true, imageUrl: true },
     }),
+    prisma.renderJob.findMany({ where: { locationId }, orderBy: { createdAt: "desc" }, take: 6 }),
   ]);
+  const reelPriceCents = parseInt(process.env.REEL_RATE_CENTS ?? "", 10) || 1500;
 
   const fb = connections.find((c) => c.provider === "FACEBOOK" && c.status === "CONNECTED");
   const yt = connections.find((c) => c.provider === "YOUTUBE" && c.status === "CONNECTED");
@@ -59,6 +61,8 @@ export default async function SocialPage({ params }: { params: { locationId: str
         fbPages={fbPages}
         queue={queue}
         productImages={products.map((p) => ({ id: p.id, name: p.name, url: p.imageUrl! }))}
+        reelJobs={renders.map((r) => ({ id: r.id, productName: r.productName, presenter: r.presenter, status: r.status, note: r.note, createdAt: r.createdAt.toISOString() }))}
+        reelPrice={`$${(reelPriceCents / 100).toFixed(0)}`}
       />
     </div>
   );

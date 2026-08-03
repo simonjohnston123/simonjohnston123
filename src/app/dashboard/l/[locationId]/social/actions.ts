@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { publishPost, type SocialNetworkKey } from "@/lib/social";
+import { generateReelScript, type ReelScript } from "@/lib/reels";
 
 const VALID_NETWORKS: SocialNetworkKey[] = ["facebook", "instagram", "youtube", "tiktok", "snapchat", "google_business"];
 
@@ -68,4 +69,55 @@ export async function deleteSocialPostAction(locationId: string, postId: string)
   await prisma.socialPost.deleteMany({ where: { id: postId, locationId } });
   revalidatePath(`/dashboard/l/${locationId}/social`);
   return { ok: true };
+}
+
+/* ---------------- 🎬 Reel Studio ---------------- */
+
+export async function searchReelProductsAction(locationId: string, q: string) {
+  await requireLocationAccess(locationId);
+  const query = q.trim();
+  if (query.length < 2) return [];
+  const rows = await prisma.product.findMany({
+    where: { locationId, active: true, imageUrl: { not: null }, name: { contains: query, mode: "insensitive" } },
+    orderBy: { inventory: "desc" },
+    take: 12,
+    select: { id: true, name: true, imageUrl: true, priceCents: true },
+  });
+  return rows.map((p) => ({ id: p.id, name: p.name, imageUrl: p.imageUrl!, priceCents: p.priceCents ?? 0 }));
+}
+
+export async function generateReelScriptAction(locationId: string, productId: string) {
+  await requireLocationAccess(locationId);
+  return generateReelScript(locationId, productId);
+}
+
+export type CreateReelResult = { ok?: true; jobId?: string; error?: string };
+
+export async function createRenderJobAction(input: {
+  locationId: string; productId: string; productName: string; presenter: string; script: ReelScript;
+}): Promise<CreateReelResult> {
+  await requireLocationAccess(input.locationId);
+  const presenter = input.presenter === "dick" ? "dick" : "dave";
+  const chunks = (input.script?.chunks ?? []).map((c) => String(c).trim()).filter(Boolean).slice(0, 3);
+  if (!chunks.length) return { error: "The script needs at least one spoken part." };
+
+  const priceCents = parseInt(process.env.REEL_RATE_CENTS ?? "", 10) || 1500; // $15 retail per reel
+  const job = await prisma.renderJob.create({
+    data: {
+      locationId: input.locationId,
+      productId: input.productId,
+      productName: input.productName.slice(0, 180),
+      presenter,
+      script: { ...input.script, chunks },
+      status: "QUEUED",
+      note: "Queued — renders on the Placid video factory (~15 min once picked up).",
+      priceCents,
+    },
+  });
+  // Bill it — every render pays, including our own businesses (dog-fooding).
+  await prisma.usageEvent.create({
+    data: { locationId: input.locationId, kind: "reel", qty: 1, unitCents: priceCents, totalCents: priceCents, ref: job.id },
+  }).catch(() => {});
+  revalidatePath(`/dashboard/l/${input.locationId}/social`);
+  return { ok: true, jobId: job.id };
 }
