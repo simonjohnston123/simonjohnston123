@@ -44,6 +44,7 @@ export async function updateProductAction(_prev: unknown, formData: FormData) {
       price: priceOf(String(formData.get("price") ?? "")),
       description: String(formData.get("description") ?? "").trim() || null,
       imageUrl: String(formData.get("imageUrl") ?? "").trim() || null,
+      categoryId: String(formData.get("categoryId") ?? "").trim() || null,
       active: formData.get("active") === "on",
     },
   });
@@ -68,4 +69,58 @@ export async function deleteProductAction(formData: FormData) {
   await requireLocationAccess(locationId);
   await prisma.product.delete({ where: { id: productId, locationId } });
   redirect(`/dashboard/l/${locationId}/products`);
+}
+
+/* ---------------- Categories ---------------- */
+
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "category";
+}
+
+export async function createCategoryAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  await requireLocationAccess(locationId);
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  if (!name) return;
+  const base = slugify(name);
+  let slug = base;
+  for (let i = 2; await prisma.productCategory.findFirst({ where: { locationId, slug }, select: { id: true } }); i++) {
+    slug = `${base}-${i}`;
+  }
+  const count = await prisma.productCategory.count({ where: { locationId } });
+  await prisma.productCategory.create({ data: { locationId, name, slug, position: count } });
+  revalidatePath(`/dashboard/l/${locationId}/products`);
+}
+
+export async function renameCategoryAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const id = String(formData.get("categoryId") ?? "");
+  await requireLocationAccess(locationId);
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  if (!name) return;
+  await prisma.productCategory.updateMany({ where: { id, locationId }, data: { name } });
+  revalidatePath(`/dashboard/l/${locationId}/products`);
+}
+
+/** Delete a category; its products simply become uncategorised. */
+export async function deleteCategoryAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const id = String(formData.get("categoryId") ?? "");
+  await requireLocationAccess(locationId);
+  await prisma.productCategory.deleteMany({ where: { id, locationId } });
+  revalidatePath(`/dashboard/l/${locationId}/products`);
+}
+
+/** Assign a product to a category (empty string clears it). */
+export async function setProductCategoryAction(formData: FormData) {
+  const locationId = String(formData.get("locationId") ?? "");
+  const productId = String(formData.get("productId") ?? "");
+  const categoryId = String(formData.get("categoryId") ?? "").trim();
+  await requireLocationAccess(locationId);
+  await prisma.product.updateMany({
+    where: { id: productId, locationId },
+    data: { categoryId: categoryId || null },
+  });
+  revalidatePath(`/dashboard/l/${locationId}/products`);
+  revalidatePath(`/dashboard/l/${locationId}/products/${productId}`);
 }

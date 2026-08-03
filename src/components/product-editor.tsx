@@ -15,6 +15,8 @@ export function ProductEditor({
   description,
   imageUrl,
   active,
+  categoryId,
+  categories,
 }: {
   locationId: string;
   productId: string;
@@ -23,6 +25,8 @@ export function ProductEditor({
   description: string;
   imageUrl: string;
   active: boolean;
+  categoryId?: string;
+  categories?: { id: string; name: string }[];
 }) {
   const [state, action] = useFormState(updateProductAction, INIT);
   const [img, setImg] = useState(imageUrl);
@@ -65,6 +69,16 @@ export function ProductEditor({
         <label className="label">Description</label>
         <textarea name="description" defaultValue={description} rows={4} className="input" />
       </div>
+
+      {categories?.length ? (
+        <div>
+          <label className="label" htmlFor="categoryId">Category</label>
+          <select id="categoryId" name="categoryId" defaultValue={categoryId ?? ""} className="input">
+            <option value="">— Uncategorised —</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      ) : null}
 
       <div>
         <label className="label">Product photo</label>

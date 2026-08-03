@@ -103,6 +103,7 @@ model Location {
   externalBusy      ExternalBusy[]
   forms             Form[]
   products          Product[]
+  productCategories ProductCategory[]
   socialPosts       SocialPost[]
   mediaAssets       MediaAsset[]
   voiceAgent        VoiceAgent?
@@ -483,6 +484,12 @@ model Calendar {
   description String?      @db.Text
   price       Int?         // whole-dollar price for this service/booking option (optional)
   active      Boolean      @default(true)
+  // Mobile/on-site services: a fixed call-out fee, plus travel charged either
+  // as a flat fee or per km beyond a free radius. All in cents.
+  calloutFeeCents  Int?
+  travelFeeCents   Int?    // flat travel fee
+  travelPerKmCents Int?    // per-km rate beyond travelFreeKm
+  travelFreeKm     Int?    // km included before per-km charging starts
   // Weekly availability: { "1": [["09:00","17:00"]], ... } keyed by weekday 0=Sun..6=Sat.
   availability     Json    @default("{}")
   bookingWindowDays Int    @default(14)
@@ -546,10 +553,28 @@ model ExternalBusy {
 // Products — a simple catalogue per business, shown at /shop/[slug].
 // ---------------------------------------------------------------------------
 
+// Business-defined product categories (create first, then assign products).
+// Separate from `Product.category`, which holds the raw supplier department.
+model ProductCategory {
+  id         String    @id @default(cuid())
+  locationId String
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String
+  position   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  products   Product[]
+
+  @@unique([locationId, slug])
+  @@index([locationId])
+}
+
 model Product {
   id          String   @id @default(cuid())
   locationId  String
   location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  productCategory ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   name        String
   price       Int?     // whole-dollar price (shop page; kept for back-compat)
   description String?  @db.Text

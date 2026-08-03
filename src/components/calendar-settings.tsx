@@ -34,7 +34,12 @@ export function CalendarSettings({
   calendar,
 }: {
   locationId: string;
-  calendar: { id: string; name: string; description: string | null; price: number | null; active: boolean; durationMinutes: number; bookingWindowDays: number; availability: unknown };
+  calendar: {
+    id: string; name: string; description: string | null; price: number | null; active: boolean;
+    durationMinutes: number; bookingWindowDays: number; availability: unknown;
+    calloutFeeCents?: number | null; travelFeeCents?: number | null;
+    travelPerKmCents?: number | null; travelFreeKm?: number | null;
+  };
 }) {
   const [state, formAction] = useFormState(updateCalendarAction, { error: "", ok: false } as { error: string; ok?: boolean });
   const [days, setDays] = useState<Record<string, DayState>>(() => initDays((calendar.availability as Availability) ?? {}));
@@ -66,6 +71,32 @@ export function CalendarSettings({
         <div>
           <label className="label">Slot length (min)</label>
           <input name="durationMinutes" type="number" defaultValue={calendar.durationMinutes} className="input" />
+        </div>
+
+        {/* Mobile / on-site charges. Leave blank for services done at your premises. */}
+        <div className="sm:col-span-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Mobile service fees <span className="font-normal normal-case text-slate-400">— leave blank if the customer comes to you</span></div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div>
+                <label className="label">Call-out fee ($)</label>
+                <input name="calloutFee" type="number" min="0" step="0.01" defaultValue={calendar.calloutFeeCents != null ? (calendar.calloutFeeCents / 100).toFixed(2) : ""} placeholder="e.g. 80" className="input" />
+              </div>
+              <div>
+                <label className="label">Travel fee ($)</label>
+                <input name="travelFee" type="number" min="0" step="0.01" defaultValue={calendar.travelFeeCents != null ? (calendar.travelFeeCents / 100).toFixed(2) : ""} placeholder="flat" className="input" />
+              </div>
+              <div>
+                <label className="label">Per km ($)</label>
+                <input name="travelPerKm" type="number" min="0" step="0.01" defaultValue={calendar.travelPerKmCents != null ? (calendar.travelPerKmCents / 100).toFixed(2) : ""} placeholder="e.g. 1.10" className="input" />
+              </div>
+              <div>
+                <label className="label">Free within (km)</label>
+                <input name="travelFreeKm" type="number" min="0" step="1" defaultValue={calendar.travelFreeKm ?? ""} placeholder="e.g. 20" className="input" />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Call-out is charged once per booking. Travel is a flat fee and/or per-km beyond the free radius.</p>
+          </div>
         </div>
         <div className="sm:col-span-2">
           <label className="label">Description (shown to customers)</label>

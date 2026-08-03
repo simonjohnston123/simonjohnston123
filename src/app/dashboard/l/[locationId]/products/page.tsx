@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui";
 import { NewProduct } from "@/components/new-product";
 import { ProductImportButton } from "@/components/product-import-button";
 import { ProductListingTable } from "@/components/product-listing-table";
+import { CategoryManager } from "@/components/category-manager";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -40,11 +41,19 @@ export default async function ProductsPage({
   const where: Prisma.ProductWhereInput = { locationId };
   if (q) where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }];
   if (category) where.category = category === "__none__" ? null : category;
+  // Business-defined category (own taxonomy) — separate from supplier department.
+  const ownCategory = searchParams.cat || undefined;
+  if (ownCategory) where.categoryId = ownCategory === "__none__" ? null : ownCategory;
   if (source) where.source = source === "manual" ? null : source;
   if (warehouse) where.warehouse = warehouse === "__none__" ? null : warehouse;
   if (supplier) where.supplier = supplier === "__none__" ? null : supplier;
 
-  const [count, products, cats, sources, warehouses, suppliers] = await Promise.all([
+  const [ownCats, count, products, cats, sources, warehouses, suppliers] = await Promise.all([
+    prisma.productCategory.findMany({
+      where: { locationId },
+      orderBy: { position: "asc" },
+      select: { id: true, name: true, _count: { select: { products: true } } },
+    }),
     prisma.product.count({ where }),
     prisma.product.findMany({ where, orderBy: SORTS[sort], skip: (page - 1) * per, take: per }),
     prisma.product.groupBy({ by: ["category"], where: { locationId }, _count: { _all: true } }),
@@ -84,6 +93,10 @@ export default async function ProductsPage({
         subtitle={`${count} product${count === 1 ? "" : "s"} in your catalogue`}
         action={
           <div className="flex items-center gap-2">
+            <CategoryManager
+              locationId={locationId}
+              categories={ownCats.map((c) => ({ id: c.id, name: c.name, count: c._count.products }))}
+            />
             <ProductImportButton locationId={locationId} />
             <Link href={`/shop/${location.slug}`} target="_blank" className="btn-secondary text-sm">Open shop ↗</Link>
           </div>
@@ -93,6 +106,23 @@ export default async function ProductsPage({
       <div className="mb-4">
         <NewProduct locationId={locationId} />
       </div>
+
+      {ownCats.length ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Categories</span>
+          <Link href={base} className={`rounded-full border px-3 py-1 text-xs font-medium ${!ownCategory ? "border-transparent bg-slate-900 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>All</Link>
+          {ownCats.map((c) => (
+            <Link
+              key={c.id}
+              href={`${base}?cat=${c.id}`}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${ownCategory === c.id ? "border-transparent bg-slate-900 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            >
+              {c.name} · {c._count.products}
+            </Link>
+          ))}
+          <Link href={`${base}?cat=__none__`} className={`rounded-full border px-3 py-1 text-xs font-medium ${ownCategory === "__none__" ? "border-transparent bg-slate-900 text-white" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>Uncategorised</Link>
+        </div>
+      ) : null}
 
       {/* Category grouping chips — scrollable so a big taxonomy doesn't bury the table. */}
       {catChips.length > 0 || uncategorised > 0 ? (

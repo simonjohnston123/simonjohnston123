@@ -12,6 +12,11 @@ export default async function ProductEditPage({ params }: { params: { locationId
   await requireLocationAccess(params.locationId);
 
   const product = await prisma.product.findFirst({ where: { id: params.productId, locationId: params.locationId } });
+  const productCategories = await prisma.productCategory.findMany({
+    where: { locationId: params.locationId },
+    orderBy: { position: "asc" },
+    select: { id: true, name: true },
+  });
   if (!product) notFound();
 
   return (
@@ -30,6 +35,8 @@ export default async function ProductEditPage({ params }: { params: { locationId
           price={product.price}
           description={product.description ?? ""}
           imageUrl={product.imageUrl ?? ""}
+          categoryId={product.categoryId ?? ""}
+          categories={productCategories.map((c) => ({ id: c.id, name: c.name }))}
           active={product.active}
         />
       </div>

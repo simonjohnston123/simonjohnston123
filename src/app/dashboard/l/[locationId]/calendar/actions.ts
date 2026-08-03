@@ -119,12 +119,30 @@ export async function updateCalendarAction(_prev: unknown, formData: FormData) {
   const priceRaw = String(formData.get("price") ?? "").trim();
   const price = priceRaw === "" ? null : Math.max(0, Math.round(Number(priceRaw) || 0));
 
+  // Mobile/on-site fees — entered in dollars, stored in cents. Blank = not charged.
+  const cents = (key: string): number | null => {
+    const raw = String(formData.get(key) ?? "").trim();
+    if (raw === "") return null;
+    const n = Number(raw.replace(/[^0-9.]/g, ""));
+    return Number.isFinite(n) ? Math.max(0, Math.round(n * 100)) : null;
+  };
+  const whole = (key: string): number | null => {
+    const raw = String(formData.get(key) ?? "").trim();
+    if (raw === "") return null;
+    const n = parseInt(raw.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) ? Math.max(0, n) : null;
+  };
+
   await prisma.calendar.update({
     where: { id: calendarId, locationId },
     data: {
       name: String(formData.get("name") ?? "").trim() || "Calendar",
       description: String(formData.get("description") ?? "").trim() || null,
       price,
+      calloutFeeCents: cents("calloutFee"),
+      travelFeeCents: cents("travelFee"),
+      travelPerKmCents: cents("travelPerKm"),
+      travelFreeKm: whole("travelFreeKm"),
       active: formData.get("active") === "on",
       durationMinutes,
       bookingWindowDays,
