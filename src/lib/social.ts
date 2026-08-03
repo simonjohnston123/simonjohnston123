@@ -186,6 +186,17 @@ async function publishYouTube(locationId: string, body: string, mediaUrls: strin
   return { ok: true, id: `youtu.be/${j.id}`, at: new Date().toISOString() };
 }
 
+/** Google Business Profile post — appears on the business's Google listing. */
+async function publishGoogleBusiness(locationId: string, body: string, mediaUrls: string[], mediaKind: string | null): Promise<NetResult> {
+  if (!body.trim()) return { ok: false, error: "Google Business posts need some text.", at: new Date().toISOString() };
+  const { postToBusinessProfile } = await import("@/lib/google-business");
+  const image = mediaKind === "image" ? mediaUrls[0] : undefined;
+  const r = await postToBusinessProfile(locationId, body, image);
+  return r.ok
+    ? { ok: true, id: "Google Business Profile", at: new Date().toISOString() }
+    : { ok: false, error: r.error ?? "Google Business post failed.", at: new Date().toISOString() };
+}
+
 function stub(reason: string): NetResult {
   return { ok: false, error: reason, at: new Date().toISOString() };
 }
@@ -211,7 +222,7 @@ export async function publishPost(postId: string): Promise<void> {
       else if (net === "youtube") results[net] = await publishYouTube(post.locationId, post.body, mediaUrls, post.mediaKind);
       else if (net === "tiktok") results[net] = stub("TikTok posting needs our TikTok developer app approved first.");
       else if (net === "snapchat") results[net] = stub("Snapchat has no organic posting API — ads only, coming with the ads phase.");
-      else if (net === "google_business") results[net] = stub("Google Business Profile posting needs the Google OAuth app verified first.");
+      else if (net === "google_business") results[net] = await publishGoogleBusiness(post.locationId, post.body, mediaUrls, post.mediaKind);
       else results[net] = stub("Unknown network.");
     } catch (e) {
       results[net] = { ok: false, error: String(e instanceof Error ? e.message : e).slice(0, 300), at: new Date().toISOString() };

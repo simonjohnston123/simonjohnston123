@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { disconnectGoogleAction, syncGmailAction } from "@/app/dashboard/l/[locationId]/google/actions";
+import { disconnectGoogleAction, syncGmailAction, syncReviewsAction, syncCalendarAction } from "@/app/dashboard/l/[locationId]/google/actions";
 
 export type Service = { key: string; label: string; icon: string; blurb: string; tier: string; granted: boolean };
 
@@ -95,6 +95,30 @@ export function GoogleConnect({
             disabled={pending}
             className="btn-secondary text-sm"
           >{pending ? "Syncing…" : "✉️ Sync Gmail now"}</button>
+        ) : null}
+
+        {connected && services.find((s) => s.key === "business")?.granted ? (
+          <button
+            onClick={() => start(async () => {
+              const r = await syncReviewsAction(locationId);
+              setMsg(r.error ? r.error : `✓ Pulled ${r.imported} review${r.imported === 1 ? "" : "s"} into your inbox.`);
+              router.refresh();
+            })}
+            disabled={pending}
+            className="btn-secondary text-sm"
+          >{pending ? "Syncing…" : "⭐ Sync Google reviews"}</button>
+        ) : null}
+
+        {connected && services.find((s) => s.key === "calendar")?.granted ? (
+          <button
+            onClick={() => start(async () => {
+              const r = await syncCalendarAction(locationId);
+              setMsg(r.error ? r.error : "✓ Calendar synced — your Google commitments now block booking slots.");
+              router.refresh();
+            })}
+            disabled={pending}
+            className="btn-secondary text-sm"
+          >{pending ? "Syncing…" : "📅 Sync calendar"}</button>
         ) : null}
 
         {msg ? <span className={`text-sm font-semibold ${msg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{msg}</span> : null}
