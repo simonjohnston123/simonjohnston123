@@ -3,7 +3,7 @@ import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader, Badge } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
-import { addRoomAction, deleteRoomAction, saveHomesteadSettingsAction, setBookingStatusAction } from "./actions";
+import { addClientAction, addRoomAction, deleteRoomAction, saveHomesteadSettingsAction, setBookingStatusAction } from "./actions";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +60,19 @@ export default async function RoomsPage({ params }: { params: { locationId: stri
               <div><label className="label">Photo URL</label><input name="imageUrl" className="input" placeholder="https://… (upload coming soon)" /></div>
               <div><label className="label">Description</label><input name="description" className="input" placeholder="Furnished, ensuite, all bills included" /></div>
               <SubmitButton className="btn-primary">Add room</SubmitButton>
+            </form>
+          </section>
+
+          {/* Add a client */}
+          <section>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Add a client</h2>
+            <form action={addClientAction} className="card grid gap-3 p-4 sm:grid-cols-2">
+              <input type="hidden" name="locationId" value={params.locationId} />
+              <div><label className="label">First name</label><input name="firstName" className="input" placeholder="Jane" /></div>
+              <div><label className="label">Last name</label><input name="lastName" className="input" placeholder="Doe" /></div>
+              <div><label className="label">Email</label><input name="email" type="email" className="input" placeholder="jane@example.com" /></div>
+              <div><label className="label">Phone</label><input name="phone" className="input" placeholder="04xx xxx xxx" /></div>
+              <div className="sm:col-span-2"><SubmitButton className="btn-primary">Add client</SubmitButton></div>
             </form>
           </section>
 
