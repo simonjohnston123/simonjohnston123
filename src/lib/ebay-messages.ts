@@ -248,7 +248,28 @@ function money(cents: number | null | undefined, dollars?: number | null): strin
   return null;
 }
 
-/** Best-effort match from an eBay listing title to a catalogue product. */
+/** Distinctive lower-cased words from a listing title. */
+function significantWords(title: string): string[] {
+  return [
+    ...new Set(
+      title
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    ),
+  ];
+}
+
+/**
+ * Match an eBay listing title to a catalogue product.
+ *
+ * eBay truncates titles to 80 characters and sellers keyword-stuff them, so an
+ * exact match only lands about 40% of the time. The fallback scores candidates
+ * on how much of the title they actually cover and REFUSES a weak match —
+ * giving the AI no facts (so it offers to confirm) is far safer than giving it
+ * facts from a different product, which becomes a wrong answer to a customer.
+ */
 async function matchProduct(locationId: string, title: string | null): Promise<ProductFacts | null> {
   if (!title) return null;
   const select = {
@@ -259,23 +280,28 @@ async function matchProduct(locationId: string, title: string | null): Promise<P
   const exact = await prisma.product.findFirst({ where: { locationId, name: title }, select });
   if (exact) return exact;
 
-  // Fall back to the longest distinctive words from the listing title — eBay
-  // titles are truncated and keyword-stuffed, so a whole-string match rarely hits.
-  const words = title
-    .replace(/[^\w\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 3)
-    .sort((a, b) => b.length - a.length)
-    .slice(0, 4);
+  const words = significantWords(title);
+  if (words.length < 2) return null;
 
-  for (const w of words) {
-    const hit = await prisma.product.findFirst({
-      where: { locationId, name: { contains: w, mode: "insensitive" } },
-      select,
-    });
-    if (hit) return hit;
+  // Narrow with the two longest (most distinctive) words, then score.
+  const anchors = [...words].sort((a, b) => b.length - a.length).slice(0, 2);
+  const candidates = await prisma.product.findMany({
+    where: { locationId, AND: anchors.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })) },
+    take: 40,
+    select,
+  });
+
+  let best: ProductFacts | null = null;
+  let bestScore = 0;
+  for (const c of candidates) {
+    const name = c.name.toLowerCase();
+    const score = words.filter((w) => name.includes(w)).length / words.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
   }
-  return null;
+  return bestScore >= 0.6 ? best : null;
 }
 
 /** A few alternatives from the same category, so the AI can offer options. */
