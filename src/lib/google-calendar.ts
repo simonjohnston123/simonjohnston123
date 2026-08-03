@@ -23,11 +23,22 @@ const BUSY_WINDOW_DAYS = 45;
 type StoredTokens = { accessToken: string; refreshToken?: string; expiresAt?: number };
 type ConnMeta = { calendarId?: string; lastBusySyncAt?: number };
 
-/** The CONNECTED Google Calendar connection for a location, or null. */
+/** The CONNECTED calendar connection for a location, or null.
+ *  Prefers the legacy dedicated GOOGLE_CALENDAR connection; otherwise falls
+ *  back to the unified GOOGLE connection (one Google login covering every
+ *  service), provided the business granted the calendar scope. */
 async function getConnection(locationId: string): Promise<Connection | null> {
-  return prisma.connection.findFirst({
+  const dedicated = await prisma.connection.findFirst({
     where: { locationId, provider: PROVIDER, status: "CONNECTED" },
   });
+  if (dedicated) return dedicated;
+
+  const unified = await prisma.connection.findFirst({
+    where: { locationId, provider: "GOOGLE", status: "CONNECTED" },
+  });
+  if (!unified) return null;
+  const services = ((unified.meta ?? {}) as { services?: string[] }).services ?? [];
+  return services.includes("calendar") ? unified : null;
 }
 
 function calendarId(conn: Connection): string {
