@@ -100,9 +100,11 @@ export async function createRenderJobAction(input: {
   locationId: string; productId: string; productName: string; presenter: string; script: ReelScript;
 }): Promise<CreateReelResult> {
   await requireLocationAccess(input.locationId);
-  const presenter = input.presenter === "dick" ? "dick" : "dave";
+  const presenter = ["dave", "dick", "custom", "music"].includes(input.presenter) ? input.presenter : "dave";
   const chunks = (input.script?.chunks ?? []).map((c) => String(c).trim()).filter(Boolean).slice(0, 3);
-  if (!chunks.length) return { error: "The script needs at least one spoken part." };
+  if (!chunks.length) return { error: presenter === "music" ? "Add at least one caption line." : "The script needs at least one spoken part." };
+  const scriptExtra = input.script as ReelScript & { portrait_url?: string };
+  if (presenter === "custom" && !/^https?:\/\//.test(scriptExtra.portrait_url ?? "")) return { error: "Upload a presenter photo first." };
 
   const priceCents = parseInt(process.env.REEL_RATE_CENTS ?? "", 10) || 1500; // $15 retail per reel
   const job = await prisma.renderJob.create({
