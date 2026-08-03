@@ -82,10 +82,32 @@ async function businessContext(locationId: string): Promise<string> {
   return lines.filter(Boolean).join("\n");
 }
 
+/** Live catalogue lookup: when the caller names a product, search the REAL
+ *  inventory instead of trusting the tiny context sample (the "air fryer"
+ *  lesson — never deny stocking something without checking). */
+async function productLookup(locationId: string, callerText: string): Promise<string> {
+  const words = Array.from(new Set(callerText.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4)));
+  if (!words.length) return "";
+  const OR = words.flatMap((w) => [{ name: { contains: w, mode: "insensitive" as const } }]);
+  const hits = await prisma.product.findMany({
+    where: { locationId, active: true, OR },
+    orderBy: { inventory: "desc" },
+    take: 5,
+    select: { name: true, priceCents: true, price: true, inventory: true },
+  });
+  if (!hits.length) return "";
+  return (
+    "Live catalogue matches for what the caller mentioned (these ARE in stock unless qty 0):\n" +
+    hits.map((p) => `- ${p.name} — $${p.priceCents ? (p.priceCents / 100).toFixed(2) : p.price ?? "?"}${p.inventory != null ? ` (${p.inventory} in stock)` : ""}`).join("\n")
+  );
+}
+
 /** One conversational turn: caller said something → what do we say/do? */
 export async function decide(locationId: string, transcript: Turn[]): Promise<AiDecision> {
   const key = (await getSetting(SETTING_KEYS.anthropicApiKey)) || process.env.ANTHROPIC_API_KEY;
-  const ctx = await businessContext(locationId);
+  const lastCaller = transcript.filter((t) => t.role === "caller").pop()?.text ?? "";
+  const [ctxBase, products] = await Promise.all([businessContext(locationId), productLookup(locationId, lastCaller)]);
+  const ctx = products ? `${ctxBase}\n\n${products}` : ctxBase;
   const history = transcript.slice(-12).map((t) => `${t.role === "caller" ? "Caller" : "You"}: ${t.text}`).join("\n");
 
   if (key) {
@@ -164,6 +186,16 @@ export async function finalizeCall(callSid: string, durationSec: number | null):
   }
 
   await prisma.callLog.update({ where: { callSid }, data: { status: "filed", durationSec: durationSec ?? undefined, contactId, summary: notes ?? undefined } });
+
+  // Meter the call: billed per started minute at the platform retail rate.
+  // This ledger row is what the monthly Stripe rollup charges the business.
+  if (durationSec && durationSec > 0) {
+    const minutes = Math.max(1, Math.ceil(durationSec / 60));
+    const unitCents = parseInt(process.env.VOICE_RATE_CENTS ?? "", 10) || 25; // default $0.25/min retail
+    await prisma.usageEvent.create({
+      data: { locationId: call.locationId, kind: "voice_min", qty: minutes, unitCents, totalCents: minutes * unitCents, ref: callSid },
+    }).catch(() => {});
+  }
   void convo;
 }
 

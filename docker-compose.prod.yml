@@ -74,6 +74,8 @@ services:
       # Social poster — YouTube OAuth app (Google Cloud). Optional until connected.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # AI receptionist retail rate per started minute (cents) — usage ledger.
+      VOICE_RATE_CENTS: ${VOICE_RATE_CENTS:-25}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads

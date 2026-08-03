@@ -107,6 +107,7 @@ model Location {
   mediaAssets       MediaAsset[]
   voiceAgent        VoiceAgent?
   callLogs          CallLog[]
+  usageEvents       UsageEvent[]
   inboxFolders      InboxFolder[]
   // Provider keys this business chose to use (set at onboarding) — drives which
   // integrations we surface first.
@@ -366,6 +367,24 @@ model VoiceAgent {
   voice       String   @default("Polly.Olivia-Neural") // AU neural voice
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// One row per billable platform event (voice minute, SMS, reel render, …).
+// Monthly rollup bills each business via the platform Stripe. Master vendor
+// accounts are Placid's; clients only ever see these metered charges.
+model UsageEvent {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  kind       String   // voice_min | sms | reel | ...
+  qty        Int      @default(1)
+  unitCents  Int      // retail price per unit charged to the business
+  totalCents Int
+  ref        String?  // e.g. callSid, message id, render id
+  createdAt  DateTime @default(now())
+
+  @@index([locationId, createdAt])
+  @@index([locationId, kind])
 }
 
 model CallLog {
