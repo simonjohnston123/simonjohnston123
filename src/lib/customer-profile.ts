@@ -109,8 +109,15 @@ export async function rebuildCustomerProfiles(locationId: string): Promise<Profi
   // suppresses, so it uses the same rule rather than a second opinion.
   const dupes = await duplicateOrderIds(locationId);
 
+  // An order is a sale — but a cancelled one isn't. There are none today, so
+  // this costs nothing now and stops the first cancellation quietly inflating
+  // someone's lifetime value and mislabelling them a repeat buyer.
   const orders = await prisma.order.findMany({
-    where: { locationId, ...(dupes.size ? { id: { notIn: [...dupes] } } : {}) },
+    where: {
+      locationId,
+      status: { not: "CANCELLED" },
+      ...(dupes.size ? { id: { notIn: [...dupes] } } : {}),
+    },
     orderBy: { placedAt: "asc" },
     select: {
       id: true, contactId: true, source: true, total: true, items: true,
