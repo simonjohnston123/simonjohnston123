@@ -126,15 +126,40 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Drop empty values so a product's attributes say only what we actually know. */
+/** Supplier placeholders that look like data but mean "we didn't say". */
+const PLACEHOLDERS = new Set(["n/a", "na", "does not apply", "doesnotapply", "none", "null", "-", "unknown", "[object object]"]);
+
+/** Dimensions and weight only ever arrive as 0 when DZ has no figure. */
+const MEASURED = new Set(["weightKg", "lengthMm", "widthMm", "heightMm", "cbm"]);
+
+/**
+ * Keep only what the supplier actually told us.
+ *
+ * A stored 0 for weight reads as "weighs nothing" to a filter, and "N/A" reads
+ * as a barcode. An absent key is honest; a placeholder is worse than silence,
+ * because an AI agent will quote it.
+ */
 function cleanAttributes(o: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(o)) {
     if (v === null || v === undefined || v === "") continue;
+    if (typeof v === "number" && MEASURED.has(k) && v <= 0) continue;
+    if (typeof v === "string" && PLACEHOLDERS.has(v.trim().toLowerCase())) continue;
     if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0) continue;
     out[k] = v;
   }
   return out;
+}
+
+/** DZ's `spec` is sometimes an object; String() on it yields "[object Object]". */
+function specText(v: unknown): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return v.slice(0, 2000);
+  try {
+    return JSON.stringify(v).slice(0, 2000);
+  } catch {
+    return null;
+  }
 }
 
 /** Look up supplier facts for a batch of SKUs (keep batches modest — 60/min). */
@@ -177,7 +202,7 @@ export async function dzFactsForSkus(skus: string[]): Promise<Map<string, DzFact
         brand: r.brand ? String(r.brand) : null,
         colour: r.colour ? String(r.colour) : null,
         dispatchEta: r.ETA ? String(r.ETA) : null,
-        spec: r.spec ? String(r.spec).slice(0, 2000) : null,
+        spec: specText(r.spec),
         rrpCents: rrp === null ? null : Math.round(rrp * 100),
         category: cleanAttributes({
           l1: r.l1_category_name ? String(r.l1_category_name) : null,
