@@ -111,6 +111,7 @@ model Location {
   usageEvents       UsageEvent[]
   renderJobs        RenderJob[]
   inboxFolders      InboxFolder[]
+  supplierOrders    SupplierOrder[]
   // Provider keys this business chose to use (set at onboarding) — drives which
   // integrations we surface first.
   wantedIntegrations Json @default("[]")
@@ -967,11 +968,50 @@ model Order {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  supplierOrders  SupplierOrder[]
+
   @@index([locationId])
   @@index([locationId, status])
   @@index([contactId])
   @@index([locationId, source, externalId])
   @@index([locationId, placedAt])
+}
+
+enum SupplierOrderStatus {
+  TO_PLACE
+  PLACED
+  SHIPPED
+  FAILED
+  CANCELLED
+}
+
+/// One purchase from one supplier, covering the lines of a customer order that
+/// that supplier fulfils. A single order can split across suppliers, so this is
+/// deliberately separate from Order rather than a status on it — it is what the
+/// fulfilment desk works from, replacing the per-supplier CSVs.
+model SupplierOrder {
+  id          String              @id @default(cuid())
+  locationId  String
+  location    Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orderId     String
+  order       Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplier    String
+  status      SupplierOrderStatus @default(TO_PLACE)
+  /// [{ sku, name, qty, costCents, productId, warehouse }]
+  items       Json                @default("[]")
+  costCents   Int?
+  /// The supplier's own order reference, once placed.
+  supplierRef String?
+  tracking    String?
+  carrier     String?
+  error       String?             @db.Text
+  placedAt    DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([orderId, supplier])
+  @@index([locationId, status])
+  @@index([locationId, supplier])
 }
 
 // ---------------------------------------------------------------------------

@@ -50,7 +50,8 @@ type EbayOrder = {
   orderFulfillmentStatus?: string;
   pricingSummary?: { total?: { value?: string } };
   buyer?: { username?: string };
-  lineItems?: { title?: string; quantity?: number; lineItemCost?: { value?: string } }[];
+  // sku is what lets the ordering desk work out which supplier to buy from.
+  lineItems?: { title?: string; quantity?: number; sku?: string; lineItemCost?: { value?: string } }[];
   fulfillmentStartInstructions?: {
     shippingStep?: {
       shipTo?: {
@@ -128,7 +129,12 @@ export async function syncEbayOrders(locationId: string): Promise<EbaySyncResult
     }
     contactId = contact.id;
 
-    const items = (o.lineItems ?? []).map((li) => ({ name: li.title ?? "Item", qty: li.quantity ?? 1, price: Number(li.lineItemCost?.value) || 0 }));
+    const items = (o.lineItems ?? []).map((li) => ({
+      name: li.title ?? "Item",
+      qty: li.quantity ?? 1,
+      price: Number(li.lineItemCost?.value) || 0,
+      sku: li.sku ?? null,
+    }));
     const data = {
       contactId,
       number: Number(o.legacyOrderId) || 0,

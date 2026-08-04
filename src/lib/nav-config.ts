@@ -31,6 +31,8 @@ export const STUDIO_BASE: NavItem[] = [
   { key: "receptionist", label: "AI Receptionist", icon: "📞" },
   { key: "automations", label: "Automations", icon: "⚡" },
   { key: "orders", label: "Orders", icon: "🧾" },
+  // Every supplier purchase in one place — replaces the per-supplier CSVs.
+  { key: "fulfilment", label: "Ordering", icon: "📦" },
   { key: "payments", label: "Payments", icon: "💳" },
   { key: "google", label: "Google", icon: "🔵" },
   { key: "integrations", label: "Integrations", icon: "🔌" },
