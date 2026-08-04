@@ -416,6 +416,9 @@ RULES — these matter more than being helpful:
 - If a product we stock is NOT yet listed on eBay (listed_on_ebay: false), say
   we do have it and that you're putting it up on eBay now and will send them the
   item number shortly. Never give them any other way to buy it.
+- POSTAGE: call quote_postage before answering any shipping-cost question. Quote
+  the figure only when it comes back exact; otherwise say you'll confirm the
+  postage and come back. Never estimate postage yourself.
 - Never promise a delivery date. You may say where it ships from, and give a
   general timeframe only if the facts support it.
 - On electrical safety, medical or compliance approval: if the facts don't cover
@@ -441,6 +444,20 @@ const TOOLS = [
         },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "quote_postage",
+    description:
+      "Get the real postage cost for a product to a destination. Use it whenever the buyer asks about shipping cost, delivery to a particular place, or postage to a postcode. Returns exact=true only when the supplier priced it — if exact is false, do NOT quote a figure, say you'll confirm.",
+    input_schema: {
+      type: "object",
+      properties: {
+        product_id: { type: "string", description: "id from a search_stock result" },
+        country_code: { type: "string", description: "2-letter destination, e.g. AU" },
+        postcode: { type: "string", description: "destination postcode if the buyer gave one" },
+      },
+      required: ["product_id", "country_code"],
     },
   },
 ];
@@ -592,16 +609,33 @@ export async function draftEbayAnswer(conversationId: string): Promise<DraftResu
         messages.push({ role: "assistant", content: blocks });
         const results = [];
         for (const call of calls) {
-          const query = typeof call.input?.query === "string" ? call.input.query : "";
-          const hits = call.name === "search_stock" ? await searchStock(convo.locationId, query) : [];
-          for (const h of hits) found.set(h.id, h);
-          results.push({
-            type: "tool_result",
-            tool_use_id: call.id,
-            content: hits.length
-              ? JSON.stringify(hits.map(({ id: _id, ...rest }) => ({ ...rest, listed_on_ebay: rest.listedOnEbay })))
-              : "No products matched that search.",
-          });
+          let content = "";
+
+          if (call.name === "quote_postage") {
+            const { quoteFreight } = await import("@/lib/freight");
+            const q = await quoteFreight({
+              locationId: convo.locationId,
+              productId: String(call.input?.product_id ?? ""),
+              countryCode: String(call.input?.country_code ?? "AU"),
+              postcode: call.input?.postcode ? String(call.input.postcode) : undefined,
+            });
+            content = JSON.stringify({
+              exact: q.exact,
+              price: typeof q.cents === "number" ? `A$${(q.cents / 100).toFixed(2)}` : null,
+              service: q.service ?? null,
+              eta: q.eta ?? null,
+              note: q.note,
+            });
+          } else {
+            const query = typeof call.input?.query === "string" ? call.input.query : "";
+            const hits = call.name === "search_stock" ? await searchStock(convo.locationId, query) : [];
+            for (const h of hits) found.set(h.id, h);
+            content = hits.length
+              ? JSON.stringify(hits.map((h) => ({ ...h, listed_on_ebay: h.listedOnEbay })))
+              : "No products matched that search.";
+          }
+
+          results.push({ type: "tool_result", tool_use_id: call.id, content });
         }
         messages.push({ role: "user", content: results });
         continue;
