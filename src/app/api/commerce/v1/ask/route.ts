@@ -101,14 +101,22 @@ export async function POST(req: NextRequest) {
     pageSize: 12,
   });
 
-  // Narrow filters can strand a shopper on zero results. Widen once, and say so,
-  // rather than reporting "nothing found" for something we stock.
+  // Narrow filters can strand a shopper on zero results. Widen by dropping the
+  // last word at a time — "wireless charger iPhone watch" becomes "wireless
+  // charger", which is still the thing they asked for. Keeping one arbitrary
+  // word instead ("wireless") matches tyre inflators.
   let widened = false;
   if (result.total === 0) {
-    const firstWord = search.split(/\s+/).filter((w) => w.length > 3)[0];
-    if (firstWord) {
-      widened = true;
-      result = await searchCatalogue({ locationId: store.id, destination: to, text: firstWord, pageSize: 12 });
+    const words = search.split(/\s+/).filter(Boolean);
+    for (let take = words.length - 1; take >= 1; take--) {
+      const shorter = words.slice(0, take).join(" ");
+      if (shorter.length < 3) break;
+      const retry = await searchCatalogue({ locationId: store.id, destination: to, text: shorter, pageSize: 12 });
+      if (retry.total > 0) {
+        widened = true;
+        result = retry;
+        break;
+      }
     }
   }
 

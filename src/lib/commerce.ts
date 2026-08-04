@@ -64,6 +64,13 @@ function buildWhere(q: CatalogueQuery): Prisma.ProductWhereInput {
     // The destination gate — the one non-negotiable filter.
     shipCountries: { array_contains: [q.destination.toUpperCase()] },
     priceCents: { not: null, lt: SENTINEL_PRICE_CENTS },
+    // Collection-only stock can't be delivered to anyone, so it has no place in
+    // a destination-filtered catalogue however well it matches.
+    NOT: [
+      { name: { contains: "self-pickup", mode: "insensitive" } },
+      { name: { contains: "self pickup", mode: "insensitive" } },
+      { name: { contains: "only self", mode: "insensitive" } },
+    ],
   };
 
   if (q.text) where.name = { contains: q.text, mode: "insensitive" };
