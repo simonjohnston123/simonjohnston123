@@ -215,9 +215,11 @@ export async function buildSupplierOrders(locationId: string, limit = 200): Prom
 export function supplierAutomation(supplier: string): { auto: boolean; note: string } {
   switch (supplier) {
     case "CJ Dropshipping":
-      return { auto: false, note: "Needs the CJ API key + wallet balance before orders can be placed automatically." };
+      // The only supplier whose API allows the full loop.
+      return { auto: true, note: "Order and pay here — CJ handles dispatch." };
     case "Dropshipzone":
-      return { auto: false, note: "Place on the Dropshipzone portal, then record the reference and tracking here." };
+      // Their API is GET-only on /orders, so this genuinely cannot be automated.
+      return { auto: false, note: "Dropshipzone's API can't accept orders — place it on their portal, then record the reference here." };
     default:
       return { auto: false, note: "Place with the supplier, then record the reference and tracking here." };
   }

@@ -7,6 +7,9 @@ import {
   markPlacedAction,
   recordTrackingAction,
   setStatusAction,
+  placeWithCjAction,
+  payWithCjAction,
+  refreshCjAction,
 } from "@/app/dashboard/l/[locationId]/fulfilment/actions";
 
 export type DeskItem = { sku: string | null; name: string; qty: number; costCents: number | null; sellCents: number | null; warehouse: string | null };
@@ -121,6 +124,30 @@ export function SupplierOrderCard({ locationId, row }: { locationId: string; row
 
       {!row.automation.auto ? (
         <p className="mb-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">{row.automation.note}</p>
+      ) : null}
+
+      {row.supplier === "CJ Dropshipping" ? (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-brand-50 p-2">
+          {row.status === "TO_PLACE" ? (
+            <button onClick={() => run(() => placeWithCjAction(locationId, row.id))} disabled={pending} className="btn-primary text-sm">
+              {pending ? "Talking to CJ…" : "Order with CJ"}
+            </button>
+          ) : (
+            <>
+              <button onClick={() => run(() => payWithCjAction(locationId, row.id))} disabled={pending} className="btn-primary text-sm">
+                Pay from CJ balance
+              </button>
+              <button onClick={() => run(() => refreshCjAction(locationId, row.id))} disabled={pending} className="btn-secondary text-sm">
+                Check tracking
+              </button>
+            </>
+          )}
+          <span className="text-[11px] text-slate-500">
+            {row.status === "TO_PLACE"
+              ? "Creates the order at CJ with live freight. Nothing is charged until you pay."
+              : "Paying spends real money from your CJ wallet and can't be undone."}
+          </span>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap items-end gap-2">

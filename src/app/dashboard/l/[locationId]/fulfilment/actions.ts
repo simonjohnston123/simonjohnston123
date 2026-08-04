@@ -73,3 +73,49 @@ export async function setStatusAction(
   revalidatePath(path(locationId));
   return { ok: true, message: `Moved to ${status.toLowerCase().replace("_", " ")}.` };
 }
+
+// --- CJ: place and pay without leaving the CRM ------------------------------
+
+/** Create the order with CJ. Does NOT pay — that's a separate, explicit click. */
+export async function placeWithCjAction(locationId: string, id: string): Promise<FulfilResult & { cjOrderId?: string }> {
+  await requireLocationAccess(locationId);
+  if (!(await owned(locationId, id))) return { ok: false, message: "Not found." };
+
+  const { placeCjOrder } = await import("@/lib/cj-orders");
+  const r = await placeCjOrder(id);
+  revalidatePath(path(locationId));
+
+  if (!r.ok) return { ok: false, message: r.error ?? "CJ rejected the order." };
+  const freight = typeof r.freight === "number" ? ` · freight $${r.freight.toFixed(2)} (${r.logistic})` : "";
+  return { ok: true, message: `Created with CJ${r.cjOrderId ? ` — ${r.cjOrderId}` : ""}${freight}. Not paid yet.`, cjOrderId: r.cjOrderId };
+}
+
+/** Pay a created CJ order from the wallet. Spends real money — irreversible. */
+export async function payWithCjAction(locationId: string, id: string): Promise<FulfilResult> {
+  await requireLocationAccess(locationId);
+  if (!(await owned(locationId, id))) return { ok: false, message: "Not found." };
+
+  const { payCjOrder, cjBalance } = await import("@/lib/cj-orders");
+  const r = await payCjOrder(id);
+  revalidatePath(path(locationId));
+
+  if (r.ok) return { ok: true, message: "Paid from your CJ balance — CJ will dispatch it." };
+
+  // The usual reason is an empty wallet; say so with the actual figure.
+  const b = await cjBalance();
+  const funds = b.ok && b.balance ? ` Your CJ balance is $${b.balance.amount.toFixed(2)}.` : "";
+  return { ok: false, message: `${r.error ?? "Payment failed."}${funds}` };
+}
+
+/** Ask CJ for status + tracking on an order we placed. */
+export async function refreshCjAction(locationId: string, id: string): Promise<FulfilResult> {
+  await requireLocationAccess(locationId);
+  if (!(await owned(locationId, id))) return { ok: false, message: "Not found." };
+
+  const { refreshCjOrder } = await import("@/lib/cj-orders");
+  const r = await refreshCjOrder(id);
+  revalidatePath(path(locationId));
+
+  if (!r.ok) return { ok: false, message: r.error ?? "Couldn't reach CJ." };
+  return { ok: true, message: r.tracking ? `Tracking ${r.tracking}` : `CJ status: ${r.status ?? "no tracking yet"}` };
+}
