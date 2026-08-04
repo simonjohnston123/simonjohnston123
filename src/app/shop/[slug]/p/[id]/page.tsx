@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { quoteFreight } from "@/lib/freight";
 import { AddToCart } from "@/components/shop-cart";
+import { productImage } from "@/lib/product-image";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +103,7 @@ export default async function ProductPage({
         <div>
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {images[0] ? (
-              <Image src={images[0]} alt={product.name} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-contain p-4" />
+              <Image src={productImage(images[0], 900)!} alt={product.name} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-contain p-4" unoptimized />
             ) : (
               <div className="grid h-full place-items-center text-slate-400">No image</div>
             )}
@@ -111,7 +112,7 @@ export default async function ProductPage({
             <div className="mt-3 grid grid-cols-5 gap-2">
               {images.slice(1).map((src, i) => (
                 <div key={i} className="relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-white">
-                  <Image src={src} alt="" fill sizes="120px" className="object-contain p-1" />
+                  <Image src={productImage(src, 200)!} alt="" fill sizes="120px" className="object-contain p-1" unoptimized />
                 </div>
               ))}
             </div>

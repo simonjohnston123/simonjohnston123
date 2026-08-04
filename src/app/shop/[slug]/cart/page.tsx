@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { loadCart } from "@/lib/cart";
 import { QtyControl, CheckoutBox } from "@/components/shop-cart";
+import { productImage } from "@/lib/product-image";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default async function CartPage({
               {cart.lines.map((l) => (
                 <div key={l.id} className={`flex gap-4 rounded-2xl border bg-white p-4 ${l.deliverable ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}>
                   <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-50">
-                    {l.image ? <Image src={l.image} alt={l.name} fill sizes="80px" className="object-contain p-1" /> : null}
+                    {l.image ? <Image src={productImage(l.image, 200)!} alt={l.name} fill sizes="80px" className="object-contain p-1" unoptimized /> : null}
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link href={`${base}/p/${l.id}?to=${to}`} className="line-clamp-2 text-sm font-semibold text-slate-900 hover:underline">

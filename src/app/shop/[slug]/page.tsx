@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { cartCount } from "@/lib/cart";
 import { AddToCart } from "@/components/shop-cart";
+import { productImage } from "@/lib/product-image";
 
 export const dynamic = "force-dynamic";
 
@@ -188,12 +189,14 @@ export default async function ShopPage({
                     // storefront.
                     <div className="relative h-48 w-full bg-slate-50">
                       <Image
-                        src={p.imageUrl}
+                        src={productImage(p.imageUrl, 500)!}
                         alt={p.name}
                         fill
                         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                         className="object-cover"
-                        unoptimized={false}
+                        // Already sized by the supplier CDN — re-processing it
+                        // here is what starved the server in the first place.
+                        unoptimized
                       />
                     </div>
                   ) : (
