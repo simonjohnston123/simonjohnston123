@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -170,8 +171,20 @@ export default async function ShopPage({
               return (
                 <article key={p.id} className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
                   {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.imageUrl} alt={p.name} loading="lazy" className="h-48 w-full bg-slate-50 object-cover" />
+                    // Supplier images are enormous — CJ's run ~1.7 MB each, so
+                    // 24 of them is a 40 MB page. Next resizes and re-encodes to
+                    // WebP, which is the difference between a blank grid and a
+                    // storefront.
+                    <div className="relative h-48 w-full bg-slate-50">
+                      <Image
+                        src={p.imageUrl}
+                        alt={p.name}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                        className="object-cover"
+                        unoptimized={false}
+                      />
+                    </div>
                   ) : (
                     <div className="grid h-48 w-full place-items-center bg-slate-100 text-sm text-slate-400">No image</div>
                   )}
