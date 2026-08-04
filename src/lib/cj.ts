@@ -116,6 +116,9 @@ export type CjListItem = {
   sellPrice?: string;
   categoryName?: string;
   productWeight?: string;
+  /** CJ tells us exactly where this product can ship — better than any map. */
+  shippingCountryCodes?: string[] | string;
+  isFreeShipping?: string | number;
 };
 
 /** One page of the CJ catalogue for a given warehouse country. */
@@ -174,6 +177,15 @@ export async function importCjWarehouse(
       const costCents = Math.round(Number(it.sellPrice ?? 0) * 100) || null;
       const externalId = `${it.pid}:${countryCode}`;
 
+      // Prefer CJ's own answer for where this can ship; fall back to the
+      // warehouse map only when they don't say.
+      const declared = Array.isArray(it.shippingCountryCodes)
+        ? it.shippingCountryCodes
+        : typeof it.shippingCountryCodes === "string" && it.shippingCountryCodes
+          ? it.shippingCountryCodes.split(/[,\s]+/).filter(Boolean)
+          : [];
+      const shipCountries = declared.length ? declared : reach;
+
       const existing = await prisma.product.findFirst({
         where: { locationId, source: "CJ Dropshipping", externalId },
         select: { id: true },
@@ -188,7 +200,7 @@ export async function importCjWarehouse(
         priceCents: costCents ? Math.round(costCents * MARKUP) : null,
         supplier: "CJ Dropshipping",
         warehouse: countryCode,
-        shipCountries: reach,
+        shipCountries,
         source: "CJ Dropshipping",
         externalId,
       };
