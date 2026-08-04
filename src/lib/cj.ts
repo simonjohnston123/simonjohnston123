@@ -179,11 +179,14 @@ export async function importCjWarehouse(
 
       // Prefer CJ's own answer for where this can ship; fall back to the
       // warehouse map only when they don't say.
-      const declared = Array.isArray(it.shippingCountryCodes)
+      const raw = Array.isArray(it.shippingCountryCodes)
         ? it.shippingCountryCodes
         : typeof it.shippingCountryCodes === "string" && it.shippingCountryCodes
           ? it.shippingCountryCodes.split(/[,\s]+/).filter(Boolean)
           : [];
+      // CJ emits pseudo-codes like "CN_US" (China warehouse, US-bound). Left
+      // raw they match no customer, so the product is silently unsellable.
+      const declared = [...new Set(raw.map((c) => (c.includes("_") ? c.split("_").pop()! : c)).filter((c) => /^[A-Z]{2}$/.test(c)))];
       const shipCountries = declared.length ? declared : reach;
 
       const existing = await prisma.product.findFirst({
