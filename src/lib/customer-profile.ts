@@ -72,9 +72,17 @@ function identityKey(o: { customerEmail: string | null; customerName: string | n
   const name = nameKey(o.customerName);
   const street = streetKey(o.deliveryAddress);
 
-  if (email.includes("@") && !isRelayEmail(email)) return `email:${email}`;
+  // Name + street comes FIRST, because it is the only signal that survives the
+  // trip between marketplaces. Email looks stronger but isn't: eBay supplies a
+  // relay address and Shopify the real one, so keying on email puts the same
+  // person in two buckets — which is why the first two runs merged nothing
+  // across 127 orders that were the same people.
+  //
+  // The trade-off is deliberate: two people at one address become one
+  // customer. A household is the honest resolution of a shipping address, and
+  // under-merging silently halves every lifetime value.
   if (name && street) return `addr:${name}|${street}`;
-  // A relay address is better than nothing when there's no address to use.
+  if (email.includes("@") && !isRelayEmail(email)) return `email:${email}`;
   if (email.includes("@")) return `email:${email}`;
   return null;
 }
