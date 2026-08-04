@@ -34,11 +34,22 @@ async function handle(req: NextRequest) {
 
   for (let round = 0; round < BATCHES_PER_RUN; round++) {
     const rows = await prisma.product.findMany({
-      where: { supplier: "Dropshipzone", sku: { not: null } },
+      // Also pick up products that came in via Shopify with no real supplier
+      // attribution. Their SKUs are Dropshipzone's ("V…"), and they are the
+      // ones actually being sold — so without this the margin on real sales is
+      // unknowable.
+      where: {
+        sku: { not: null },
+        OR: [
+          { supplier: "Dropshipzone" },
+          { supplier: { in: ["Placid Deals"] }, sku: { startsWith: "V" } },
+          { supplier: null, sku: { startsWith: "V" } },
+        ],
+      },
       // Nulls first: fill the gap before refreshing what we already know.
       orderBy: [{ costCents: { sort: "asc", nulls: "first" } }, { updatedAt: "asc" }],
       take: BATCH,
-      select: { id: true, sku: true, costCents: true, priceCents: true },
+      select: { id: true, sku: true, costCents: true, priceCents: true, supplier: true },
     });
     if (!rows.length) break;
 
@@ -56,6 +67,9 @@ async function handle(req: NextRequest) {
       await prisma.product.update({
         where: { id: r.id },
         data: {
+          // The supplier answered for this SKU, so it is theirs — correct the
+          // attribution while we're here.
+          supplier: "Dropshipzone",
           costCents: f.costCents ?? r.costCents,
           inventory: f.stock ?? undefined,
           // 0 means "we know postage is nothing". Left null for the "limited"
