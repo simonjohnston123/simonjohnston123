@@ -15,11 +15,12 @@ export async function rebuildAction(locationId: string): Promise<FulfilResult> {
   const r = await buildSupplierOrders(locationId);
   revalidatePath(path(locationId));
 
-  if (!r.created && !r.updated) return { ok: true, message: "Nothing new to buy." };
   const bits = [];
   if (r.created) bits.push(`${r.created} new`);
   if (r.updated) bits.push(`${r.updated} refreshed`);
+  if (r.duplicates) bits.push(`${r.duplicates} duplicate${r.duplicates === 1 ? "" : "s"} removed (same sale on eBay + Shopify)`);
   if (r.unresolved) bits.push(`${r.unresolved} line${r.unresolved === 1 ? "" : "s"} with no supplier`);
+  if (!bits.length) return { ok: true, message: "Nothing new to buy." };
   return { ok: true, message: bits.join(" · ") };
 }
 

@@ -85,7 +85,61 @@ export async function resolveOrderLines(locationId: string, order: { items: unkn
   return out;
 }
 
-export type BuildResult = { created: number; updated: number; unresolved: number };
+export type BuildResult = { created: number; updated: number; unresolved: number; duplicates: number };
+
+/** Street line only — channels format city/country differently for the same address. */
+function streetKey(address: string | null): string {
+  return (address ?? "").replace(/\s+/g, " ").split(",")[0]!.trim().toLowerCase();
+}
+
+/**
+ * Orders that are the same physical sale arriving twice.
+ *
+ * The Shopify store receives eBay sales as well, and the CRM syncs both eBay
+ * directly and Shopify — so one sale lands as two orders. Buying against both
+ * means buying the stock twice, so the later copy is suppressed here.
+ *
+ * Matched on street line + first item, because the channels disagree on
+ * everything else: customer name gains a Shopify handle, and the address
+ * country flips between code and name ("Nuuk, 3900, GL" vs "NUUK, 3900,
+ * Greenland").
+ */
+export async function duplicateOrderIds(locationId: string): Promise<Set<string>> {
+  const orders = await prisma.order.findMany({
+    where: { locationId },
+    select: { id: true, source: true, items: true, deliveryAddress: true, placedAt: true, createdAt: true },
+  });
+
+  const seen = new Map<string, { id: string; when: number; source: string }>();
+  const dupes = new Set<string>();
+
+  for (const o of orders) {
+    const first = (Array.isArray(o.items) ? (o.items as OrderLine[])[0]?.name : null) ?? "";
+    const street = streetKey(o.deliveryAddress);
+    if (!first || !street) continue;
+
+    const key = `${street}::${first.toLowerCase()}`;
+    const when = (o.placedAt ?? o.createdAt).getTime();
+    const source = o.source ?? "";
+    const prev = seen.get(key);
+
+    if (!prev) {
+      seen.set(key, { id: o.id, when, source });
+      continue;
+    }
+    // Same sale on two channels. Keep the earliest; that is the original.
+    if (prev.source !== source) {
+      if (when < prev.when) {
+        dupes.add(prev.id);
+        seen.set(key, { id: o.id, when, source });
+      } else {
+        dupes.add(o.id);
+      }
+    }
+  }
+
+  return dupes;
+}
 
 /**
  * Create/refresh SupplierOrders for orders that still need buying.
@@ -102,9 +156,22 @@ export async function buildSupplierOrders(locationId: string, limit = 200): Prom
     select: { id: true, items: true },
   });
 
-  const res: BuildResult = { created: 0, updated: 0, unresolved: 0 };
+  const res: BuildResult = { created: 0, updated: 0, unresolved: 0, duplicates: 0 };
+
+  // The same sale arrives from both eBay and Shopify. Buying against both would
+  // buy the stock twice, so the duplicate copies never reach the desk — and any
+  // that were created before this check are cleared out.
+  const dupes = await duplicateOrderIds(locationId);
+  if (dupes.size) {
+    const removed = await prisma.supplierOrder.deleteMany({
+      where: { locationId, status: "TO_PLACE", orderId: { in: [...dupes] } },
+    });
+    res.duplicates = removed.count;
+  }
 
   for (const order of orders) {
+    if (dupes.has(order.id)) continue;
+
     const resolved = await resolveOrderLines(locationId, order);
     if (!resolved.length) continue;
 
