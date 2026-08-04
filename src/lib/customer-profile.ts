@@ -46,20 +46,36 @@ function nameKey(name: string | null): string {
 }
 
 /**
+ * Relay addresses issued BY a marketplace, not owned by the person.
+ *
+ * eBay hands out "…@members.ebay.com.au" per buyer per seller. It looks like an
+ * email and is stable within eBay, but the same human on Shopify has a
+ * completely different one — so keying identity on it guarantees the two never
+ * meet, which is exactly what happened on the first run: 260 orders became 259
+ * customers and nothing merged.
+ */
+const RELAY_DOMAINS = ["members.ebay.com", "members.ebay.com.au", "marketplace.amazon.com", "relay.amazon.com", "marketplace.etsy.com"];
+
+const isRelayEmail = (email: string) => RELAY_DOMAINS.some((d) => email.endsWith(`@${d}`) || email.includes(`@${d}`));
+
+/**
  * The identity key for an order.
  *
- * Email is the strongest signal, but marketplaces mask it — eBay gives
- * "…@members.ebay.com.au", which is per-buyer but not the person's real
- * address, so it still identifies them reliably. Failing that, name + street
- * identifies a household, which is the honest limit of what we can know.
+ * A real email is the strongest signal we get. A marketplace relay address is
+ * not — it identifies an account, not a person — so those fall through to name
+ * + street, which identifies a household. That is the honest limit of what the
+ * data supports, and it is what lets one buyer on eBay and Shopify become one
+ * customer.
  */
 function identityKey(o: { customerEmail: string | null; customerName: string | null; deliveryAddress: string | null }): string | null {
   const email = (o.customerEmail ?? "").trim().toLowerCase();
-  if (email && email.includes("@")) return `email:${email}`;
-
   const name = nameKey(o.customerName);
   const street = streetKey(o.deliveryAddress);
+
+  if (email.includes("@") && !isRelayEmail(email)) return `email:${email}`;
   if (name && street) return `addr:${name}|${street}`;
+  // A relay address is better than nothing when there's no address to use.
+  if (email.includes("@")) return `email:${email}`;
   return null;
 }
 
