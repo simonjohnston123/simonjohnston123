@@ -3,6 +3,8 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { cartCount } from "@/lib/cart";
+import { AddToCart } from "@/components/shop-cart";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +120,7 @@ export default async function ShopPage({
   ]);
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const basket = cartCount();
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -147,6 +150,14 @@ export default async function ShopPage({
               <span className="font-semibold text-slate-900">{destination.label}</span>
               <Link href={base} className="text-xs font-medium underline" style={{ color: primary }}>change</Link>
             </div>
+
+            <Link
+              href={`${base}/cart`}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+              style={{ backgroundColor: primary }}
+            >
+              Basket{basket > 0 ? ` (${basket})` : ""}
+            </Link>
           </div>
         </div>
       </header>
@@ -189,7 +200,7 @@ export default async function ShopPage({
                     <div className="grid h-48 w-full place-items-center bg-slate-100 text-sm text-slate-400">No image</div>
                   )}
                   <div className="flex flex-1 flex-col p-4">
-                    <h2 className="line-clamp-2 text-sm font-semibold text-slate-900">{p.name}</h2>
+                    <Link href={`${base}/p/${p.id}?to=${destination.code}`} className="line-clamp-2 text-sm font-semibold text-slate-900 hover:underline">{p.name}</Link>
 
                     <div className="mt-2 flex flex-wrap items-baseline gap-2">
                       <span className="text-lg font-bold" style={{ color: primary }}>
@@ -210,13 +221,12 @@ export default async function ShopPage({
                       {inStock === false ? <span className="font-medium text-amber-600">Out of stock</span> : null}
                     </div>
 
-                    <Link
-                      href={`/sites/${location.slug}#contact`}
-                      className="mt-4 rounded-xl px-4 py-2.5 text-center text-sm font-semibold text-white"
-                      style={{ backgroundColor: primary }}
-                    >
-                      Enquire
-                    </Link>
+                    <div className="mt-4 flex flex-col gap-2">
+                      <AddToCart slug={location.slug} productId={p.id} destination={destination.code} primary={primary} />
+                      <Link href={`${base}/p/${p.id}?to=${destination.code}`} className="text-center text-xs font-medium text-slate-500 hover:text-slate-800">
+                        View details
+                      </Link>
+                    </div>
                   </div>
                 </article>
               );
