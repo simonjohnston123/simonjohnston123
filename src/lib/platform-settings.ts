@@ -16,6 +16,9 @@ export const SETTING_KEYS = {
   facebookAppId: "facebook_app_id",
   facebookAppSecret: "facebook_app_secret",
   connectApiToken: "connect_api_token",
+  // CJ Dropshipping Developer API — server-side catalogue + live stock feed.
+  cjEmail: "cj_email",
+  cjApiKey: "cj_api_key",
 } as const;
 
 export async function getSetting(key: string): Promise<string | null> {

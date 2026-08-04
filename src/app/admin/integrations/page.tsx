@@ -3,14 +3,14 @@ import { getSetting, SETTING_KEYS } from "@/lib/platform-settings";
 import { isConfiguredAsync } from "@/lib/oauth-providers";
 import { shopifyConfigured } from "@/lib/shopify-oauth";
 import { getConnectApiToken, CONNECT_API_BASE } from "@/lib/connect-api";
-import { EbayCertForm, ShopifySecretForm, FacebookCredsForm, ConnectApiPanel } from "./integrations-form";
+import { EbayCertForm, ShopifySecretForm, FacebookCredsForm, CjCredsForm, ConnectApiPanel } from "./integrations-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin — Integrations" };
 
 export default async function AdminIntegrationsPage() {
   await requireSuperAdmin();
-  const [cert, ebayReady, shopifySecret, shopifyReady, fbId, fbSecret, fbReady, connectToken] = await Promise.all([
+  const [cert, ebayReady, shopifySecret, shopifyReady, fbId, fbSecret, fbReady, connectToken, cjEmail, cjKey] = await Promise.all([
     getSetting(SETTING_KEYS.ebayClientSecret),
     isConfiguredAsync("EBAY"),
     getSetting(SETTING_KEYS.shopifyClientSecret),
@@ -19,6 +19,8 @@ export default async function AdminIntegrationsPage() {
     getSetting(SETTING_KEYS.facebookAppSecret),
     isConfiguredAsync("FACEBOOK"),
     getConnectApiToken(),
+    getSetting(SETTING_KEYS.cjEmail),
+    getSetting(SETTING_KEYS.cjApiKey),
   ]);
 
   return (
@@ -38,6 +40,19 @@ export default async function AdminIntegrationsPage() {
 
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
         <EbayCertForm certSet={Boolean(cert)} />
+      </div>
+
+      <div className={`mb-6 rounded-xl border p-4 ${cjEmail && cjKey ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+        <p className={`text-sm font-medium ${cjEmail && cjKey ? "text-green-800" : "text-amber-800"}`}>
+          {cjEmail && cjKey
+            ? "● CJ Dropshipping is connected — catalogue import and live stock can run."
+            : "● CJ Dropshipping is not connected — add the API key below to import stock."}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">Imports one product row per warehouse, so stock can only be sold where it can actually ship.</p>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+        <CjCredsForm emailSet={Boolean(cjEmail)} keySet={Boolean(cjKey)} />
       </div>
 
       <div className={`mb-6 rounded-xl border p-4 ${shopifyReady ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>

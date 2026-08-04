@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { saveEbayCertAction, saveShopifySecretAction, saveFacebookCredsAction, type SaveState } from "./actions";
+import { saveEbayCertAction, saveCjCredsAction, saveShopifySecretAction, saveFacebookCredsAction, type SaveState } from "./actions";
 
 function SaveButton({ label = "Save" }: { label?: string }) {
   const { pending } = useFormStatus();
@@ -110,6 +110,35 @@ export function EbayCertForm({ certSet }: { certSet: boolean }) {
         </p>
       </div>
       <SaveButton label="Save Cert ID" />
+    </form>
+  );
+}
+
+export function CjCredsForm({ emailSet, keySet }: { emailSet: boolean; keySet: boolean }) {
+  const [state, action] = useFormState<SaveState, FormData>(saveCjCredsAction, { error: "" });
+  return (
+    <form action={action} className="space-y-3">
+      {state.ok ? (
+        <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">✓ Saved. CJ catalogue and live stock feed can now run.</p>
+      ) : null}
+      {state.error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{state.error}</p> : null}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          CJ account email {emailSet ? <span className="text-xs font-normal text-green-600">· set ✓</span> : <span className="text-xs font-normal text-amber-600">· not set</span>}
+        </label>
+        <input name="cjEmail" type="text" autoComplete="off" placeholder={emailSet ? "•••••••• (leave blank to keep current)" : "you@example.com"} className="input w-full font-mono" />
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-slate-700">
+          CJ API key {keySet ? <span className="text-xs font-normal text-green-600">· set ✓</span> : <span className="text-xs font-normal text-amber-600">· not set</span>}
+        </label>
+        <input name="cjApiKey" type="password" autoComplete="off" placeholder={keySet ? "•••••••• (leave blank to keep current)" : "from CJ → My CJ → Authorization → API"} className="input w-full font-mono" />
+        <p className="mt-1 text-xs text-slate-500">
+          CJ Dropshipping → My CJ → Authorization → API → <em>Generate API Key</em>. This is a server key, not your
+          password, and is what lets stock levels refresh on a schedule. Stored encrypted.
+        </p>
+      </div>
+      <SaveButton label="Save CJ credentials" />
     </form>
   );
 }
