@@ -58,6 +58,10 @@ async function handle(req: NextRequest) {
         data: {
           costCents: f.costCents ?? r.costCents,
           inventory: f.stock ?? undefined,
+          // 0 means "we know postage is nothing". Left null for the "limited"
+          // ones, because DZ won't say where the surcharge applies and a wrong
+          // $0 is a promise we can't keep.
+          freightCents: f.freeShipping ? 0 : null,
           // Only set a price where there isn't one — never overwrite pricing
           // that has been set deliberately.
           priceCents: r.priceCents ?? (f.costCents ? Math.round(f.costCents * 1.7) : undefined),

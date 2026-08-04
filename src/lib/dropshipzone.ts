@@ -111,7 +111,10 @@ export type DzFacts = {
   weightKg: number | null;
   ean: string | null;
   eta: string | null;
+  /** Unconditionally free to send anywhere in AU — safe to sell at $0 postage. */
   freeShipping: boolean;
+  /** Free "with limits" — DZ surcharges somewhere, and their API won't say where. */
+  limitedFreeShipping: boolean;
 };
 
 type RawFacts = Record<string, unknown>;
@@ -145,8 +148,12 @@ export async function dzFactsForSkus(skus: string[]): Promise<Map<string, DzFact
       weightKg: num(r.weight),
       ean: r.eancode ? String(r.eancode) : null,
       eta: r.ETA ? String(r.ETA) : null,
-      // Two separate flags on their side; either means we aren't paying freight.
-      freeShipping: String(r.freeshipping ?? "0") === "1" || r.limited_au_free_shipping === true,
+      // Two different promises, and the difference matters: "1" is free
+      // outright, while limited_au_free_shipping means free to most of AU with
+      // a surcharge somewhere DZ won't disclose. Only the first is safe to
+      // quote as $0.
+      freeShipping: String(r.freeshipping ?? "0") === "1",
+      limitedFreeShipping: r.limited_au_free_shipping === true,
     });
   }
   return out;

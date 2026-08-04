@@ -50,7 +50,7 @@ export async function quoteFreight(req: FreightRequest): Promise<FreightQuote> {
 
   const product = await prisma.product.findFirst({
     where: { id: req.productId, locationId: req.locationId },
-    select: { id: true, name: true, sku: true, supplier: true, warehouse: true, externalId: true, shipCountries: true, inventory: true },
+    select: { id: true, name: true, sku: true, supplier: true, warehouse: true, externalId: true, shipCountries: true, inventory: true, freightCents: true },
   });
   if (!product) return unknown("Product not found.");
 
@@ -58,6 +58,11 @@ export async function quoteFreight(req: FreightRequest): Promise<FreightQuote> {
   const ships = Array.isArray(product.shipCountries) ? (product.shipCountries as string[]) : [];
   if (ships.length && !ships.includes(country)) {
     return unavailable(`We can't send this one to ${country}.`);
+  }
+
+  // Known-free postage is already recorded, so no supplier call is needed.
+  if (product.freightCents === 0 && country === "AU") {
+    return { cents: 0, exact: true, source: "dz-free-shipping", note: "Free delivery within Australia." };
   }
 
   if (product.supplier === "CJ Dropshipping") return quoteCj(product, qty, country, req.postcode);
@@ -112,6 +117,9 @@ async function quoteDz(product: ProductRow, country: string): Promise<FreightQuo
 
   if (f.freeShipping) {
     return { cents: 0, exact: true, source: "dz-free-shipping", note: "Free delivery within Australia." };
+  }
+  if (f.limitedFreeShipping) {
+    return unknown("Free to most of Australia, but the supplier surcharges some areas and won't say which — confirm for this address.");
   }
   return unknown("The supplier doesn't publish a postage price for this item — confirm before quoting.");
 }
