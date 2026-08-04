@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { dzFactsForSkus } from "@/lib/dropshipzone";
+import { usdToAudCents } from "@/lib/fx";
 
 // ---------------------------------------------------------------------------
 // What will it actually cost to send THIS product to THIS address?
@@ -92,8 +93,9 @@ async function quoteCj(product: ProductRow, qty: number, country: string, postco
   if (!r.ok || !r.options?.length) return unavailable(r.error ?? `No shipping option to ${country}.`);
 
   const cheapest = [...r.options].sort((a, b) => a.logisticPrice - b.logisticPrice)[0]!;
+  // CJ prices freight in USD as well.
   return {
-    cents: Math.round(cheapest.logisticPrice * 100),
+    cents: await usdToAudCents(cheapest.logisticPrice),
     exact: true,
     source: "cj",
     service: cheapest.logisticName,

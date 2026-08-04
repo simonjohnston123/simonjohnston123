@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { getSetting, setSetting } from "@/lib/platform-settings";
+import { usdToAudCents } from "@/lib/fx";
 
 // ---------------------------------------------------------------------------
 // CJ Dropshipping — server-side catalogue feed.
@@ -174,7 +175,9 @@ export async function importCjWarehouse(
       if (!it.pid || !it.productNameEn) continue;
       out.scanned++;
 
-      const costCents = Math.round(Number(it.sellPrice ?? 0) * 100) || null;
+      // CJ quotes USD. Storing it as AUD understates cost by ~43% and turns
+      // the markup into break-even once marketplace fees land.
+      const costCents = await usdToAudCents(Number(it.sellPrice ?? 0));
       const externalId = `${it.pid}:${countryCode}`;
 
       // Prefer CJ's own answer for where this can ship; fall back to the
