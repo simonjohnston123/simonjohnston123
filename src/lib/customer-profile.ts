@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { duplicateOrderIds } from "@/lib/fulfilment";
 
 // ---------------------------------------------------------------------------
 // Customer lifecycle engine.
@@ -102,8 +103,14 @@ export type ProfileBuildResult = {
  * recalculated from source.
  */
 export async function rebuildCustomerProfiles(locationId: string): Promise<ProfileBuildResult> {
+  // The Shopify store also receives eBay sales, so one sale exists as two
+  // orders. Counting both doubles lifetime value and labels a first-time buyer
+  // a "returning customer" — the same duplication the ordering desk already
+  // suppresses, so it uses the same rule rather than a second opinion.
+  const dupes = await duplicateOrderIds(locationId);
+
   const orders = await prisma.order.findMany({
-    where: { locationId },
+    where: { locationId, ...(dupes.size ? { id: { notIn: [...dupes] } } : {}) },
     orderBy: { placedAt: "asc" },
     select: {
       id: true, contactId: true, source: true, total: true, items: true,
