@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireLocationAccess } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { syncEbayMessages, draftEbayAnswer, sendEbayReply } from "@/lib/ebay-messages";
+import { syncEbayMessages, draftEbayAnswer, sendEbayReply, listProductForBuyer, type StockHit } from "@/lib/ebay-messages";
 
-export type EbayActionResult = { ok: boolean; message: string; draft?: string };
+export type EbayActionResult = { ok: boolean; message: string; draft?: string; toList?: StockHit[] };
 
 /** "Pull eBay questions" — import buyer messages into the inbox. */
 export async function syncEbayMessagesAction(locationId: string, days = 30): Promise<EbayActionResult> {
@@ -29,8 +29,27 @@ export async function draftEbayReplyAction(locationId: string, conversationId: s
   const r = await draftEbayAnswer(conversationId);
   revalidatePath(`/dashboard/l/${locationId}/conversations`);
   return r.ok
-    ? { ok: true, message: "Draft ready — read it before sending.", draft: r.draft }
+    ? { ok: true, message: "Draft ready — read it before sending.", draft: r.draft, toList: r.toList }
     : { ok: false, message: r.error ?? "Couldn't draft a reply." };
+}
+
+/**
+ * List a product on eBay so the buyer can be given an item number. Buyers can't
+ * be sent anywhere off eBay, so this is the only way to sell them something
+ * that wasn't already listed.
+ */
+export async function listAndOfferAction(
+  locationId: string,
+  conversationId: string,
+  productId: string,
+): Promise<EbayActionResult & { itemId?: string; sentence?: string }> {
+  await requireLocationAccess(locationId);
+  const r = await listProductForBuyer(locationId, productId);
+  if (!r.ok) return { ok: false, message: r.error ?? "Couldn't list it on eBay." };
+
+  const sentence = `I've just listed it on eBay — item number ${r.itemId}. Search that number and it'll come straight up.`;
+  revalidatePath(`/dashboard/l/${locationId}/conversations`);
+  return { ok: true, message: `Listed — item ${r.itemId}.`, itemId: r.itemId, sentence };
 }
 
 /** Send the (possibly edited) reply to the buyer on eBay. */

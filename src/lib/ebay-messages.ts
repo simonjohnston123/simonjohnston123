@@ -397,26 +397,144 @@ function factSheet(p: ProductFacts): string {
 
 const SYSTEM = `You are answering a question from a buyer on eBay, writing as the seller.
 
+SEARCH OUR STOCK BEFORE YOU ANSWER.
+Whenever the buyer asks whether we have something — a different size, colour,
+length, shelf count, capacity, model, or simply "do you stock X" — call
+search_stock. Our catalogue is far bigger than what is listed on eBay, so
+"we don't have one" is usually WRONG until you have searched. Search more than
+once with different wording if the first attempt finds nothing.
+
 RULES — these matter more than being helpful:
-- Only state facts given to you in PRODUCT FACTS. Never invent specifications,
-  measurements, materials, compatibility, certifications or compliance claims.
-- If the answer isn't in the facts, say plainly that you'll confirm and come
-  back to them. Do not guess. A wrong spec becomes a return or a defect.
-- Never promise a delivery date. You may say where it ships from and give a
+- Only state facts returned by search_stock or given in PRODUCT FACTS. Never
+  invent specifications, measurements, materials, compatibility, certifications
+  or compliance claims. A wrong spec becomes a return or a defect.
+- If the answer isn't in those facts, say plainly that you'll confirm and come
+  back to them. Do not guess.
+- NEVER send the buyer off eBay. No website links, no email addresses, no phone
+  numbers, no "visit our store". eBay forbids it and it risks the account.
+  Refer to products by NAME and, when it is listed, by its eBay item number.
+- If a product we stock is NOT yet listed on eBay (listed_on_ebay: false), say
+  we do have it and that you're putting it up on eBay now and will send them the
+  item number shortly. Never give them any other way to buy it.
+- Never promise a delivery date. You may say where it ships from, and give a
   general timeframe only if the facts support it.
-- If asked about electrical safety, medical or compliance approval and the facts
-  don't cover it, say you'll confirm before they buy.
-- If the item looks unsuitable for what they describe, say so and suggest a
-  listed alternative from ALTERNATIVES if one genuinely fits.
+- On electrical safety, medical or compliance approval: if the facts don't cover
+  it, say you'll confirm before they buy.
 - Discount requests: be warm, don't commit to a number, say you'll take a look.
+- Out of stock or unsuitable: offer the closest thing search_stock found.
 
 STYLE: plain Australian English, warm and direct. 2-5 sentences. No greeting
 line beyond "Hi <name>," and no sign-off block — just the message body. Never
 mention that you are an AI.`;
 
-export type DraftResult = { ok: boolean; draft?: string; error?: string };
+const TOOLS = [
+  {
+    name: "search_stock",
+    description:
+      "Search the seller's full product catalogue (much larger than what is listed on eBay). Returns name, price, stock on hand, a description extract, and whether each product is already listed on eBay with its item number. Use this for any question about what we stock, alternatives, other sizes/colours/variants, or replacements.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Keywords describing the product, e.g. 'liquor bottle display 3 shelves' or 'cat neck brace small'",
+        },
+      },
+      required: ["query"],
+    },
+  },
+];
 
-/** Draft an answer to an eBay buyer question, grounded in the catalogue. */
+export type StockHit = {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: string | null;
+  inventory: number | null;
+  listedOnEbay: boolean;
+  ebayItemId: string | null;
+  extract: string | null;
+};
+
+/**
+ * Keyword search over the catalogue, ranked by how many of the query's words a
+ * product name contains. Narrows in SQL on the two most distinctive words so we
+ * never scan all 60k rows, then ranks the shortlist in memory.
+ */
+export async function searchStock(locationId: string, query: string, limit = 8): Promise<StockHit[]> {
+  const words = significantWords(query);
+  if (!words.length) return [];
+  const anchors = [...words].sort((a, b) => b.length - a.length).slice(0, 2);
+
+  const select = {
+    id: true, name: true, sku: true, priceCents: true, price: true, inventory: true,
+    description: true, channels: true, ebayItemId: true,
+  } as const;
+
+  // Try the two most distinctive words together, then fall back to the single
+  // best word so a slightly-off phrasing still finds something.
+  let rows = await prisma.product.findMany({
+    where: {
+      locationId, active: true,
+      AND: anchors.map((w) => ({ name: { contains: w, mode: "insensitive" as const } })),
+    },
+    take: 80,
+    select,
+  });
+  if (!rows.length && anchors[0]) {
+    rows = await prisma.product.findMany({
+      where: { locationId, active: true, name: { contains: anchors[0], mode: "insensitive" } },
+      take: 80,
+      select,
+    });
+  }
+
+  return rows
+    .map((r) => {
+      const name = r.name.toLowerCase();
+      return { r, score: words.filter((w) => name.includes(w)).length };
+    })
+    .sort((a, b) => b.score - a.score || (b.r.inventory ?? 0) - (a.r.inventory ?? 0))
+    .slice(0, limit)
+    .map(({ r }) => ({
+      id: r.id,
+      name: r.name,
+      sku: r.sku,
+      price: money(r.priceCents, r.price),
+      inventory: r.inventory,
+      listedOnEbay: Array.isArray(r.channels) ? (r.channels as string[]).includes("ebay") : false,
+      ebayItemId: r.ebayItemId,
+      extract: r.description ? r.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 700) : null,
+    }));
+}
+
+/** eBay bans pushing buyers off-platform — strip anything that would. */
+function stripOffPlatform(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\bwww\.\S+/gi, "")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+export type DraftResult = {
+  ok: boolean;
+  draft?: string;
+  error?: string;
+  /** Products the AI found that aren't on eBay yet — offer to list them. */
+  toList?: StockHit[];
+};
+
+/**
+ * Draft an answer to an eBay buyer question.
+ *
+ * Claude runs a small tool loop with search_stock so it can answer "do you have
+ * a shorter one?" from the whole catalogue, not just the listing being asked
+ * about. Anything it finds that isn't on eBay yet comes back in `toList` so the
+ * seller can publish it and give the buyer an item number — buyers must never
+ * be sent off eBay.
+ */
 export async function draftEbayAnswer(conversationId: string): Promise<DraftResult> {
   const convo = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -446,27 +564,105 @@ export async function draftEbayAnswer(conversationId: string): Promise<DraftResu
     .map((m) => `${m.direction === "INBOUND" ? "Buyer" : "Seller"}: ${m.body}`)
     .join("\n\n");
 
-  try {
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 600,
-        system: SYSTEM,
-        messages: [{ role: "user", content: `${context}\n\nCONVERSATION SO FAR:\n${transcript}\n\nWrite the seller's reply.` }],
-      }),
-    });
-    if (!res.ok) return { ok: false, error: `AI error ${res.status}: ${(await res.text()).slice(0, 160)}` };
-    const json = (await res.json()) as { content?: { type: string; text?: string }[] };
-    const draft = (json.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
-    if (!draft) return { ok: false, error: "The AI returned an empty reply." };
+  type Block =
+    | { type: "text"; text?: string }
+    | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> };
 
-    await prisma.conversation.update({ where: { id: conversationId }, data: { draftReply: draft } });
-    return { ok: true, draft };
+  const messages: { role: "user" | "assistant"; content: unknown }[] = [
+    { role: "user", content: `${context}\n\nCONVERSATION SO FAR:\n${transcript}\n\nWrite the seller's reply.` },
+  ];
+  const found = new Map<string, StockHit>();
+
+  try {
+    // A few rounds is plenty: search, maybe re-search with different wording,
+    // then answer.
+    for (let round = 0; round < 4; round++) {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: MODEL, max_tokens: 900, system: SYSTEM, tools: TOOLS, messages }),
+      });
+      if (!res.ok) return { ok: false, error: `AI error ${res.status}: ${(await res.text()).slice(0, 160)}` };
+
+      const json = (await res.json()) as { content?: Block[]; stop_reason?: string };
+      const blocks = json.content ?? [];
+
+      const calls = blocks.filter((b): b is Extract<Block, { type: "tool_use" }> => b.type === "tool_use");
+      if (json.stop_reason === "tool_use" && calls.length) {
+        messages.push({ role: "assistant", content: blocks });
+        const results = [];
+        for (const call of calls) {
+          const query = typeof call.input?.query === "string" ? call.input.query : "";
+          const hits = call.name === "search_stock" ? await searchStock(convo.locationId, query) : [];
+          for (const h of hits) found.set(h.id, h);
+          results.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: hits.length
+              ? JSON.stringify(hits.map(({ id: _id, ...rest }) => ({ ...rest, listed_on_ebay: rest.listedOnEbay })))
+              : "No products matched that search.",
+          });
+        }
+        messages.push({ role: "user", content: results });
+        continue;
+      }
+
+      const raw = blocks.filter((b) => b.type === "text").map((b) => ("text" in b ? b.text ?? "" : "")).join("").trim();
+      if (!raw) return { ok: false, error: "The AI returned an empty reply." };
+      const draft = stripOffPlatform(raw);
+
+      await prisma.conversation.update({ where: { id: conversationId }, data: { draftReply: draft } });
+      return {
+        ok: true,
+        draft,
+        toList: [...found.values()].filter((h) => !h.listedOnEbay),
+      };
+    }
+    return { ok: false, error: "The AI kept searching without answering — try again." };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "AI request failed." };
   }
+}
+
+// --- Listing on demand -----------------------------------------------------
+
+export type ListNowResult = { ok: boolean; itemId?: string; name?: string; error?: string };
+
+/**
+ * Publish a catalogue product to eBay so we can give the buyer an item number.
+ *
+ * This is the "we do have one, it just isn't up yet" path: the seller can't
+ * point the buyer anywhere off eBay, so the only legitimate move is to list it
+ * and reply with the item number.
+ */
+export async function listProductForBuyer(locationId: string, productId: string): Promise<ListNowResult> {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, locationId },
+    select: {
+      id: true, externalId: true, name: true, description: true, imageUrl: true,
+      priceCents: true, inventory: true, sku: true, category: true, shipCountries: true, ebayItemId: true,
+    },
+  });
+  if (!product) return { ok: false, error: "Product not found." };
+  if (product.ebayItemId) return { ok: true, itemId: product.ebayItemId, name: product.name };
+
+  const { resolveListingContext, pushProductToEbay } = await import("@/lib/ebay-listing");
+  const token = await getValidToken(locationId);
+  if (!token) return { ok: false, error: "eBay isn't connected — reconnect eBay." };
+
+  const resolved = await resolveListingContext(token);
+  if (!resolved.ok || !resolved.ctx) return { ok: false, error: resolved.reason ?? "Couldn't read your eBay business policies." };
+
+  const r = await pushProductToEbay(locationId, product, resolved.ctx, token);
+  if (!r.ok) return { ok: false, error: r.reason ?? "eBay rejected the listing." };
+
+  await prisma.product.update({
+    where: { id: product.id },
+    data: { ebayItemId: r.listingId ?? null },
+  });
+  await prisma.$executeRaw`UPDATE "Product" SET channels = (CASE WHEN channels @> '"ebay"'::jsonb THEN channels ELSE channels || '"ebay"'::jsonb END) WHERE id = ${product.id}`;
+
+  return { ok: true, itemId: r.listingId, name: product.name };
 }
 
 // --- Sending ---------------------------------------------------------------

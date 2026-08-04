@@ -602,6 +602,9 @@ model Product {
   inventory   Int?     // total stock across variants
   source      String?  // where it came from (Shopify/eBay/manual)
   externalId  String?  // provider product id (dedup)
+  // The live eBay listing (item) number, recorded when we publish. Buyers must
+  // be kept on eBay, so an answer that offers a product has to quote this.
+  ebayItemId  String?
   // Fulfilment/shipping origin — drives the warehouse & dropshipper filters and
   // the geo-gate ("only market where it can ship"). From Shopify tags/metafields.
   supplier    String?  // dropshipper / supplier (e.g. Dropshipzone, CJ Dropshipping)
@@ -619,6 +622,7 @@ model Product {
   @@index([locationId, warehouse])
   @@index([locationId, supplier])
   @@index([locationId, source, externalId])
+  @@index([locationId, ebayItemId])
 }
 
 // ---------------------------------------------------------------------------

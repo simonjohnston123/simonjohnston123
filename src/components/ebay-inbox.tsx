@@ -7,7 +7,19 @@ import {
   draftEbayReplyAction,
   sendEbayReplyAction,
   draftAllEbayRepliesAction,
+  listAndOfferAction,
 } from "@/app/dashboard/l/[locationId]/conversations/ebay-actions";
+
+type StockHit = {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: string | null;
+  inventory: number | null;
+  listedOnEbay: boolean;
+  ebayItemId: string | null;
+  extract: string | null;
+};
 
 /** Header controls: pull buyer questions in, and pre-draft the open ones. */
 export function EbaySyncButton({ locationId }: { locationId: string }) {
@@ -64,6 +76,7 @@ export function EbayReplyBox({
   const [text, setText] = useState(initialDraft ?? "");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState(false);
+  const [toList, setToList] = useState<StockHit[]>([]);
   const [pending, start] = useTransition();
 
   // Switching threads must not carry the previous thread's draft across.
@@ -71,6 +84,7 @@ export function EbayReplyBox({
     setText(initialDraft ?? "");
     setMsg(null);
     setErr(false);
+    setToList([]);
   }, [conversationId, initialDraft]);
 
   const draft = () =>
@@ -79,6 +93,20 @@ export function EbayReplyBox({
       setErr(!r.ok);
       setMsg(r.message);
       if (r.draft) setText(r.draft);
+      setToList(r.toList ?? []);
+    });
+
+  // "We stock it but it isn't up yet" — list it, then drop the item number into
+  // the reply so the buyer never has to leave eBay to find it.
+  const listIt = (p: StockHit) =>
+    start(async () => {
+      const r = await listAndOfferAction(locationId, conversationId, p.id);
+      setErr(!r.ok);
+      setMsg(r.message);
+      if (r.ok) {
+        if (r.sentence) setText((t) => (t ? `${t.trimEnd()} ${r.sentence}` : r.sentence!));
+        setToList((list) => list.filter((x) => x.id !== p.id));
+      }
     });
 
   const send = () =>
@@ -105,6 +133,28 @@ export function EbayReplyBox({
         ) : null}
         <span className="text-xs text-slate-400">Read it before sending — it goes straight to the buyer.</span>
       </div>
+
+      {toList.length ? (
+        <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-1 text-xs font-semibold text-amber-900">
+            In stock but not on eBay yet — list it to give the buyer an item number
+          </div>
+          <div className="space-y-1.5">
+            {toList.map((p) => (
+              <div key={p.id} className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-700">
+                  {p.name}
+                  {p.price ? <span className="text-slate-500"> · {p.price}</span> : null}
+                  {typeof p.inventory === "number" ? <span className="text-slate-500"> · {p.inventory} in stock</span> : null}
+                </span>
+                <button onClick={() => listIt(p)} disabled={pending} className="btn-secondary shrink-0 text-xs">
+                  List on eBay
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <textarea
         value={text}
