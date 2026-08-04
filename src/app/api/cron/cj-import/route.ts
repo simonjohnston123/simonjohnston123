@@ -40,7 +40,7 @@ async function handle(req: NextRequest) {
   }
 
   const r = await importCjWarehouse(locationId, country, { maxPages: pages });
-  return NextResponse.json({ ok: r.ok, locationId, ...r });
+  return NextResponse.json({ ...r, locationId });
 }
 
 export const GET = handle;
