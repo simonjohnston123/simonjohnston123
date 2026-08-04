@@ -76,6 +76,8 @@ async function handle(req: NextRequest) {
           // ones, because DZ won't say where the surcharge applies and a wrong
           // $0 is a promise we can't keep.
           freightCents: f.freeShipping ? 0 : null,
+          // Specs the supplier publishes and we previously discarded.
+          ...(Object.keys(f.attributes).length ? { attributes: f.attributes as object } : {}),
           // Only set a price where there isn't one — never overwrite pricing
           // that has been set deliberately.
           priceCents: r.priceCents ?? (f.costCents ? Math.round(f.costCents * 1.7) : undefined),

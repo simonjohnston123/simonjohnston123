@@ -115,6 +115,8 @@ export type DzFacts = {
   freeShipping: boolean;
   /** Free "with limits" — DZ surcharges somewhere, and their API won't say where. */
   limitedFreeShipping: boolean;
+  /** Structured specs — what makes a product comparable rather than just listable. */
+  attributes: Record<string, unknown>;
 };
 
 type RawFacts = Record<string, unknown>;
@@ -123,6 +125,17 @@ const num = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+/** Drop empty values so a product's attributes say only what we actually know. */
+function cleanAttributes(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === null || v === undefined || v === "") continue;
+    if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0) continue;
+    out[k] = v;
+  }
+  return out;
+}
 
 /** Look up supplier facts for a batch of SKUs (keep batches modest — 60/min). */
 export async function dzFactsForSkus(skus: string[]): Promise<Map<string, DzFacts>> {
@@ -154,6 +167,24 @@ export async function dzFactsForSkus(skus: string[]): Promise<Map<string, DzFact
       // quote as $0.
       freeShipping: String(r.freeshipping ?? "0") === "1",
       limitedFreeShipping: r.limited_au_free_shipping === true,
+      attributes: cleanAttributes({
+        weightKg: num(r.weight),
+        lengthMm: num(r.length),
+        widthMm: num(r.width),
+        heightMm: num(r.height),
+        cbm: num(r.cbm),
+        barcode: r.eancode ? String(r.eancode) : null,
+        brand: r.brand ? String(r.brand) : null,
+        colour: r.colour ? String(r.colour) : null,
+        dispatchEta: r.ETA ? String(r.ETA) : null,
+        spec: r.spec ? String(r.spec).slice(0, 2000) : null,
+        rrpCents: rrp === null ? null : Math.round(rrp * 100),
+        category: cleanAttributes({
+          l1: r.l1_category_name ? String(r.l1_category_name) : null,
+          l2: r.l2_category_name ? String(r.l2_category_name) : null,
+          l3: r.l3_category_name ? String(r.l3_category_name) : null,
+        }),
+      }),
     });
   }
   return out;

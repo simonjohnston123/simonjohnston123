@@ -34,6 +34,9 @@ export async function GET(req: NextRequest) {
     maxCents: cents(sp.get("max")),
     inStockOnly: sp.get("inStock") === "true",
     freeDeliveryOnly: sp.get("freeDelivery") === "true",
+    brand: sp.get("brand") || undefined,
+    hasBarcode: sp.get("hasBarcode") === "true",
+    maxWeightKg: Number(sp.get("maxWeightKg")) || undefined,
     page: Number(sp.get("page")) || 1,
     pageSize: Number(sp.get("pageSize")) || 24,
   });

@@ -606,6 +606,12 @@ model Product {
   // The live eBay listing (item) number, recorded when we publish. Buyers must
   // be kept on eBay, so an answer that offers a product has to quote this.
   ebayItemId  String?
+  /// Structured specifications, from the supplier where they publish them:
+  /// { weightKg, lengthMm, widthMm, heightMm, cbm, barcode, brand, colour,
+  ///   dispatchEta, spec, category: {l1,l2,l3} }
+  /// A title and a price are enough for a human browsing; comparison,
+  /// compatibility, bundles and semantic search all need real attributes.
+  attributes  Json     @default("{}")
   // Fulfilment/shipping origin — drives the warehouse & dropshipper filters and
   // the geo-gate ("only market where it can ship"). From Shopify tags/metafields.
   supplier    String?  // dropshipper / supplier (e.g. Dropshipzone, CJ Dropshipping)

@@ -30,6 +30,10 @@ export type CatalogueQuery = {
   maxCents?: number;
   inStockOnly?: boolean;
   freeDeliveryOnly?: boolean;
+  /** Structured filters, e.g. { brand: "Devanti" } or { maxWeightKg: 5 }. */
+  brand?: string;
+  maxWeightKg?: number;
+  hasBarcode?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -47,6 +51,8 @@ export type CatalogueItem = {
   delivery: { freeToDestination: boolean; note: string };
   supplier: string | null;
   category: string | null;
+  /** Only what the supplier actually publishes — absent keys mean unknown. */
+  attributes: Record<string, unknown>;
 };
 
 export type CatalogueResult = {
@@ -77,6 +83,15 @@ function buildWhere(q: CatalogueQuery): Prisma.ProductWhereInput {
   if (q.inStockOnly) where.inventory = { gt: 0 };
   if (q.freeDeliveryOnly) where.freightCents = 0;
 
+  // Attribute filters. These are what a comparison or an agent actually needs —
+  // "under 5kg", "this brand", "has a real barcode" — and they only became
+  // possible once specs were captured rather than discarded.
+  const attrFilters: Prisma.ProductWhereInput[] = [];
+  if (q.brand) attrFilters.push({ attributes: { path: ["brand"], equals: q.brand } });
+  if (q.hasBarcode) attrFilters.push({ NOT: { attributes: { path: ["barcode"], equals: Prisma.DbNull } } });
+  if (q.maxWeightKg != null) attrFilters.push({ attributes: { path: ["weightKg"], lte: q.maxWeightKg } });
+  if (attrFilters.length) where.AND = attrFilters;
+
   if (q.minCents != null || q.maxCents != null) {
     where.priceCents = {
       not: null,
@@ -92,6 +107,7 @@ function toItem(p: {
   id: string; name: string; sku: string | null; imageUrl: string | null;
   priceCents: number | null; inventory: number | null; warehouse: string | null;
   freightCents: number | null; supplier: string | null; category: string | null;
+  attributes?: unknown;
 }): CatalogueItem {
   const free = p.freightCents === 0;
   return {
@@ -109,6 +125,7 @@ function toItem(p: {
     },
     supplier: p.supplier,
     category: p.category,
+    attributes: (p.attributes && typeof p.attributes === "object" ? p.attributes : {}) as Record<string, unknown>,
   };
 }
 
@@ -129,6 +146,7 @@ export async function searchCatalogue(q: CatalogueQuery): Promise<CatalogueResul
       select: {
         id: true, name: true, sku: true, imageUrl: true, priceCents: true,
         inventory: true, warehouse: true, freightCents: true, supplier: true, category: true,
+        attributes: true,
       },
     }),
   ]);
@@ -153,7 +171,7 @@ export async function getCatalogueItem(
     select: {
       id: true, name: true, sku: true, imageUrl: true, images: true, priceCents: true,
       inventory: true, warehouse: true, freightCents: true, supplier: true, category: true,
-      description: true, shipCountries: true,
+      description: true, shipCountries: true, attributes: true,
     },
   });
   if (!p) return null;
