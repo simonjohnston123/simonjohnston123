@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireLocationAccess } from "@/lib/auth";
 import { CHANNEL_BY_KEY, channelAllowsShipCountries } from "@/lib/channels";
 import { getValidToken, resolveListingContext, pushProductToEbay } from "@/lib/ebay-listing";
+import { screenProduct, violationSummary } from "@/lib/compliance";
 
 export type ProductFilter = {
   q?: string;
@@ -101,10 +102,23 @@ export async function publishToEbayAction(locationId: string, ids: string[]): Pr
 
   let published = 0;
   let failed = 0;
+  let blocked = 0;
   let firstError = "";
+  let firstBlock = "";
   for (const p of products) {
     const ship = Array.isArray(p.shipCountries) ? (p.shipCountries as string[]) : [];
     if (!channelAllowsShipCountries(ebay, ship)) { failed++; continue; }
+
+    // Compliance screen before anything is published. eBay issued 81 policy
+    // takedowns in 120 days against this account; listing first and finding
+    // out later is what puts the channel at risk.
+    const screen = screenProduct(p, "EBAY_AU");
+    if (!screen.ok) {
+      blocked++;
+      if (!firstBlock) firstBlock = violationSummary(screen.violations);
+      continue;
+    }
+
     const r = await pushProductToEbay(locationId, p, resolved.ctx, token);
     if (r.ok) {
       published++;
@@ -116,8 +130,13 @@ export async function publishToEbayAction(locationId: string, ids: string[]): Pr
   }
 
   revalidatePath(`/dashboard/l/${locationId}/products`);
-  const msg = `${published} published to eBay${failed ? ` · ${failed} failed${firstError ? ` (${firstError})` : ""}` : ""}${ids.length > EBAY_PUSH_CAP ? ` — capped at ${EBAY_PUSH_CAP}/run` : ""}`;
-  return { ok: published > 0 || failed === 0, message: msg, marketed: published, skipped: failed };
+  const msg = [
+    `${published} published to eBay`,
+    blocked ? `${blocked} blocked by compliance${firstBlock ? ` (${firstBlock})` : ""}` : "",
+    failed ? `${failed} failed${firstError ? ` (${firstError})` : ""}` : "",
+    ids.length > EBAY_PUSH_CAP ? `capped at ${EBAY_PUSH_CAP}/run` : "",
+  ].filter(Boolean).join(" · ");
+  return { ok: published > 0 || (failed === 0 && blocked === 0), message: msg, marketed: published, skipped: failed + blocked };
 }
 
 /** Remove a channel from selected products. */
