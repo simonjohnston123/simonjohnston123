@@ -168,6 +168,24 @@ model Contact {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // ---- Lifecycle profile -------------------------------------------------
+  // Derived from orders and rebuilt by the profile job, never hand-edited.
+  // Stored rather than computed per request: segments, automations and the
+  // health score all read them, and recomputing across every order each time
+  // would make those queries unusable.
+  lifetimeValueCents Int      @default(0)
+  profitCents        Int      @default(0)
+  orderCount         Int      @default(0)
+  avgOrderValueCents Int      @default(0)
+  firstPurchaseAt    DateTime?
+  lastPurchaseAt     DateTime?
+  /// Category interests accumulated from what they've actually bought.
+  interests          Json     @default("[]")
+  /// Behaviour labels: new / returning / vip / dormant / frequent …
+  behaviourTags      Json     @default("[]")
+  /// excellent | healthy | neutral | at_risk | lost
+  healthScore        String?
+
   tags          ContactTag[]
   fieldValues   CustomFieldValue[]
   opportunities Opportunity[]
@@ -175,10 +193,36 @@ model Contact {
   appointments  Appointment[]
   tasks         Task[]
   orders        Order[]
+  accounts      CustomerAccount[]
 
   @@index([locationId])
   @@index([locationId, email])
   @@index([locationId, externalId])
+  @@index([locationId, lastPurchaseAt])
+  @@index([locationId, lifetimeValueCents])
+}
+
+/// One customer, many marketplace identities.
+///
+/// The same person is "simon_j" on eBay and an email address on Shopify. Without
+/// this they are two customers, every statistic is halved, and no segment is
+/// trustworthy. Orders stay attached to the marketplace they came from while the
+/// person stays singular.
+model CustomerAccount {
+  id          String   @id @default(cuid())
+  locationId  String
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// eBay | Shopify | Amazon | Temu | Website | …
+  marketplace String
+  /// Their identifier on that marketplace — username, customer id or email.
+  handle      String
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  orderCount  Int      @default(0)
+
+  @@unique([locationId, marketplace, handle])
+  @@index([contactId])
 }
 
 // ---------------------------------------------------------------------------
