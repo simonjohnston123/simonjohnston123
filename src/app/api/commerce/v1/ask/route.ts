@@ -108,9 +108,11 @@ export async function POST(req: NextRequest) {
   let widened = false;
   if (result.total === 0) {
     const words = search.split(/\s+/).filter(Boolean);
-    for (let take = words.length - 1; take >= 1; take--) {
+    // Stop at two words. Collapsing to a single word finds *something* for
+    // almost any query — "wireless" returns headphones and wifi cards — and a
+    // confidently irrelevant answer is worse than admitting we don't stock it.
+    for (let take = words.length - 1; take >= 2; take--) {
       const shorter = words.slice(0, take).join(" ");
-      if (shorter.length < 3) break;
       const retry = await searchCatalogue({ locationId: store.id, destination: to, text: shorter, pageSize: 12 });
       if (retry.total > 0) {
         widened = true;
