@@ -13,8 +13,10 @@ export const maxDuration = 300;
 // invisible), then the least-recently-checked, so it keeps stock fresh once the
 // backfill is done. DZ allows 60 requests/min, so each run takes a slice.
 
-const BATCH = 50;
-const BATCHES_PER_RUN = 8;
+// DZ returns a fixed 40 rows per page whatever `limit` says, so a batch above
+// that silently loses the overflow and looks like 'SKU not found'.
+const BATCH = 30;
+const BATCHES_PER_RUN = 10;
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
