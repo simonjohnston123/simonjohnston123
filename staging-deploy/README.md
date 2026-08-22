@@ -15,11 +15,23 @@ register as a live workflow here and fail on every push.
    `.github/workflows/ci.yml` and `.github/workflows/deploy-staging.yml`.
    `ci.yml` needs no secrets and no environment — it works immediately.
    Check the Node major in `ci.yml` matches the droplet's.
-2. Create a **`staging` environment** in that repo
+2. **Check the environment's deployment branch policy before the trial.** A
+   `staging` environment set to *Selected branches and tags* with a rule
+   matching only `staging`, and **0 branches / 0 tags currently allowed**, will
+   reject the run outright — the policy is evaluated against the branch the
+   workflow is *dispatched from* (`github.ref`), not the `ref` input it checks
+   out. Dispatching from `main` or a feature branch fails before a single step
+   runs, and the error points at the environment rather than the workflow.
+   Either add a rule matching the branches deploys are launched from, or launch
+   every deploy from a branch the policy admits. This is worth settling now:
+   it is the most likely reason a first trial fails for a reason unrelated to
+   anything in these files.
+
+3. Create a **`staging` environment** in that repo
    (Settings → Environments → New environment → `staging`).
    Add a required reviewer there if you want deploys gated by approval — the
    workflow needs no change for that.
-3. Add these **environment secrets** under that environment:
+4. Add these **environment secrets** under that environment:
 
    | Secret | Value |
    |---|---|
@@ -112,25 +124,52 @@ unknown verb) and then the allow cases — because a gate that refuses
 *everything*, including a broken one, would pass a suite that only checked
 refusals. It exits non-zero if any case goes the wrong way.
 
-### The production gate, and why receive-archive derives its own sha
+### The production gate — a weaker guarantee than it looks
 
-`deploy-production.sh` gates on an **exact 40-char string match** between your
-`HEAD` and `/opt/placidcrm-staging/DEPLOYED_COMMIT`, read over SSH from the
-file. It never consults the `Deployment` table — so refusing the production DB
-write (option 1 above) costs a missing board row and nothing else. The gate is
-unaffected.
+`deploy-production.sh` gates on an **exact 40-char match** between the
+developer's `HEAD` and `/opt/placidcrm-staging/DEPLOYED_COMMIT`, read over SSH
+from the file. It never consults the `Deployment` table — so refusing the
+production DB write (option 1 above) costs a missing board row and nothing
+else. The gate is unaffected by that choice.
 
-But that file is written by `receive-archive`, a verb this credential holds.
-Had the sha stayed caller data, a leaked staging secret could write commit `Y`
-into the file while the tree held code `X`; the next human deploying `Y` would
-sail through the gate and ship code staging never exercised. Not injection into
-production — production builds from the developer's own `git archive` — but it
-defeats the single guarantee the gate exists to give.
+**But the gate's only evidence is a file this credential writes.** Anyone who
+can write the staging tree can influence which commits pass the production
+gate: put sha `Y` in the archive's pax header, ship tree `X` underneath it, and
+`DEPLOYED_COMMIT` reads `Y` beside code `X`. The next human deploying `Y` sails
+through and ships code staging never exercised.
 
-So `receive-archive` **derives the sha from the archive** (`git
-get-tar-commit-id`, with a pax-header fallback) and refuses an archive that
-carries no commit id. A caller may still state what it believes it sent, and it
-must agree. The file cannot disagree with the code it sits beside.
+`receive-archive` reading the sha from the header instead of an argument does
+**not** close this. The caller supplies the whole tar stream, header included,
+and there is no object database on the droplet to check the pairing against.
+It buys three real but smaller things — accidental disagreement is impossible,
+an archive with no commit id is refused, a caller lying in an argument is
+caught — and it is worth keeping for those. It is not a binding.
+
+Severity: this needs a leaked credential to matter, and it degrades a safety
+gate rather than granting production access. The guarantee is weaker than
+stated, not absent.
+
+To actually bind sha to content, in increasing order of effort:
+
+1. **Deploy by fetch, not by tar.** Make the staging tree a git checkout and
+   have the droplet `fetch` and `checkout <sha>` from GitHub with a read-only
+   deploy key. Git is content-addressed, so the pairing is verified by
+   construction and no credential can forge it. This is the real fix, and it
+   is a change to the deploy model — it belongs with the repo session, not
+   here.
+2. **Require a signature.** A signed tag or detached signature over the
+   archive, checked on the droplet against a pinned public key. Strong, but it
+   means every deployable commit needs signing — which the ChatGPT-pushes
+   workflow cannot do today.
+3. **Move the evidence off the file.** Have the production gate compare
+   against something derived from the *running* staging container — its
+   `BUILD_ID`, or a hash of the deployed tree. Weaker than either above, but
+   it at least forces a forger to run the code they are claiming.
+4. **Accept it and say so.** Keep this design and state plainly that anyone
+   who can write the staging tree can influence the production gate.
+
+**Until one of 1–3 lands, option 4 is what is in force, and this section is
+that statement.**
 
 ### Honest limits
 
@@ -139,12 +178,19 @@ that is the job, and it is why this identity must never be reused for anything
 else. The boundary this buys you is that a leaked GitHub secret compromises
 staging, not production. It is a blast-radius reduction, not a sandbox.
 
-"Compromises staging, not production" was doing slightly too much work before
-the change above: this credential writes the file that the production gate
-reads, which is production influence even though it is not production access.
-Deriving the sha from the archive is what makes that sentence true again. If a
-future verb ever writes `DEPLOYED_COMMIT` from anything caller-supplied, the
-sentence stops being true and should be edited, not defended.
+"Compromises staging, not production" is doing slightly too much work, and the
+archive-header change did not fix that — see the section above. This credential
+writes the file the production gate reads, which is production *influence*
+without production *access*.
+
+The rule, stated as a property rather than a mechanism, because the mechanism
+is what fooled the first attempt at it:
+
+> `DEPLOYED_COMMIT` may only be written from a value the caller cannot choose.
+
+Today it is written from a value the caller *can* choose — it simply arrives in
+a tar header rather than an argument. When that stops being true, edit this
+section. Do not defend it.
 
 ### Database credentials
 

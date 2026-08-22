@@ -104,15 +104,16 @@ case "${1:-}" in
   # accepts, and it is asserted to be exactly a commit hash first.
   # --- deploy-staging.sh step 1. Tar arrives on STDIN.
   #
-  # THE SHA IS DERIVED FROM THE ARCHIVE, NEVER FROM THE CALLER. If it were
-  # caller data, this credential could write commit Y into DEPLOYED_COMMIT
-  # while the tree holds code X — and deploy-production.sh's staging gate
-  # reads exactly that file. A leaked staging key would then let unexercised
-  # code through the production gate. Binding the two removes that.
+  # The sha is read from the archive's pax global header rather than taken
+  # as an argument. THIS IS NOT A BINDING, and must not be described as one:
+  # the caller supplies the whole tar stream, header included, so anyone
+  # holding this credential can put any sha in the header above any tree.
+  # There is no object database here to check the pairing against.
   #
-  # `git archive HEAD` records the commit id in a pax global header, which
-  # is what git get-tar-commit-id reads. The dd fallback parses the same
-  # header if git is not installed on the droplet.
+  # What it does buy: accidental disagreement is impossible, an archive
+  # carrying no commit id is refused, and a caller that merely lies in an
+  # argument is caught. Keep it — but see README "The production gate" for
+  # what is actually required to bind sha to content.
   receive-archive)
     claimed="${2:-}"
     tmp="$DIR/.deploy-tmp"
