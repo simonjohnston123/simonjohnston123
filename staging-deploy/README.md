@@ -70,6 +70,21 @@ Two `prod-*` verbs exist so the workflow can *prove* production did not move.
 They read a file and a container start time. They are the only production
 contact in the whole path, and neither can change anything.
 
+Both take **no argument**. The path and the container name are baked into the
+root-owned wrapper, and the gate matches the verb as an exact literal string,
+so there is nothing to point elsewhere. `verify-gate.sh` asserts this
+explicitly — a read-only verb that accepts a container name is a verb that can
+be aimed at something else.
+
+### Verify before trusting
+
+Run `verify-gate.sh <host> <key>` after provisioning and **before** adding the
+secrets. It runs the refusal cases first (login shell, `docker ps`, reading
+either `.env`, a verb with an argument, a verb with a shell chain appended, an
+unknown verb) and then the allow cases — because a gate that refuses
+*everything*, including a broken one, would pass a suite that only checked
+refusals. It exits non-zero if any case goes the wrong way.
+
 ### Honest limits
 
 `docker exec` into the staging container is arbitrary code **in staging** —

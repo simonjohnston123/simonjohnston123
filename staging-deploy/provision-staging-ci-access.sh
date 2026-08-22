@@ -101,6 +101,12 @@ case "${1:-}" in
   build-id)        exec docker exec "$STAGING_CONTAINER" cat /app/.next/BUILD_ID ;;
   migrate-status)  exec docker exec "$STAGING_CONTAINER" npx prisma migrate status ;;
   migrate-deploy)  exec docker exec "$STAGING_CONTAINER" npx prisma migrate deploy ;;
+
+  # Production PROOF verbs. Literal paths and a literal container name, both
+  # baked in here. They take no argument, so there is nothing to point
+  # elsewhere. This is the only production contact in the entire path.
+  prod-deployed-commit) exec cat /opt/placidcrm/DEPLOYED_COMMIT ;;
+  prod-started-at)      exec docker inspect -f '{{.State.StartedAt}}' placidcrm-app-1 ;;
   *)
     echo "staging-deploy-ctl: refused verb '${1:-}'" >&2
     exit 64
@@ -142,8 +148,8 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
 
   # Production PROOF ONLY — reads two facts, changes nothing. This is how
   # the workflow shows production did not move; it is not a way in.
-  "prod-deployed-commit") exec cat /opt/placidcrm/DEPLOYED_COMMIT ;;
-  "prod-started-at")      exec docker inspect -f '{{.State.StartedAt}}' placidcrm-app-1 ;;
+  "prod-deployed-commit") exec sudo -n "$CTL" prod-deployed-commit ;;
+  "prod-started-at")      exec sudo -n "$CTL" prod-started-at ;;
 
   # Deploy verbs.
   "compose-build")        exec sudo -n "$CTL" compose-build ;;
@@ -161,12 +167,6 @@ esac
 GATE
 chown root:root "$SSHGATE"; chmod 755 "$SSHGATE"
 say "wrote $SSHGATE"
-
-# The two prod-* proof verbs need docker inspect. Grant that one read via a
-# tiny root-owned path rather than the docker group.
-if ! grep -q 'prod-started-at' /etc/sudoers.d/placid-staging-deploy 2>/dev/null; then
-  say "note: prod-started-at runs as the SSH user; see README for the read-only option"
-fi
 
 hdr "6. CI keypair"
 HOME_SSH="/home/$DEPLOY_USER/.ssh"
