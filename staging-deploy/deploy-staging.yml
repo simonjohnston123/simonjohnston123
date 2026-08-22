@@ -71,20 +71,22 @@ jobs:
           SHA: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
-          conclusions="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
-            --jq '.check_runs[] | select(.name != "Deploy to staging") | "\(.name)=\(.conclusion)"')"
+          # The PR Verify workflow reports its job id as the check name:
+          # `verify`. Gate on that specific check rather than "all checks",
+          # so an unrelated future check cannot silently become a deploy
+          # blocker — or, worse, an absent one silently pass.
+          verdict="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
+            --jq '.check_runs[] | select(.name == "verify") | .conclusion' | head -1)"
 
-          if [ -z "${conclusions}" ]; then
-            echo "::error::no check runs on ${SHA} — CI has not run on this commit"
+          if [ -z "${verdict}" ]; then
+            echo "::error::no 'verify' check on ${SHA} — PR Verify has not run on this commit"
             exit 1
           fi
-
-          echo "${conclusions}"
-          if echo "${conclusions}" | grep -qv '=success$'; then
-            echo "::error::not every check succeeded on ${SHA}"
+          if [ "${verdict}" != "success" ]; then
+            echo "::error::'verify' concluded '${verdict}' on ${SHA}"
             exit 1
           fi
-          echo "CI is green on ${SHA}."
+          echo "PR Verify (verify) is green on ${SHA}."
 
       - name: Assert the staging script is present
         run: |

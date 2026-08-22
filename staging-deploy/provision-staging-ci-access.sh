@@ -86,27 +86,91 @@ hdr "3. Root-owned control wrapper (the only sudo entry point)"
 cat > "$CTL" <<'WRAPPER'
 #!/usr/bin/env bash
 # Root-owned. The ONLY thing placid-staging-deploy may sudo.
-# Every verb is hardcoded against the staging container and staging dir.
-# No verb takes a path, an image or a container name from the caller.
+#
+# One verb per remote command in scripts/deploy-staging.sh. Every docker
+# call lives HERE, because the deploy user is deliberately outside the
+# docker group and `docker run -v /:/host` would reach /opt/placidcrm.
+#
+# bash, not sh: compose-build uses `set -o pipefail`.
 set -euo pipefail
 
-STAGING_DIR="/opt/placidcrm-staging"
-STAGING_CONTAINER="placidcrm-staging-app"
+DIR="/opt/placidcrm-staging"
+APP="placidcrm-staging-app"
+COMPOSE="docker-compose.staging.yml"
 
 case "${1:-}" in
-  compose-build)   exec docker compose --project-directory "$STAGING_DIR" build ;;
-  compose-up)      exec docker compose --project-directory "$STAGING_DIR" up -d ;;
-  compose-ps)      exec docker compose --project-directory "$STAGING_DIR" ps ;;
-  started-at)      exec docker inspect -f '{{.State.StartedAt}}' "$STAGING_CONTAINER" ;;
-  build-id)        exec docker exec "$STAGING_CONTAINER" cat /app/.next/BUILD_ID ;;
-  migrate-status)  exec docker exec "$STAGING_CONTAINER" npx prisma migrate status ;;
-  migrate-deploy)  exec docker exec "$STAGING_CONTAINER" npx prisma migrate deploy ;;
+  # --- deploy-staging.sh step 1. Tar arrives on STDIN and must pass
+  # through untouched. The SHA is the one piece of caller data any verb
+  # accepts, and it is asserted to be exactly a commit hash first.
+  receive-archive)
+    sha="${2:-}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "receive-archive: not a sha" >&2; exit 65; }
+    rm -rf "$DIR/.deploy-tmp"
+    mkdir -p "$DIR/.deploy-tmp"
+    tar -xf - -C "$DIR/.deploy-tmp"
+    # Sanity: refuse to prune the live tree if the archive is not the app.
+    test -d "$DIR/.deploy-tmp/src/app" || { echo "archive missing src/app" >&2; exit 66; }
+    rm -rf "$DIR"/{src,prisma,public,scripts}
+    cp -a "$DIR/.deploy-tmp"/. "$DIR"/
+    rm -rf "$DIR/.deploy-tmp"
+    printf '%s' "$sha" > "$DIR/DEPLOYED_COMMIT"
+    ;;
 
-  # Production PROOF verbs. Literal paths and a literal container name, both
-  # baked in here. They take no argument, so there is nothing to point
-  # elsewhere. This is the only production contact in the entire path.
+  compose-build)
+    cd "$DIR"
+    set -o pipefail
+    docker compose -f "$COMPOSE" build > /tmp/staging-build-full.log 2>&1
+    rc=$?
+    tail -60 /tmp/staging-build-full.log
+    exit $rc
+    ;;
+
+  compose-up)
+    cd "$DIR"
+    docker compose -f "$COMPOSE" up -d 2>&1 | tail -2
+    ;;
+
+  staging-status)
+    cat "$DIR/DEPLOYED_COMMIT"
+    docker inspect -f '{{.State.StartedAt}}' "$APP"
+    docker exec "$APP" cat /app/.next/BUILD_ID
+    docker inspect -f '{{.State.Status}}' "$APP"
+    ;;
+
+  staging-migration-count) exec docker exec "$APP" sh -c "ls /app/prisma/migrations | grep -c '^[0-9]'" ;;
+  staging-build-id)        exec docker exec "$APP" cat /app/.next/BUILD_ID ;;
+  migrate-status)          exec docker exec "$APP" npx prisma migrate status ;;
+  migrate-deploy)          exec docker exec "$APP" npx prisma migrate deploy ;;
+
+  # --- Proof verbs for the workflow. No arguments; literal paths and a
+  # literal container name baked in, so there is nothing to aim elsewhere.
+  deployed-commit)      exec cat "$DIR/DEPLOYED_COMMIT" ;;
+  started-at)           exec docker inspect -f '{{.State.StartedAt}}' "$APP" ;;
+  build-id)             exec docker exec "$APP" cat /app/.next/BUILD_ID ;;
   prod-deployed-commit) exec cat /opt/placidcrm/DEPLOYED_COMMIT ;;
   prod-started-at)      exec docker inspect -f '{{.State.StartedAt}}' placidcrm-app-1 ;;
+  prod-http-status)     exec curl -s -o /dev/null -w '%{http_code}' https://placidcrm.com/ ;;
+
+  # --- deploy-staging.sh step 8: a WRITE to the PRODUCTION database.
+  # Refused by default. See README "The production write". Enabling this
+  # is a deliberate decision, not a step in getting a deploy to pass.
+  record-deployment)
+    [ -f /etc/placid-staging-deploy/allow-prod-deployment-record ] || {
+      echo "record-deployment: refused — production DB write not enabled for CI" >&2
+      exit 67
+    }
+    sha="${2:-}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "record-deployment: not a sha" >&2; exit 65; }
+    # Subject arrives on stdin and is bound as a psql variable, never
+    # interpolated into the statement — a subject containing $$ would
+    # otherwise break out of dollar-quoting.
+    subject="$(head -c 500)"
+    docker exec -i placidcrm-db-1 psql -U placid -d placidcrm \
+      -v ON_ERROR_STOP=1 -v sha="$sha" -v subj="$subject" -v env=staging \
+      -c 'INSERT INTO "Deployment" ("commitSha","environment","note","deployedAt")
+          VALUES (:'"'"'sha'"'"', :'"'"'env'"'"', :'"'"'subj'"'"', now())'
+    ;;
+
   *)
     echo "staging-deploy-ctl: refused verb '${1:-}'" >&2
     exit 64
@@ -131,38 +195,35 @@ say "sudoers installed and validated"
 hdr "5. SSH forced command"
 cat > "$SSHGATE" <<'GATE'
 #!/usr/bin/env bash
-# Forced command for the CI key. The key cannot run anything else:
-# whatever the client asked for arrives in SSH_ORIGINAL_COMMAND and is
-# matched against this list, never evaluated as a shell string.
+# Forced command for the CI key. Whatever the client asked for arrives in
+# SSH_ORIGINAL_COMMAND and is matched here — never evaluated as a shell
+# string, so `deployed-commit; id` is one unmatched literal, not two
+# commands.
+#
+# STDIN IS NEVER READ HERE. receive-archive's tar must reach the wrapper
+# untouched, so every branch uses exec.
 set -euo pipefail
-
 CTL="/usr/local/sbin/staging-deploy-ctl"
-STAGING_DIR="/opt/placidcrm-staging"
 
-case "${SSH_ORIGINAL_COMMAND:-}" in
-  # Proofs the workflow needs. Read-only.
-  "deployed-commit")      exec cat "$STAGING_DIR/DEPLOYED_COMMIT" ;;
-  "started-at")           exec sudo -n "$CTL" started-at ;;
-  "build-id")             exec sudo -n "$CTL" build-id ;;
-  "migrate-status")       exec sudo -n "$CTL" migrate-status ;;
+cmd="${SSH_ORIGINAL_COMMAND:-}"
+verb="${cmd%% *}"
+rest="${cmd#"$verb"}"; rest="${rest# }"
 
-  # Production PROOF ONLY — reads two facts, changes nothing. This is how
-  # the workflow shows production did not move; it is not a way in.
-  "prod-deployed-commit") exec sudo -n "$CTL" prod-deployed-commit ;;
-  "prod-started-at")      exec sudo -n "$CTL" prod-started-at ;;
+case "$verb" in
+  # The two verbs that take the commit sha. The wrapper asserts its shape.
+  receive-archive|record-deployment)
+    exec sudo -n "$CTL" "$verb" "$rest" ;;
 
-  # Deploy verbs.
-  "compose-build")        exec sudo -n "$CTL" compose-build ;;
-  "compose-up")           exec sudo -n "$CTL" compose-up ;;
-  "migrate-deploy")       exec sudo -n "$CTL" migrate-deploy ;;
-
-  # Receiving the code tarball on stdin, unpacked into staging only.
-  "receive-archive")      exec tar -xzf - -C "$STAGING_DIR" ;;
+  # Everything else takes NO argument: reject if anything follows.
+  deployed-commit|started-at|build-id|staging-status|staging-build-id| \
+  staging-migration-count|migrate-status|migrate-deploy|compose-build| \
+  compose-up|prod-deployed-commit|prod-started-at|prod-http-status)
+    [ -z "$rest" ] || { echo "refused: '$verb' takes no argument" >&2; exit 64; }
+    exec sudo -n "$CTL" "$verb" ;;
 
   *)
-    echo "refused: '${SSH_ORIGINAL_COMMAND:-<login shell>}'" >&2
-    exit 64
-    ;;
+    echo "refused: '${cmd:-<login shell>}'" >&2
+    exit 64 ;;
 esac
 GATE
 chown root:root "$SSHGATE"; chmod 755 "$SSHGATE"
