@@ -1,0 +1,155 @@
+# Remote staging deploy for PlacidCRM.
+#
+# This file does NOT belong in this repository. Copy it to the PlacidCRM
+# application repo as .github/workflows/deploy-staging.yml. See README.md
+# in this directory for installation and the assumptions to verify first.
+#
+# Design note: this workflow deliberately does NOT reimplement the guards in
+# scripts/deploy-staging.sh. It checks out the exact commit and runs that
+# script, so there is one deploy path and it cannot drift from the local one.
+
+name: Deploy to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit SHA to deploy to staging"
+        required: true
+        type: string
+
+concurrency:
+  # A tar deploy clobbers a parallel session's edits — one at a time, and
+  # never cancel a run mid-deploy.
+  group: staging-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.ref }} to staging
+    runs-on: ubuntu-latest
+    # Scopes the secrets below to this environment and lets you add a
+    # required-reviewer rule without touching this file.
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL || 'https://staging.placidcrm.com' }}
+    # Deploys take longer than 10 minutes; the droplet build is the slow part.
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the exact ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          # deploy-staging.sh ships `git archive HEAD`, so it needs real history.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the commit being deployed
+        id: commit
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${sha} ($(git rev-parse --short HEAD)) from ref '${{ inputs.ref }}'"
+
+      - name: Assert the staging script is present
+        run: |
+          set -euo pipefail
+          test -f scripts/deploy-staging.sh \
+            || { echo "::error::scripts/deploy-staging.sh not found at this commit"; exit 1; }
+
+      # Documented guard #5, hoisted onto the runner: a `///` in a .sql file is
+      # a SQL syntax error that crash-loops the app and blocks every future
+      # migration with a P3009. Cheaper to catch here than on the droplet.
+      - name: Migration syntax guard
+        run: |
+          set -euo pipefail
+          if grep -rn '///' prisma/migrations --include='*.sql'; then
+            echo "::error::Prisma doc comment (///) found in a migration .sql file"
+            exit 1
+          fi
+          echo "No /// in migration SQL."
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+        run: |
+          set -euo pipefail
+          # Keep the host out of the log even if a later command echoes it.
+          echo "::add-mask::${PROD_HOST}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # deploy-staging.sh refers to this key by name, so write it there
+          # rather than relying on the agent alone.
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/placid_connect_devbeta_ed25519
+          chmod 600 ~/.ssh/placid_connect_devbeta_ed25519
+          printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          # Pinned host key — never StrictHostKeyChecking=no.
+          cat > ~/.ssh/config <<EOF
+          Host *
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            IdentitiesOnly yes
+            ServerAliveInterval 30
+            ServerAliveCountMax 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy to staging
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${PROD_HOST}"
+          bash scripts/deploy-staging.sh
+
+      # Never trust the exit code alone — check the artifact on the droplet.
+      - name: Prove staging is serving this commit
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          EXPECTED: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${PROD_HOST}"
+
+          deployed="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 \
+            "root@${PROD_HOST}" \
+            'cat /opt/placidcrm-staging/DEPLOYED_COMMIT' | tr -d '[:space:]')"
+
+          echo "DEPLOYED_COMMIT on staging: ${deployed}"
+          echo "Expected:                   ${EXPECTED}"
+
+          # Accept a short sha written by the script, but require a real prefix.
+          case "${EXPECTED}" in
+            "${deployed}"*) ;;
+            *) echo "::error::staging is serving ${deployed}, not ${EXPECTED}"; exit 1 ;;
+          esac
+
+          ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
+            'docker inspect -f "container started: {{.State.StartedAt}}" placidcrm-staging-app; \
+             docker exec placidcrm-staging-app cat /app/.next/BUILD_ID'
+
+      - name: Summarise
+        if: always()
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL || 'https://staging.placidcrm.com' }}
+        run: |
+          {
+            echo "### Staging deploy"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Ref | \`${{ inputs.ref }}\` |"
+            echo "| Commit | \`${{ steps.commit.outputs.sha }}\` |"
+            echo "| URL | ${STAGING_URL} |"
+            echo "| Result | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
