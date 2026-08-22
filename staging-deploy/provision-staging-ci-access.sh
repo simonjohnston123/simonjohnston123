@@ -102,18 +102,55 @@ case "${1:-}" in
   # --- deploy-staging.sh step 1. Tar arrives on STDIN and must pass
   # through untouched. The SHA is the one piece of caller data any verb
   # accepts, and it is asserted to be exactly a commit hash first.
+  # --- deploy-staging.sh step 1. Tar arrives on STDIN.
+  #
+  # THE SHA IS DERIVED FROM THE ARCHIVE, NEVER FROM THE CALLER. If it were
+  # caller data, this credential could write commit Y into DEPLOYED_COMMIT
+  # while the tree holds code X — and deploy-production.sh's staging gate
+  # reads exactly that file. A leaked staging key would then let unexercised
+  # code through the production gate. Binding the two removes that.
+  #
+  # `git archive HEAD` records the commit id in a pax global header, which
+  # is what git get-tar-commit-id reads. The dd fallback parses the same
+  # header if git is not installed on the droplet.
   receive-archive)
-    sha="${2:-}"
-    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "receive-archive: not a sha" >&2; exit 65; }
-    rm -rf "$DIR/.deploy-tmp"
-    mkdir -p "$DIR/.deploy-tmp"
-    tar -xf - -C "$DIR/.deploy-tmp"
-    # Sanity: refuse to prune the live tree if the archive is not the app.
-    test -d "$DIR/.deploy-tmp/src/app" || { echo "archive missing src/app" >&2; exit 66; }
+    claimed="${2:-}"
+    tmp="$DIR/.deploy-tmp"
+    arch="$(mktemp /tmp/staging-archive.XXXXXX)"
+    trap 'rm -f "$arch"' EXIT
+    cat > "$arch"
+
+    # git archive may or may not be piped through gzip; normalise first.
+    if [ "$(head -c2 "$arch" | od -An -tx1 | tr -d ' \n')" = "1f8b" ]; then
+      gunzip -c "$arch" > "${arch}.tar" && mv "${arch}.tar" "$arch"
+    fi
+
+    sha=""
+    if command -v git >/dev/null 2>&1; then
+      sha="$(git get-tar-commit-id < "$arch" 2>/dev/null | tr -d '[:space:]' || true)"
+    fi
+    if [ -z "$sha" ]; then
+      sha="$(dd if="$arch" bs=512 skip=1 count=1 2>/dev/null | tr -d '\000' \
+             | sed -n 's/.*comment=\([0-9a-f]\{40\}\).*/\1/p')"
+    fi
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+      echo "receive-archive: archive carries no commit id — refusing" >&2; exit 65; }
+
+    # A caller may still state what it thinks it sent; it must agree.
+    if [ -n "$claimed" ] && [ "$claimed" != "$sha" ]; then
+      echo "receive-archive: caller claimed $claimed, archive is $sha" >&2; exit 65
+    fi
+
+    rm -rf "$tmp"; mkdir -p "$tmp"
+    tar -xf "$arch" -C "$tmp"
+    # Refuse to prune the live tree if the archive is not the app.
+    test -d "$tmp/src/app" || { echo "archive missing src/app" >&2; exit 66; }
     rm -rf "$DIR"/{src,prisma,public,scripts}
-    cp -a "$DIR/.deploy-tmp"/. "$DIR"/
-    rm -rf "$DIR/.deploy-tmp"
+    cp -a "$tmp"/. "$DIR"/
+    rm -rf "$tmp"
+    # Written LAST, and only from the derived value.
     printf '%s' "$sha" > "$DIR/DEPLOYED_COMMIT"
+    echo "$sha"
     ;;
 
   compose-build)

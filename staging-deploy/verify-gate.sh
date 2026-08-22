@@ -54,6 +54,10 @@ refuse "prod-started-at WITH an argument"   "prod-started-at placidcrm-staging-a
 refuse "prod-deployed-commit WITH a path"   "prod-deployed-commit /etc/shadow"
 refuse "compose-up WITH an argument"        "compose-up --scale app=9"
 refuse "receive-archive with a bad sha"     "receive-archive not-a-sha"
+# The forgery case: a well-formed sha the archive does not back up. Sent with
+# no archive on stdin, so it must fail at the commit-id check regardless.
+refuse "receive-archive, sha with no archive" \
+       "receive-archive 1111111111111111111111111111111111111111"
 refuse "receive-archive with a path"        "receive-archive ../../etc"
 refuse "production DB write (default off)"  "record-deployment 0000000000000000000000000000000000000000"
 refuse "verb with a shell chain appended"   "deployed-commit; id"

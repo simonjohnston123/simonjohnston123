@@ -112,12 +112,39 @@ unknown verb) and then the allow cases — because a gate that refuses
 *everything*, including a broken one, would pass a suite that only checked
 refusals. It exits non-zero if any case goes the wrong way.
 
+### The production gate, and why receive-archive derives its own sha
+
+`deploy-production.sh` gates on an **exact 40-char string match** between your
+`HEAD` and `/opt/placidcrm-staging/DEPLOYED_COMMIT`, read over SSH from the
+file. It never consults the `Deployment` table — so refusing the production DB
+write (option 1 above) costs a missing board row and nothing else. The gate is
+unaffected.
+
+But that file is written by `receive-archive`, a verb this credential holds.
+Had the sha stayed caller data, a leaked staging secret could write commit `Y`
+into the file while the tree held code `X`; the next human deploying `Y` would
+sail through the gate and ship code staging never exercised. Not injection into
+production — production builds from the developer's own `git archive` — but it
+defeats the single guarantee the gate exists to give.
+
+So `receive-archive` **derives the sha from the archive** (`git
+get-tar-commit-id`, with a pax-header fallback) and refuses an archive that
+carries no commit id. A caller may still state what it believes it sent, and it
+must agree. The file cannot disagree with the code it sits beside.
+
 ### Honest limits
 
 `docker exec` into the staging container is arbitrary code **in staging** —
 that is the job, and it is why this identity must never be reused for anything
 else. The boundary this buys you is that a leaked GitHub secret compromises
 staging, not production. It is a blast-radius reduction, not a sandbox.
+
+"Compromises staging, not production" was doing slightly too much work before
+the change above: this credential writes the file that the production gate
+reads, which is production influence even though it is not production access.
+Deriving the sha from the archive is what makes that sentence true again. If a
+future verb ever writes `DEPLOYED_COMMIT` from anything caller-supplied, the
+sentence stops being true and should be edited, not defended.
 
 ### Database credentials
 
@@ -138,6 +165,31 @@ host  placidcrm_staging  placid_staging_ci  0.0.0.0/0  scram-sha-256
 The SQL deliberately does **not** `REVOKE CONNECT ... FROM PUBLIC` on the
 production database. That would strip every role relying on the default and
 can take the app down.
+
+## Findings in the deploy scripts (not fixed here)
+
+Turned up while deriving the verb list. None is caused by this work; all three
+are in `scripts/`, which needs a session with the repo.
+
+1. **The pre-deploy backup can silently be empty.** `deploy-production.sh` runs
+   `pg_dump ... | gzip > file` in a remote shell with no `pipefail`. If
+   `pg_dump` fails, `gzip` still exits 0 and writes a valid near-empty archive,
+   the remote command returns 0, and the deploy proceeds. `ls -lh` prints a size
+   but nothing asserts it. This is the exact failure the build step carries a
+   nine-line comment about, still live in the one step that promises
+   recoverability. Add `set -o pipefail` and assert a minimum size.
+2. **Backup filenames collide.** The stamp comes from the commit date, not
+   wall-clock, so redeploying the same commit overwrites the previous run's
+   pre-deploy dump — which rollback option 3 in `DEPLOYMENT.md` assumes is the
+   state before you touched anything.
+3. **Production asserts less than staging.** Staging ends with
+   `[ "$UP" = running ] || exit 1`. Production captures the same values and
+   asserts nothing — it fails on neither a dead container nor a non-200. The
+   script with the customers and the money has the weaker runtime proof.
+
+Also: the `$$…$$` subject interpolation fixed here in `record-deployment` exists
+in **both** scripts. Applying the psql-variable binding to only the staging one
+leaves the same quoting break in production.
 
 ## Why it calls the existing script
 
