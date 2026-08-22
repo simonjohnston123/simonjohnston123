@@ -52,6 +52,20 @@ the droplet is strictly cheaper:
 The dirty-tree guard is unnecessary here: a CI checkout is clean by
 construction.
 
+## What a run proves
+
+The job fails rather than reporting a green deploy it cannot substantiate:
+
+| Claim | How it is proved |
+|---|---|
+| Staging is serving the requested commit | `/opt/placidcrm-staging/DEPLOYED_COMMIT` on the droplet is compared to the SHA that was checked out; a mismatch fails the job |
+| The artifact is genuinely new | container start time and Next `BUILD_ID` are printed from the running staging container |
+| Production is untouched | production's `DEPLOYED_COMMIT` **and** `placidcrm-app-1` start time are snapshotted before the deploy and re-read after; any difference is a hard failure |
+| Simon initiated it remotely | the run is `workflow_dispatch` from the Actions tab, so it works from a phone with no PC, no local Claude Code and no local SSH |
+
+Exit codes are never trusted on their own — a 200 proves the old container is
+alive, not that new code shipped.
+
 ## Production is untouched
 
 The workflow is `workflow_dispatch` only — no push or schedule trigger — and

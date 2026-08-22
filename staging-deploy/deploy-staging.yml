@@ -104,6 +104,26 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
+      # Production must come out of this run byte-identical. Snapshot it first
+      # so the claim can be proved, not asserted.
+      - name: Snapshot production before deploying
+        id: prod_before
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${PROD_HOST}"
+          before="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
+            'cat /opt/placidcrm/DEPLOYED_COMMIT | tr -d "[:space:]"; echo; \
+             docker inspect -f "{{.State.StartedAt}}" placidcrm-app-1')"
+          {
+            echo 'snapshot<<PRODSNAP'
+            echo "${before}"
+            echo 'PRODSNAP'
+          } >> "$GITHUB_OUTPUT"
+          echo "Production before:"
+          echo "${before}"
+
       - name: Deploy to staging
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
@@ -137,6 +157,27 @@ jobs:
           ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
             'docker inspect -f "container started: {{.State.StartedAt}}" placidcrm-staging-app; \
              docker exec placidcrm-staging-app cat /app/.next/BUILD_ID'
+
+      # Any change here means the staging path touched production. Hard fail.
+      - name: Prove production is untouched
+        if: always() && steps.prod_before.outcome == 'success'
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          BEFORE: ${{ steps.prod_before.outputs.snapshot }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::${PROD_HOST}"
+          after="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
+            'cat /opt/placidcrm/DEPLOYED_COMMIT | tr -d "[:space:]"; echo; \
+             docker inspect -f "{{.State.StartedAt}}" placidcrm-app-1')"
+
+          if [ "${after}" != "${BEFORE}" ]; then
+            echo "::error::production changed during a staging deploy"
+            printf 'before:\n%s\nafter:\n%s\n' "${BEFORE}" "${after}"
+            exit 1
+          fi
+          echo "Production unchanged (commit and container start time both identical):"
+          echo "${after}"
 
       - name: Summarise
         if: always()
