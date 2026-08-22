@@ -109,6 +109,7 @@ jobs:
           SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           PROD_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           # Keep the host out of the log even if a later command echoes it.
@@ -116,10 +117,10 @@ jobs:
 
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # deploy-staging.sh refers to this key by name, so write it there
-          # rather than relying on the agent alone.
-          printf '%s\n' "${SSH_KEY}" > ~/.ssh/placid_connect_devbeta_ed25519
-          chmod 600 ~/.ssh/placid_connect_devbeta_ed25519
+          # Staging-only identity: this key is pinned to a forced command on
+          # the droplet and cannot open a shell or reach /opt/placidcrm.
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/staging_ci_ed25519
+          chmod 600 ~/.ssh/staging_ci_ed25519
           printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
@@ -140,12 +141,12 @@ jobs:
         id: prod_before
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
-          before="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
-            'cat /opt/placidcrm/DEPLOYED_COMMIT | tr -d "[:space:]"; echo; \
-             docker inspect -f "{{.State.StartedAt}}" placidcrm-app-1')"
+          ssh_prod() { ssh -i ~/.ssh/staging_ci_ed25519 "${DEPLOY_USER}@${PROD_HOST}" "$1"; }
+          before="$(ssh_prod prod-deployed-commit | tr -d '[:space:]')|$(ssh_prod prod-started-at | tr -d '[:space:]')"
           {
             echo 'snapshot<<PRODSNAP'
             echo "${before}"
@@ -157,6 +158,7 @@ jobs:
       - name: Deploy to staging
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
@@ -166,14 +168,15 @@ jobs:
       - name: Prove staging is serving this commit
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
           EXPECTED: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
 
-          deployed="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 \
-            "root@${PROD_HOST}" \
-            'cat /opt/placidcrm-staging/DEPLOYED_COMMIT' | tr -d '[:space:]')"
+          deployed="$(ssh -i ~/.ssh/staging_ci_ed25519 \
+            "${DEPLOY_USER}@${PROD_HOST}" \
+            deployed-commit | tr -d '[:space:]')"
 
           echo "DEPLOYED_COMMIT on staging: ${deployed}"
           echo "Expected:                   ${EXPECTED}"
@@ -184,22 +187,22 @@ jobs:
             *) echo "::error::staging is serving ${deployed}, not ${EXPECTED}"; exit 1 ;;
           esac
 
-          ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
-            'docker inspect -f "container started: {{.State.StartedAt}}" placidcrm-staging-app; \
-             docker exec placidcrm-staging-app cat /app/.next/BUILD_ID'
+          ssh_stg() { ssh -i ~/.ssh/staging_ci_ed25519 "${DEPLOY_USER}@${PROD_HOST}" "$1"; }
+          echo "container started: $(ssh_stg started-at)"
+          echo "next BUILD_ID:     $(ssh_stg build-id)"
 
       # Any change here means the staging path touched production. Hard fail.
       - name: Prove production is untouched
         if: always() && steps.prod_before.outcome == 'success'
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
           BEFORE: ${{ steps.prod_before.outputs.snapshot }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
-          after="$(ssh -i ~/.ssh/placid_connect_devbeta_ed25519 "root@${PROD_HOST}" \
-            'cat /opt/placidcrm/DEPLOYED_COMMIT | tr -d "[:space:]"; echo; \
-             docker inspect -f "{{.State.StartedAt}}" placidcrm-app-1')"
+          ssh_prod() { ssh -i ~/.ssh/staging_ci_ed25519 "${DEPLOY_USER}@${PROD_HOST}" "$1"; }
+          after="$(ssh_prod prod-deployed-commit | tr -d '[:space:]')|$(ssh_prod prod-started-at | tr -d '[:space:]')"
 
           if [ "${after}" != "${BEFORE}" ]; then
             echo "::error::production changed during a staging deploy"
