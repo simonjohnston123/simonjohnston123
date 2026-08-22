@@ -157,6 +157,9 @@ jobs:
           echo "Production before:"
           echo "${before}"
 
+      # deploy-staging.sh drives the fetch model: it calls fetch-checkout with
+      # the sha instead of piping a tar. The droplet then proves the pairing
+      # itself — the runner never asserts what the tree contains.
       - name: Deploy to staging
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}

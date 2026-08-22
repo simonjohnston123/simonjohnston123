@@ -31,7 +31,15 @@ SSHGATE="/usr/local/sbin/staging-deploy-ssh"
 KEY_OUT="/root/staging-ci-${DEPLOY_USER}.key"
 
 CHECK_ONLY=0
-[ "${1:-}" = "--check" ] && CHECK_ONLY=1
+INIT_GIT=0
+for a in "$@"; do
+  case "$a" in
+    --check)    CHECK_ONLY=1 ;;
+    --init-git) INIT_GIT=1 ;;
+    *) echo "unknown option: $a" >&2; exit 64 ;;
+  esac
+done
+DIR_GIT="$STAGING_DIR/.git"
 
 say() { printf '  %s\n' "$*"; }
 hdr() { printf '\n== %s\n' "$*"; }
@@ -46,6 +54,10 @@ if [ "$CHECK_ONLY" = 1 ]; then
   [ -f "$SSHGATE" ] && say "ssh gate $SSHGATE: present" || say "ssh gate $SSHGATE: absent"
   [ -f /etc/sudoers.d/placid-staging-deploy ] && say "sudoers: present" || say "sudoers: absent"
   say "staging dir owner: $(stat -c '%U:%G' "$STAGING_DIR")"
+  [ -d "$STAGING_DIR/.git" ] && say "staging is a git checkout: yes (fetch-checkout active)" \
+                             || say "staging is a git checkout: no (still on deprecated receive-archive)"
+  [ -f /etc/placid-staging-deploy/github_deploy_ed25519 ] && say "github deploy key: present" \
+                                                          || say "github deploy key: absent"
   [ -d "$PROD_DIR" ] && say "prod dir owner:    $(stat -c '%U:%G' "$PROD_DIR") (must NOT be $DEPLOY_USER)"
   exit 0
 fi
@@ -97,6 +109,7 @@ set -euo pipefail
 DIR="/opt/placidcrm-staging"
 APP="placidcrm-staging-app"
 COMPOSE="docker-compose.staging.yml"
+GH_KEY="/etc/placid-staging-deploy/github_deploy_ed25519"
 
 case "${1:-}" in
   # --- deploy-staging.sh step 1. Tar arrives on STDIN and must pass
@@ -114,7 +127,14 @@ case "${1:-}" in
   # carrying no commit id is refused, and a caller that merely lies in an
   # argument is caught. Keep it — but see README "The production gate" for
   # what is actually required to bind sha to content.
+  # DEPRECATED — superseded by fetch-checkout, which actually binds sha to
+  # content. Kept only until the fetch model has completed a trial. Refuses
+  # once $DIR is a git checkout, so the two paths can never both be live.
   receive-archive)
+    test -d "$DIR/.git" && {
+      echo "receive-archive: refused — $DIR is a git checkout, use fetch-checkout" >&2
+      exit 71; }
+    echo "receive-archive: DEPRECATED, use fetch-checkout" >&2
     claimed="${2:-}"
     tmp="$DIR/.deploy-tmp"
     arch="$(mktemp /tmp/staging-archive.XXXXXX)"
@@ -152,6 +172,37 @@ case "${1:-}" in
     # Written LAST, and only from the derived value.
     printf '%s' "$sha" > "$DIR/DEPLOYED_COMMIT"
     echo "$sha"
+    ;;
+
+  # --- THE DEPLOY PATH. Git is content-addressed, so `git cat-file -e` on a
+  # commit object proves that object IS that content. The caller names a sha
+  # and cannot choose what it contains — which is the property receive-archive
+  # could never provide, whether the sha arrived as an argument or in a tar
+  # header. DEPLOYED_COMMIT is then written from `git rev-parse HEAD`, a value
+  # produced by git after checkout rather than supplied by anyone.
+  #
+  # The GitHub deploy key lives at $GH_KEY, root-owned 600. The CI credential
+  # cannot read it: it only ever reaches this verb through sudo.
+  fetch-checkout)
+    sha="${2:-}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "fetch-checkout: not a sha" >&2; exit 65; }
+    test -d "$DIR/.git" || { echo "fetch-checkout: $DIR is not a git checkout — run --init-git" >&2; exit 68; }
+
+    export GIT_SSH_COMMAND="ssh -i $GH_KEY -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes"
+    git -C "$DIR" fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+
+    # The binding. Refuses a sha GitHub has never published.
+    git -C "$DIR" cat-file -e "${sha}^{commit}" 2>/dev/null || {
+      echo "fetch-checkout: $sha is not a commit in this repository" >&2; exit 69; }
+
+    # -f discards tracked-file drift. Untracked files — .env, compose
+    # overrides, Caddyfiles — are left alone, and nothing here runs git clean.
+    git -C "$DIR" checkout -f --detach "$sha"
+
+    actual="$(git -C "$DIR" rev-parse HEAD)"
+    [ "$actual" = "$sha" ] || { echo "fetch-checkout: HEAD is $actual, expected $sha" >&2; exit 70; }
+    printf '%s' "$actual" > "$DIR/DEPLOYED_COMMIT"
+    echo "$actual"
     ;;
 
   compose-build)
@@ -249,7 +300,7 @@ rest="${cmd#"$verb"}"; rest="${rest# }"
 
 case "$verb" in
   # The two verbs that take the commit sha. The wrapper asserts its shape.
-  receive-archive|record-deployment)
+  fetch-checkout|receive-archive|record-deployment)
     exec sudo -n "$CTL" "$verb" "$rest" ;;
 
   # Everything else takes NO argument: reject if anything follows.
@@ -281,6 +332,59 @@ printf 'restrict,command="%s" %s\n' "$SSHGATE" "$(cat "${KEY_OUT}.pub")" > "$HOM
 chown "$DEPLOY_USER":"$DEPLOY_USER" "$HOME_SSH/authorized_keys"
 chmod 600 "$HOME_SSH/authorized_keys"
 say "authorized_keys pinned to the forced command"
+
+# --------------------------------------------------------------------------
+hdr "7. Convert staging to a git checkout (--init-git only)"
+if [ "${INIT_GIT:-0}" = 1 ]; then
+  GH_KEY_DIR=/etc/placid-staging-deploy
+  GH_KEY="$GH_KEY_DIR/github_deploy_ed25519"
+  install -d -m 700 -o root -g root "$GH_KEY_DIR"
+
+  if [ ! -f "$GH_KEY" ]; then
+    ssh-keygen -t ed25519 -N '' -C "placid-crm staging deploy (read-only)" -f "$GH_KEY" >/dev/null
+    chown root:root "$GH_KEY" "${GH_KEY}.pub"; chmod 600 "$GH_KEY"; chmod 644 "${GH_KEY}.pub"
+    say "generated GitHub deploy key"
+    echo
+    echo "  ADD THIS AS A READ-ONLY DEPLOY KEY on placidgroup/placid-crm"
+    echo "  (Settings -> Deploy keys -> Add, leave 'Allow write access' UNCHECKED):"
+    echo
+    cat "${GH_KEY}.pub"
+    echo
+    echo "  Then re-run with --init-git to finish. Stopping here."
+    exit 0
+  fi
+
+  # Pin github.com's host key for root, so StrictHostKeyChecking=yes works.
+  install -d -m 700 /root/.ssh
+  ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null
+  sort -u /root/.ssh/known_hosts -o /root/.ssh/known_hosts
+
+  export GIT_SSH_COMMAND="ssh -i $GH_KEY -o IdentitiesOnly=yes -o BatchMode=yes"
+  if [ -d "$DIR_GIT" ]; then
+    say "$STAGING_DIR is already a git checkout"
+  else
+    git -C "$STAGING_DIR" init -q
+    git -C "$STAGING_DIR" remote add origin git@github.com:placidgroup/placid-crm.git 2>/dev/null || true
+    git -C "$STAGING_DIR" fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+    say "initialised and fetched"
+    echo
+    echo "  NOT checked out. The currently-deployed tree is untouched."
+    echo "  The first fetch-checkout will move it, and that is the trial."
+  fi
+  # .env, compose overrides and Caddyfiles must survive a checkout -f.
+  cat > "$STAGING_DIR/.git/info/exclude" <<'EXCL'
+.env
+.env.*
+DEPLOYED_COMMIT
+docker-compose.staging.yml
+docker-compose.override.yml
+Caddyfile
+EXCL
+  chown -R "$DEPLOY_USER":"$DEPLOY_USER" "$STAGING_DIR/.git"
+  say "local excludes written; .env and compose overrides will not be clobbered"
+else
+  say "skipped (pass --init-git to convert staging to a git checkout)"
+fi
 
 # --------------------------------------------------------------------------
 hdr "DONE — GitHub secrets to create (staging environment)"
