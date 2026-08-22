@@ -108,10 +108,15 @@ jobs:
 
       - name: Configure SSH
         env:
+          # STAGING_SSH_KEY is the only genuine secret here. STAGING_SSH_USER
+          # and SSH_KNOWN_HOSTS are environment VARIABLES on purpose: GitHub
+          # masks every secret value everywhere in the log, so a common string
+          # like the deploy username would be replaced with *** throughout the
+          # output — unreadable in exactly the run you most need to read.
           SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
           PROD_HOST: ${{ secrets.PROD_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_USER: ${{ vars.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           # Keep the host out of the log even if a later command echoes it.
@@ -143,7 +148,7 @@ jobs:
         id: prod_before
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_USER: ${{ vars.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
@@ -163,7 +168,7 @@ jobs:
       - name: Deploy to staging
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_USER: ${{ vars.STAGING_SSH_USER }}
         run: |
           set -euo pipefail
           echo "::add-mask::${PROD_HOST}"
@@ -173,7 +178,7 @@ jobs:
       - name: Prove staging is serving this commit
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_USER: ${{ vars.STAGING_SSH_USER }}
           EXPECTED: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
@@ -201,7 +206,7 @@ jobs:
         if: always() && steps.prod_before.outcome == 'success'
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
-          DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_USER: ${{ vars.STAGING_SSH_USER }}
           BEFORE: ${{ steps.prod_before.outputs.snapshot }}
         run: |
           set -euo pipefail

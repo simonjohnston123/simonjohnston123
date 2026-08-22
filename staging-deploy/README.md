@@ -15,17 +15,17 @@ register as a live workflow here and fail on every push.
    `.github/workflows/ci.yml` and `.github/workflows/deploy-staging.yml`.
    `ci.yml` needs no secrets and no environment — it works immediately.
    Check the Node major in `ci.yml` matches the droplet's.
-2. **Check the environment's deployment branch policy before the trial.** A
-   `staging` environment set to *Selected branches and tags* with a rule
-   matching only `staging`, and **0 branches / 0 tags currently allowed**, will
-   reject the run outright — the policy is evaluated against the branch the
-   workflow is *dispatched from* (`github.ref`), not the `ref` input it checks
-   out. Dispatching from `main` or a feature branch fails before a single step
-   runs, and the error points at the environment rather than the workflow.
-   Either add a rule matching the branches deploys are launched from, or launch
-   every deploy from a branch the policy admits. This is worth settling now:
-   it is the most likely reason a first trial fails for a reason unrelated to
-   anything in these files.
+2. **The workflow must land on `main`, not sit in a PR.** `workflow_dispatch`
+   runs the workflow file as it exists on the dispatched ref, and the Actions
+   UI only lists workflows present on the default branch. A workflow in an
+   unmerged PR is not dispatchable. Note `main` currently has no `.github`
+   directory at all.
+
+   The environment's deployment branch policy is evaluated against the branch
+   the run is *dispatched from* (`github.ref`), not the `ref` input it checks
+   out — so a policy admitting `main` plus always dispatching from `main` is
+   the right shape: the dispatching branch is the authorization boundary, the
+   input is the payload.
 
 3. Create a **`staging` environment** in that repo
    (Settings → Environments → New environment → `staging`).
