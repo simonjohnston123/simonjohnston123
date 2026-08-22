@@ -11,8 +11,10 @@ register as a live workflow here and fail on every push.
 
 ## Install
 
-1. Copy `deploy-staging.yml` into the PlacidCRM app repo at
-   `.github/workflows/deploy-staging.yml`.
+1. Copy both files into the PlacidCRM app repo at
+   `.github/workflows/ci.yml` and `.github/workflows/deploy-staging.yml`.
+   `ci.yml` needs no secrets and no environment — it works immediately.
+   Check the Node major in `ci.yml` matches the droplet's.
 2. Create a **`staging` environment** in that repo
    (Settings → Environments → New environment → `staging`).
    Add a required reviewer there if you want deploys gated by approval — the
@@ -62,6 +64,7 @@ The job fails rather than reporting a green deploy it cannot substantiate:
 | The artifact is genuinely new | container start time and Next `BUILD_ID` are printed from the running staging container |
 | Production is untouched | production's `DEPLOYED_COMMIT` **and** `placidcrm-app-1` start time are snapshotted before the deploy and re-read after; any difference is a hard failure |
 | Simon initiated it remotely | the run is `workflow_dispatch` from the Actions tab, so it works from a phone with no PC, no local Claude Code and no local SSH |
+| The commit passed CI | check runs on that exact SHA are queried, and a missing or non-success check fails the job before the droplet is touched |
 
 Exit codes are never trusted on their own — a 200 proves the old container is
 alive, not that new code shipped.

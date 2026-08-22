@@ -17,6 +17,11 @@ on:
         description: "Branch, tag or commit SHA to deploy to staging"
         required: true
         type: string
+      require_ci:
+        description: "Refuse to deploy unless CI is green on that commit"
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   # A tar deploy clobbers a parallel session's edits — one at a time, and
@@ -55,6 +60,31 @@ jobs:
           sha="$(git rev-parse HEAD)"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Deploying ${sha} ($(git rev-parse --short HEAD)) from ref '${{ inputs.ref }}'"
+
+      # GitHub -> CI -> staging: this is the link that makes it a pipeline
+      # rather than a remote-control button. Uncheck require_ci only for a
+      # deliberate no-op trial against a commit that predates CI existing.
+      - name: Require green CI on this commit
+        if: ${{ inputs.require_ci }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          conclusions="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
+            --jq '.check_runs[] | select(.name != "Deploy to staging") | "\(.name)=\(.conclusion)"')"
+
+          if [ -z "${conclusions}" ]; then
+            echo "::error::no check runs on ${SHA} — CI has not run on this commit"
+            exit 1
+          fi
+
+          echo "${conclusions}"
+          if echo "${conclusions}" | grep -qv '=success$'; then
+            echo "::error::not every check succeeded on ${SHA}"
+            exit 1
+          fi
+          echo "CI is green on ${SHA}."
 
       - name: Assert the staging script is present
         run: |
