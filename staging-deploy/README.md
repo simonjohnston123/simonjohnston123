@@ -9,6 +9,31 @@ repository, which this repository is not — this repo is the GitHub profile
 README. It is kept out of `.github/workflows/` on purpose so it does not
 register as a live workflow here and fail on every push.
 
+## Running the provisioning without a terminal
+
+`provision-staging-ci-access.sh` needs a root shell on the droplet, which a
+sandboxed agent session does not have — no SSH client, and the network policy
+refuses both the droplet and `cloud.digitalocean.com`. Two routes that do work:
+
+**DigitalOcean web console.** It is a real terminal and runs in a phone
+browser: droplet -> Access -> Launch Droplet Console. This file lives in a
+**public** repo, so the droplet can fetch it directly rather than having a few
+hundred lines pasted in:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/simonjohnston123/simonjohnston123/claude/staging-deploy-country-tax-t4dy2w/staging-deploy/provision-staging-ci-access.sh -o /root/prov.sh
+bash /root/prov.sh --check     # inspects only, changes nothing
+```
+
+The console has its own paste control (clipboard icon) since a phone keyboard
+cannot paste into it directly.
+
+**Claude Code CLI, locally.** A local session has a real shell, the
+`placid_connect_devbeta` key, and no proxy, and would run this whole sequence
+in one pass. Worth splitting the work that way in general: web sessions are
+fine for repo changes and reasoning, and structurally wrong for anything that
+has to touch a host.
+
 ## Install
 
 1. Copy both files into the PlacidCRM app repo at
