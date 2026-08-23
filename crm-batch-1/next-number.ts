@@ -4,9 +4,13 @@ import { prisma } from "@/lib/db";
 // ---------------------------------------------------------------------------
 // The next document number for a business.
 //
-// Replaces four copies of the same eight lines — lib/invoicing.ts,
-// lib/quotes.ts, app/dashboard/l/[locationId]/orders/actions.ts and
-// lib/storefront-order.ts — which all carried the same defect.
+// Replaces the copies in lib/invoicing.ts and lib/quotes.ts.
+//
+// NOT the two order call sites. `Order.number` is `Int @default(0)`
+// (schema.prisma:1840), so `orderBy: { number: "desc" }` there is a NUMERIC
+// sort and is correct at any magnitude. Only `Invoice.number` (3256) and
+// `Quote.number` (3509) are `String`, and only those two carry this defect.
+// The order files have a different bug — see D-4 in DEFECTS.md.
 //
 // THE DEFECT. Each did:
 //
@@ -33,13 +37,12 @@ import { prisma } from "@/lib/db";
 // without touching a single stored value.
 // ---------------------------------------------------------------------------
 
-/** Document families that carry a per-location sequence. */
-export type NumberedModel = "invoice" | "quote" | "order";
+/** Document families whose number is zero-padded TEXT. Orders are not one. */
+export type NumberedModel = "invoice" | "quote";
 
 const TABLE: Record<NumberedModel, string> = {
   invoice: "Invoice",
   quote: "Quote",
-  order: "Order",
 };
 
 /**

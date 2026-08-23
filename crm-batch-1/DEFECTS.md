@@ -26,16 +26,23 @@ register deliberately covers only files that branch does **not** touch.
 
 **Severity: high.** Money path. Silent. Reached by any established business.
 
-**Where — four copies of the same eight lines:**
+**Where — two copies, not four.**
 
-| File | Line | Documents affected |
-|---|---|---|
-| `src/lib/invoicing.ts` | 34–41 | invoices |
-| `src/lib/quotes.ts` | 101–108 | quotes |
-| `src/app/dashboard/l/[locationId]/orders/actions.ts` | 69 | dashboard orders |
-| `src/lib/storefront-order.ts` | 235 | storefront orders |
+| File | Line | Column type | Affected |
+|---|---|---|---|
+| `src/lib/invoicing.ts` | 34–41 | `Invoice.number` **String** (schema:3256) | yes |
+| `src/lib/quotes.ts` | 101–108 | `Quote.number` **String** (schema:3509) | yes |
+| `src/app/dashboard/l/[locationId]/orders/actions.ts` | 69 | `Order.number` **Int** (schema:1840) | **no** |
+| `src/lib/storefront-order.ts` | 235 | `Order.number` **Int** | **no** |
 
-(A fifth, `src/lib/customer-quotes.ts:113`, is in the fix branch — excluded.)
+**Correction to an earlier version of this register**, which claimed all four.
+`Order.number` is `Int @default(0)`, so `orderBy: { number: "desc" }` on it is
+a *numeric* sort and is correct at any magnitude. The defect below is specific
+to a zero-padded **text** column, which is only `Invoice.number` and
+`Quote.number`. `CustomerQuote.number` (schema:4102) is also text and would
+carry it, but that file belongs to the open fix branch and is excluded.
+
+The two order call sites have a **different** defect — see D-4.
 
 **The defect.** Each reads the current maximum with:
 
@@ -148,6 +155,75 @@ double-grant, which on a credit ledger is the worse of the two.
 
 I have not implemented any of them — this changes money-handling semantics on
 live records, which is the boundary you asked me to stop at.
+
+---
+
+## D-4 — Two orders placed at the same moment get the same order number
+
+**Severity: high.** Customer-facing. Silent. No error, no exception, two rows.
+
+**Where:** `src/lib/storefront-order.ts:227–236`, and the same shape at
+`src/app/dashboard/l/[locationId]/orders/actions.ts:69`.
+
+**The defect.** The order's *identity* is idempotent and carefully so — the
+primary key is `ord_<stripe session id>`, and the file's header explains why:
+
+> Idempotency is the order's primary key: `ord_<session id>`. A second attempt
+> collides on the id and is dropped, with no unique index to add and no
+> read-then-write race to lose.
+
+That is true, and it is the right design. But the order's **number** is not
+covered by it:
+
+```ts
+const last = await prisma.order.findFirst({
+  where: { locationId }, orderBy: { number: "desc" }, select: { number: true },
+});
+...
+number: (last?.number ?? 0) + 1,
+```
+
+That is a read-then-write, and the thing it writes is not what the row is keyed
+on. Two **different** shoppers checking out at the same moment both read the
+same maximum and both write `N + 1`. Neither `create` fails, because they
+collide on nothing — their ids differ. The result is two distinct orders
+sharing one order number.
+
+The header's reassurance is what makes this easy to miss: the *dedup* race was
+genuinely solved, so the *numbering* race reads as if it were solved too.
+
+**Why it is worse than the invoice case.** D-1 fails loudly-ish — the write is
+rejected and the caller gets a null. This one succeeds. Two customers are told
+they are order 41, the fulfilment desk has two order 41s, and nothing anywhere
+reports a problem. It surfaces as a support conversation, days later.
+
+**Not the same bug as D-1.** `Order.number` is an integer, so the sort is
+correct. The fix here is not a better sort — it is making the number a value
+the database assigns rather than one the application guesses.
+
+**The fix, and why it needs a decision.** Three options:
+
+1. **A unique constraint on `(locationId, number)` plus a retry loop.** The
+   loser of the race collides, re-reads, and takes the next number. Small, and
+   it makes the existing pattern honest. Costs a migration — and, like D-3, it
+   **fails if duplicates already exist**, so it needs a count first.
+2. **A per-location counter row updated in the same transaction.** Correct
+   without a retry, but a new table and a hot row.
+3. **A Postgres sequence per location.** Cleanest, worst fit for a schema
+   Prisma manages.
+
+I would do 1. But the query below decides whether this is a schema change or an
+incident:
+
+```sql
+SELECT "locationId", "number", count(*) FROM "Order"
+ GROUP BY 1,2 HAVING count(*) > 1 ORDER BY 3 DESC;
+```
+
+If that returns rows, duplicate order numbers are already in the data and
+customers have already been given them.
+
+Not implemented — a migration on live order records.
 
 ---
 
