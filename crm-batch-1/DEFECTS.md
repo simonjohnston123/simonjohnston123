@@ -151,6 +151,72 @@ live records, which is the boundary you asked me to stop at.
 
 ---
 
+## D-3 — `applyTopup` guards a money grant with a check the database does not enforce
+
+**Severity: medium today, high if anything else ever calls it.** Money path.
+
+**Where:** `src/lib/credit.ts:104`, and `prisma/schema.prisma` around line 764.
+
+```ts
+const already = await prisma.creditEntry.findFirst({ where: { locationId, ref } });
+if (already) return false;
+await addCredit(locationId, Math.round(cents), { kind: "topup", note: "Card top-up", ref });
+```
+
+**The defect.** That is a read-then-write check, and **`CreditEntry` has no unique
+constraint on `(locationId, ref)`** — its only index is
+`@@index([locationId, createdAt])`. So two concurrent calls with the same
+session id both pass `findFirst` and both call `addCredit`. The customer is
+credited twice for one payment.
+
+The function's own docstring says it "has to be safe to run twice on the same
+session", and for a *sequential* retry it is — the first call's ledger entry is
+visible to the second. It is the simultaneous case it cannot survive, and
+nothing in the schema catches it.
+
+This is precisely the pattern the webhook route rejects for itself, in a
+comment two files away:
+
+> Claimed by INSERT rather than checked-then-written: two deliveries landing at
+> the same instant both pass a read-first check, and the unique primary key is
+> the only thing that can actually arbitrate between them.
+
+Right diagnosis, applied in one place and not the other.
+
+**Why it is only medium today.** The webhook's event-id claim currently stops
+two deliveries of the same event reaching `applyTopup` at once, so the outer
+guard is doing the work the inner one cannot. That makes this a latent defect
+rather than a live one — but the protection is incidental, lives in a different
+file, and nothing states the dependency.
+
+**Why it becomes high.** Any second caller without that outer claim — a
+success-page handler reconciling a return from Stripe, a manual replay tool, a
+backfill — reintroduces the race immediately. Nothing in `credit.ts` warns a
+future author that its safety is on loan.
+
+**The fix, and why it needs a decision.** Add
+`@@unique([locationId, ref])` to `CreditEntry` and let `addCredit` fail on the
+constraint instead of checking first. Small, correct, and it makes the
+docstring true.
+
+It is a migration on a live ledger table, and it will FAIL if any duplicate
+`(locationId, ref)` rows already exist. So it needs a count first:
+
+```sql
+SELECT "locationId", "ref", count(*) FROM "CreditEntry"
+ WHERE "ref" IS NOT NULL GROUP BY 1,2 HAVING count(*) > 1;
+```
+
+If that returns rows, the race has **already happened** and those are real
+double-grants to reconcile before the index can be added. Run it before writing
+the migration — the answer changes whether this is a schema change or an
+incident.
+
+Not implemented. Same reason as D-2: it changes money-handling semantics on
+live records.
+
+---
+
 ## Observations, not defects
 
 **`locationSeller` hardcodes AU/NZ inclusive rates** (`src/lib/seller.ts:104`)
