@@ -1,9 +1,9 @@
 # Shared, scoped deploy access for agent identities
 
 Companion to `staging-deploy/` (PR #1). That directory provisions the
-**GitHub Actions** staging identity. This one adds **named agent
-identities** — Manus, a second Claude, a human on call — on top of it,
-each with its own verb allow-list, without touching the CI path.
+**GitHub Actions** staging identity. This one adds **named agent identities** — Claude, Manus and GPT — on top
+of it, each with its own key and its own scoped role, without touching the
+CI path.
 
 No private key is handled anywhere here. You supply a **public** key the
 agent generated and kept; the private half never reaches the droplet, this
@@ -74,29 +74,70 @@ requested in step 4 **did not exist yet**. `prod-release-ctl` creates it.
 
 ## Usage
 
-Run as root on the droplet. Idempotent; `--check` changes nothing.
+Identities are `<agent>-<role>`. Three agents — **claude, manus, gpt** — and
+two roles, **staging** and **release**. Adding a fourth agent is one word in
+the `AGENTS` line.
+
+`--list` needs no droplet and no root; run it anywhere, including on an
+agent's own machine, to see exactly what an identity will be able to do:
+
+```
+$ ./provision-agent-access.sh --list
+IDENTITY           SSH USER               ALLOWED VERBS
+claude-staging     placid-staging-deploy  fetch-checkout compose-build compose-up staging-status staging-migration-count
+claude-release     placid-prod-release    release release-preflight prod-deployed-commit prod-started-at ...
+manus-staging      placid-staging-deploy  fetch-checkout compose-build compose-up staging-status staging-migration-count
+manus-release      placid-prod-release    release release-preflight prod-deployed-commit prod-started-at ...
+gpt-staging        placid-staging-deploy  fetch-checkout compose-build compose-up staging-status staging-migration-count
+gpt-release        placid-prod-release    release release-preflight prod-deployed-commit prod-started-at ...
+```
+
+Everything below runs as root on the droplet. Idempotent; `--check` changes
+nothing.
+
+### Onboarding all three agents
+
+**Each agent generates its own keypair and sends you only the `.pub`.** It
+keeps the private half; nothing secret is ever pasted anywhere.
 
 ```sh
-# 1. See what is actually installed, including live fingerprints
+ssh-keygen -t ed25519 -C "manus staging deploy" -f ~/.ssh/placid_manus   # on the agent's machine
+```
+
+Then, on the droplet:
+
+```sh
+# 0. See what is actually installed now, fingerprints included
 ./provision-agent-access.sh --check
 
-# 2. Staging access for Manus (agent supplies manus.pub; keeps its private half)
-./provision-agent-access.sh --identity manus-staging --pubkey /root/manus.pub
+# 1. Staging for all three
+./provision-agent-access.sh --identity claude-staging --pubkey /root/claude.pub
+./provision-agent-access.sh --identity manus-staging  --pubkey /root/manus.pub
+./provision-agent-access.sh --identity gpt-staging    --pubkey /root/gpt.pub
 
-# 3. Production release identity, if wanted. Ships DISABLED.
-./provision-agent-access.sh --identity manus-release --pubkey /root/manus.pub
+# 2. Production release identities, if wanted. The release verb ships DISABLED.
+./provision-agent-access.sh --identity manus-release  --pubkey /root/manus.pub
+./provision-agent-access.sh --identity gpt-release    --pubkey /root/gpt.pub
 
-# 4. Rotation is the same command with a new key. Revocation is one flag.
-./provision-agent-access.sh --identity manus-staging --revoke
+# 3. Rotation is the same command with a new key. Revocation is one flag.
+./provision-agent-access.sh --identity gpt-staging --revoke
 ```
 
-Then, **from the agent's own machine**, before relying on it:
+Order does not matter and re-runs are safe: each command touches only its
+own key line. Delete the `.pub` files afterwards — they are not secret, just
+clutter.
+
+Then, **from each agent's own machine**, before anyone relies on it:
 
 ```sh
-./verify-agent-gate.sh <host> <agent-private-key> manus-staging [expected-fingerprint]
+./verify-agent-gate.sh <host> ~/.ssh/placid_manus manus-staging [expected-fingerprint]
 ```
 
----
+### What to hand each agent
+
+Only three things, none of them secret: the **username** for its role
+(`placid-staging-deploy` or `placid-prod-release`), the **host**, and its
+**verb list**. An agent that is told more than this has been told too much.
 
 ## The request, point by point
 
@@ -107,7 +148,7 @@ the `docker` group (the script hard-fails if either is: `docker run -v
 directory, each able to `sudo` exactly one root-owned wrapper. No shell,
 no port forwarding, no agent forwarding, no pty.
 
-**2. The Manus staging allow-list.** Exactly the five verbs requested:
+**2. The staging allow-list.** Exactly the five verbs requested:
 
 ```
 fetch-checkout  compose-build  compose-up  staging-status  staging-migration-count
@@ -117,13 +158,23 @@ All five already exist in the CI wrapper, so this adds no new capability to
 the droplet — it grants a subset of what CI can already do. Deliberately
 **excluded**: `migrate-deploy`, `receive-archive` (the unbound-sha path the
 staging README documents as forgeable), and `record-deployment` (a write to
-the *production* database). So this identity cannot write to any database.
+the *production* database). So no staging identity can write to any
+database.
 
-Allow-lists are per identity, stored at
-`/etc/placid-agent-access/<identity>.allow`, and matched with `grep -qxF` —
-an exact whole-line match, so `compose` cannot admit `compose-up`. The
-identity is baked into the `authorized_keys` forced command, so the client
-never chooses which list applies to it.
+The list is defined **once, per role**, and shared by claude, manus and gpt.
+That is deliberate: a per-agent copy of the list is a list that drifts, and
+a verb quietly appearing in one agent's copy and not another's is exactly
+the drift nobody notices. Agents still get separate keys and separate
+identities, so the auth log distinguishes them and access is revoked one
+agent at a time.
+
+Allow-lists live at `/etc/placid-agent-access/<identity>.allow` and are
+matched with `grep -qxF` — an exact whole-line match, so `compose` cannot
+admit `compose-up`. The identity is baked into the `authorized_keys` forced
+command, so the client never chooses which list applies to it. Both halves
+of an identity are checked against the registry, so `gpt-root` or a
+misspelled `gpt-stagng` is refused outright rather than provisioned with a
+silently empty list.
 
 **3. Fingerprints, and not trusting a filename.** `--check` runs
 `ssh-keygen -lf` against `authorized_keys` **itself** and prints what is
@@ -170,8 +221,23 @@ repaired.
 ## What was actually verified
 
 The gate logic was extracted and run against stub wrappers in this sandbox
-— **21 cases, all passing**, plus key-management simulation. That found and
-fixed two real bugs:
+— **30 cases across all three agents, all passing** — plus registry
+validation and a key-management simulation. Specifically confirmed:
+
+- All six identities resolve to the right user and the right verb list;
+  nine malformed ones (`gpt-stagng`, `chatgpt-staging`, `gpt-root`,
+  `gpt-production`, `root-staging`, `gpt`, `gpt-`, `-staging`,
+  `manus-staging-2`) are refused rather than provisioned empty.
+- **Cross-role isolation:** a `-staging` identity cannot reach any `prod-*`
+  verb or `release`; a `-release` identity cannot reach `compose-up` or
+  `fetch-checkout`. Routing is by identity, so the two wrappers stay
+  separate even if a verb name collided.
+- No staging identity can reach `migrate-deploy`, `record-deployment` or
+  `receive-archive` — verified per agent, not just once.
+- Adding a key for one identity leaves the CI key and every other agent's
+  key untouched; revoking one identity revokes exactly one.
+
+Writing it this way found and fixed two real bugs:
 
 1. **`compose-build zzzz` returned 64, the same code as "verb not
    permitted."** A no-argument verb and a forbidden verb were
@@ -185,8 +251,7 @@ fixed two real bugs:
 2. **Revoking `manus-staging` also revoked `manus-staging-2`.** The
    marker match was an unanchored substring, so one identity silently
    revoked another. Both the install and revoke paths are now anchored to
-   end-of-line. Verified: the CI key, `claude-staging` and
-   `manus-staging-2` all survive a `manus-staging` revoke.
+   end-of-line.
 
 **What is still unverified:** everything that needs the droplet — the
 wrappers' real behaviour, `sudo`/`sshd` interaction, the forced command

@@ -11,8 +11,9 @@
 # Run as root, ON THE DROPLET. Idempotent. --check changes nothing.
 #
 #   ./provision-agent-access.sh --check
+#   ./provision-agent-access.sh --list
 #   ./provision-agent-access.sh --identity manus-staging --pubkey /root/manus.pub
-#   ./provision-agent-access.sh --identity manus-release --pubkey /root/manus.pub
+#   ./provision-agent-access.sh --identity gpt-staging   --pubkey /root/gpt.pub
 #   ./provision-agent-access.sh --identity manus-staging --revoke
 #
 # NO PRIVATE KEY IS EVER HANDLED HERE. You supply a PUBLIC key that the
@@ -37,27 +38,32 @@ GATE="/usr/local/sbin/agent-deploy-ssh"
 ALLOW_DIR="/etc/placid-agent-access"
 RELEASE_CONF="/etc/placid-prod-release"
 
-# ---- The allow-lists. One line per identity. ------------------------------
-# manus-staging is exactly the set named in the access request: enough to
-# fetch a sha, build it, bring it up and read back what is running. It has
-# no migrate-deploy, no receive-archive and no record-deployment, so it
-# cannot write to any database, production or otherwise.
-ALLOW_manus_staging="fetch-checkout compose-build compose-up staging-status staging-migration-count"
+# ---- Who gets access, and what a role means -------------------------------
+# An identity is <agent>-<role>. Adding an agent is ONE WORD here; the roles
+# below define what it may do. Deliberately not one allow-list per agent:
+# duplicated lists drift, and a verb quietly appearing in one agent's list
+# and not another's is exactly the drift nobody notices. Each agent still
+# gets its own key and its own identity, so the auth log distinguishes them
+# and access is revoked one agent at a time.
+AGENTS="claude manus gpt"
+ROLES="staging release"
 
-# manus-release is the separate production identity. Everything in it is
-# read-only EXCEPT `release`, which is guarded and ships disabled. See
-# prod-release-ctl below and README "What this does not prove".
-ALLOW_manus_release="release release-preflight prod-deployed-commit prod-started-at prod-build-id prod-migration-count prod-http-status staging-deployed-commit"
+# staging: exactly the set named in the access request — enough to fetch a
+# sha, build it, bring it up and read back what is running. No
+# migrate-deploy, no receive-archive, no record-deployment, so an identity
+# holding this role cannot write to any database, production or otherwise.
+ROLE_staging="fetch-checkout compose-build compose-up staging-status staging-migration-count"
 
-# A Claude staging identity, same shape as Manus. Named so the two agents
-# are distinguishable in the auth log rather than sharing one credential.
-ALLOW_claude_staging="$ALLOW_manus_staging"
-ALLOW_claude_release="$ALLOW_manus_release"
+# release: the separate production role. Everything here is read-only EXCEPT
+# `release`, which is guarded and ships disabled. See prod-release-ctl below
+# and README "The production guard".
+ROLE_release="release release-preflight prod-deployed-commit prod-started-at prod-build-id prod-migration-count prod-http-status staging-deployed-commit"
 
-IDENTITY=""; PUBKEY=""; CHECK_ONLY=0; REVOKE=0
+IDENTITY=""; PUBKEY=""; CHECK_ONLY=0; REVOKE=0; LIST_ONLY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --check)    CHECK_ONLY=1; shift ;;
+    --list)     LIST_ONLY=1; shift ;;
     --revoke)   REVOKE=1; shift ;;
     --identity) IDENTITY="${2:?--identity needs a value}"; shift 2 ;;
     --pubkey)   PUBKEY="${2:?--pubkey needs a path}"; shift 2 ;;
@@ -69,25 +75,50 @@ say() { printf '  %s\n' "$*"; }
 hdr() { printf '\n== %s\n' "$*"; }
 die() { echo "REFUSING: $*" >&2; exit 1; }
 
-[ "$(id -u)" -eq 0 ] || die "must run as root on the droplet"
-command -v ssh-keygen >/dev/null || die "ssh-keygen not found"
+identity_agent() { printf '%s' "${1%-*}"; }
+identity_role()  { printf '%s' "${1##*-}"; }
+in_list() { printf '%s' "$2" | tr ' ' '\n' | grep -qxF -- "$1"; }
 
-# Which user does this identity live under? *-release identities get their
-# own user so that a compromised staging key cannot reach the release path
-# and vice versa.
+# Which user does this identity live under? A release identity gets its own
+# user so that a compromised staging key cannot reach the release path, and
+# vice versa.
 identity_user() {
-  case "$1" in
-    *-release) echo "$RELEASE_USER" ;;
-    *)         echo "$STAGING_USER" ;;
+  case "$(identity_role "$1")" in
+    release) echo "$RELEASE_USER" ;;
+    *)       echo "$STAGING_USER" ;;
   esac
 }
 
+# Empty for anything that is not <known-agent>-<known-role>. Both halves are
+# checked against the registry, so a typo is refused rather than silently
+# provisioned with an empty allow-list.
 allow_for() {
-  local var="ALLOW_${1//-/_}"
+  local agent role var
+  agent="$(identity_agent "$1")"; role="$(identity_role "$1")"
+  in_list "$agent" "$AGENTS" || return 0
+  in_list "$role"  "$ROLES"  || return 0
+  var="ROLE_${role}"
   printf '%s' "${!var:-}"
 }
 
+all_identities() {
+  local a r
+  for a in $AGENTS; do for r in $ROLES; do printf '%s ' "$a-$r"; done; done
+}
+
 # --------------------------------------------------------------------------
+if [ "$LIST_ONLY" = 1 ]; then
+  printf '%-18s %-22s %s\n' IDENTITY "SSH USER" "ALLOWED VERBS"
+  for i in $(all_identities); do
+    printf '%-18s %-22s %s\n' "$i" "$(identity_user "$i")" "$(allow_for "$i")"
+  done
+  exit 0
+fi
+
+# Everything past here touches the droplet.
+[ "$(id -u)" -eq 0 ] || die "must run as root on the droplet"
+command -v ssh-keygen >/dev/null || die "ssh-keygen not found"
+
 if [ "$CHECK_ONLY" = 1 ]; then
   hdr "CHECK ONLY — nothing will be modified"
   for u in "$STAGING_USER" "$RELEASE_USER"; do
@@ -118,7 +149,7 @@ fi
 
 [ -n "$IDENTITY" ] || die "need --identity (e.g. manus-staging)"
 ALLOW="$(allow_for "$IDENTITY")"
-[ -n "$ALLOW" ] || die "unknown identity '$IDENTITY' — add an ALLOW_ line above first"
+[ -n "$ALLOW" ] || die "unknown identity '$IDENTITY'. Valid: $(all_identities)"
 # The identity is interpolated into the forced command and the key comment.
 # Keep it to a shape that cannot carry a quote, a space or a shell character.
 [[ "$IDENTITY" =~ ^[a-z0-9][a-z0-9-]{1,40}$ ]] || die "identity must match ^[a-z0-9][a-z0-9-]{1,40}$"

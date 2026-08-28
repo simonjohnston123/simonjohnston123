@@ -33,9 +33,16 @@ KEY="${2:?usage: verify-agent-gate.sh <host> <key> <identity> [expected-fpr]}"
 IDENTITY="${3:?usage: verify-agent-gate.sh <host> <key> <identity> [expected-fpr]}"
 EXPECT_FPR="${4:-}"
 
+# The probe verbs must be ones THIS identity actually holds. Testing a
+# shell chain with a verb the identity cannot run anyway would pass for the
+# wrong reason — the gate would be rejecting the verb, not the chain.
 case "$IDENTITY" in
-  *-release) SSH_USER="${SSH_USER:-placid-prod-release}" ;;
-  *)         SSH_USER="${SSH_USER:-placid-staging-deploy}" ;;
+  *-release)
+    SSH_USER="${SSH_USER:-placid-prod-release}"
+    NOARG_VERB="prod-http-status"; SHA_VERB="release-preflight" ;;
+  *)
+    SSH_USER="${SSH_USER:-placid-staging-deploy}"
+    NOARG_VERB="staging-status";   SHA_VERB="fetch-checkout" ;;
 esac
 
 BAD_SHA="zzzz"                                            # never a valid sha
@@ -105,10 +112,11 @@ refuse "read the staging env file"            "cat /opt/placidcrm-staging/.env"
 refuse "docker directly"                      "docker ps"
 refuse "sudo to a shell"                      "sudo -n /bin/bash"
 refuse "unknown verb"                         "definitely-not-a-verb"
-refuse "verb with a shell chain appended"     "staging-status; id"
-refuse "compound verbs in one call"           "staging-status; echo; staging-status"
-refuse "no-argument verb given an argument"   "staging-status --all"
-refuse "sha-taking verb with a path"          "fetch-checkout ../../etc"
+refuse "verb with a shell chain appended"     "$NOARG_VERB; id"
+refuse "compound verbs in one call"           "$NOARG_VERB; echo; $NOARG_VERB"
+refuse "no-argument verb given an argument"   "$NOARG_VERB --all"
+refuse "sha-taking verb with a path"          "$SHA_VERB ../../etc"
+refuse "sha-taking verb with a command"       "$SHA_VERB \$(id)"
 
 case "$IDENTITY" in
   *-staging)
@@ -156,4 +164,5 @@ esac
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || { echo "GATE IS NOT SAFE — do not hand this identity out yet."; exit 1; }
-echo "Verified: $IDENTITY is restricted where it must be and working where it must be."
+echo "Verified: $IDENTITY ($SSH_USER@$HOST) is restricted where it must be"
+echo "and working where it must be. Fingerprint $FPR."
