@@ -35,18 +35,18 @@ export default async function SocialPage({ params }: { params: { locationId: str
   const googleSvc: string[] = gStatus.connected ? gStatus.services : [];
 
   const networks: NetworkStatus[] = [
-    { key: "facebook", label: "Facebook", icon: "📘", ready: fbReady, detail: fbReady ? `${fbPages.length} Page${fbPages.length === 1 ? "" : "s"} connected` : fb ? "Connected but no Pages granted — reconnect in Integrations → Facebook" : "Connect in Integrations → Facebook" },
-    { key: "instagram", label: "Instagram", icon: "📸", ready: fbReady, detail: fbReady ? "Posts via your Facebook Page's linked IG Business account" : "Connect Facebook (with Pages) first" },
-    { key: "youtube", label: "YouTube", icon: "▶️", ready: !!yt, detail: yt ? (yt.accountLabel ?? "Connected") : hasGoogleApp ? "Connect your channel" : "Needs Google app credentials (admin)", connectHref: !yt && hasGoogleApp ? `/api/integrations/youtube/connect?locationId=${locationId}` : undefined },
-    { key: "tiktok", label: "TikTok", icon: "🎵", ready: false, detail: "Needs our TikTok developer app approved — coming" },
+    { key: "facebook", label: "Facebook", brand: "facebook", ready: fbReady, detail: fbReady ? `${fbPages.length} Page${fbPages.length === 1 ? "" : "s"} connected` : fb ? "Connected but no Pages granted — reconnect in Integrations → Facebook" : "Connect in Integrations → Facebook" },
+    { key: "instagram", label: "Instagram", brand: "instagram", ready: fbReady, detail: fbReady ? "Posts via your Facebook Page's linked IG Business account" : "Connect Facebook (with Pages) first" },
+    { key: "youtube", label: "YouTube", brand: "youtube", ready: !!yt, detail: yt ? (yt.accountLabel ?? "Connected") : hasGoogleApp ? "Connect your channel" : "Needs Google app credentials (admin)", connectHref: !yt && hasGoogleApp ? `/api/integrations/youtube/connect?locationId=${locationId}` : undefined },
+    { key: "tiktok", label: "TikTok", brand: "tiktok", ready: false, detail: "Needs our TikTok developer app approved — coming" },
     {
-      key: "google_business", label: "Google Business", icon: "📍",
+      key: "google_business", label: "Google Business", brand: "google_business",
       ready: googleSvc.includes("business"),
       detail: googleSvc.includes("business") ? "Posts to your Google listing" : "Connect Google and tick Business Profile",
       connectHref: googleSvc.includes("business") ? undefined : `/dashboard/l/${locationId}/google`,
     },
-    { key: "snapchat", label: "Snapchat", icon: "👻", ready: false, detail: "No organic API — ads only (ads phase)" },
-    { key: "spotify", label: "Spotify", icon: "🎧", ready: false, detail: "No posting API — podcasts distribute via RSS, ads via Ad Studio", never: true },
+    { key: "snapchat", label: "Snapchat", brand: "snapchat", ready: false, detail: "No organic API — ads only (ads phase)" },
+    { key: "spotify", label: "Spotify", brand: "spotify", ready: false, detail: "No posting API — podcasts distribute via RSS, ads via Ad Studio", never: true },
   ];
 
   const queue: QueuePost[] = posts.map((p) => ({
