@@ -4,8 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveSocialPostAction, retrySocialPostAction, deleteSocialPostAction } from "@/app/dashboard/l/[locationId]/social/actions";
 import { ReelWizard } from "./reel-studio";
+import { BrandIcon, type Brand } from "./brand-icons";
 
-export type NetworkStatus = { key: string; label: string; icon: string; ready: boolean; detail: string; connectHref?: string; never?: boolean };
+export type NetworkStatus = { key: string; label: string; brand: Brand; ready: boolean; detail: string; connectHref?: string; never?: boolean };
 export type QueuePost = {
   id: string; body: string; mediaUrls: string[]; mediaKind: string | null; networks: string[];
   results: Record<string, { ok: boolean; id?: string; error?: string }>;
@@ -22,12 +23,12 @@ const STATUS_STYLE: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-600",
 };
 
-const ADS = [
-  { icon: "📘", name: "Meta Ads (Facebook + Instagram)", href: "https://adsmanager.facebook.com", state: "Ads Manager works today with your Pages. In-CRM boosting needs Meta Marketing API approval — queued after App Review." },
-  { icon: "🔍", name: "Google Ads + Shopping", href: "https://ads.google.com", state: "Your Shopify store already feeds Google Merchant Center. In-CRM campaign control needs a Google Ads developer token." },
-  { icon: "🎵", name: "TikTok Ads", href: "https://ads.tiktok.com", state: "Ads Manager available now; API access comes with the TikTok developer app." },
-  { icon: "👻", name: "Snapchat Ads", href: "https://ads.snapchat.com", state: "Snapchat is ads-only (no organic API). Marketing API app needed for in-CRM control." },
-  { icon: "🎧", name: "Spotify Ads", href: "https://ads.spotify.com", state: "Runs via Spotify Ad Studio — no public posting/ads API to integrate." },
+const ADS: { brand: Brand; name: string; href: string; state: string }[] = [
+  { brand: "facebook", name: "Meta Ads (Facebook + Instagram)", href: "https://adsmanager.facebook.com", state: "Ads Manager works today with your Pages. In-CRM boosting needs Meta Marketing API approval — queued after App Review." },
+  { brand: "google_ads", name: "Google Ads + Shopping", href: "https://ads.google.com", state: "Your Shopify store already feeds Google Merchant Center. In-CRM campaign control needs a Google Ads developer token." },
+  { brand: "tiktok", name: "TikTok Ads", href: "https://ads.tiktok.com", state: "Ads Manager available now; API access comes with the TikTok developer app." },
+  { brand: "snapchat", name: "Snapchat Ads", href: "https://ads.snapchat.com", state: "Snapchat is ads-only (no organic API). Marketing API app needed for in-CRM control." },
+  { brand: "spotify", name: "Spotify Ads", href: "https://ads.spotify.com", state: "Runs via Spotify Ad Studio — no public posting/ads API to integrate." },
 ];
 
 export type ReelJob = { id: string; productName: string; presenter: string; status: string; note: string | null; createdAt: string };
@@ -118,23 +119,31 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
   return (
     <div>
       {/* Accounts strip */}
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {networks.map((n) => (
-          <div key={n.key} className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 ${n.ready ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`} title={n.detail}>
-            <span>{n.icon}</span>
-            <div className="leading-tight">
-              <div className="text-xs font-semibold text-slate-800">{n.label}</div>
-              <div className={`text-[10px] ${n.ready ? "text-emerald-600" : "text-slate-400"}`}>{n.ready ? "Ready" : n.never ? "N/A" : "Not ready"}</div>
+          <div key={n.key} className={`flex min-w-0 flex-col gap-1.5 rounded-xl border px-3 py-2 sm:flex-row sm:items-center sm:gap-2 ${n.ready ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`} title={n.detail}>
+            <div className="flex min-w-0 items-center gap-2">
+              <BrandIcon brand={n.brand} className={`h-5 w-5 shrink-0 ${n.ready ? "text-slate-700" : "text-slate-300"}`} />
+              <div className="min-w-0 leading-tight">
+                <div className="text-xs font-semibold leading-tight text-slate-800">{n.label}</div>
+                <div className={`whitespace-nowrap text-[10px] ${n.ready ? "text-emerald-600" : "text-slate-400"}`}>{n.ready ? "Ready" : n.never ? "N/A" : "Not ready"}</div>
+              </div>
             </div>
-            {n.connectHref ? <a href={n.connectHref} className="ml-1 rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-white">Connect</a> : null}
+            {/* On a phone the Connect pill drops to its own line inside the card
+                rather than squeezing the label into a two-line wrap. */}
+            {n.connectHref ? <a href={n.connectHref} className="shrink-0 rounded-full bg-slate-900 px-2.5 py-1 text-center text-[10px] font-bold text-white sm:ml-auto">Connect</a> : null}
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 inline-flex rounded-xl bg-slate-100 p-1 text-sm font-semibold">
-        {([["compose", "✏️ Compose"], ["queue", `📋 Queue${scheduled.length ? ` (${scheduled.length})` : ""}`], ["ads", "🎯 Ads"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 transition ${tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
+      <div className="mb-4 grid w-full grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold sm:inline-flex sm:w-auto sm:gap-0 sm:text-sm">
+        {([["compose", "✏️", "Compose"], ["queue", "📋", `Queue${scheduled.length ? ` (${scheduled.length})` : ""}`], ["ads", "🎯", "Ads"]] as const).map(([k, emoji, label]) => (
+          <button key={k} onClick={() => setTab(k)} className={`truncate rounded-lg px-2 py-2 transition sm:px-4 ${tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            {/* The emoji is decoration — dropped on the narrowest phones so the
+                three labels always fit the strip without being cut. */}
+            <span className="hidden sm:inline">{emoji} </span>{label}
+          </button>
         ))}
       </div>
 
@@ -157,20 +166,22 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
                 ))}
               </div>
             ) : null}
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">{uploading ? "Uploading…" : "📁 Upload"}</button>
+            <div className="grid gap-2 text-sm sm:flex sm:flex-wrap sm:items-center">
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 font-medium text-slate-700 hover:bg-slate-50 sm:w-auto sm:py-1.5">{uploading ? "Uploading…" : "📁 Upload"}</button>
               <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple hidden onChange={(e) => uploadFiles(e.target.files)} />
-              <button onClick={() => setShowProducts((v) => !v)} className="rounded-lg border border-slate-200 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50">🛍 From products</button>
-              <button onClick={() => setShowReel(true)} className="rounded-lg bg-slate-900 px-3 py-1.5 font-bold text-white hover:bg-slate-800">🎬 Create AI video</button>
+              <button onClick={() => setShowProducts((v) => !v)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 font-medium text-slate-700 hover:bg-slate-50 sm:w-auto sm:py-1.5">🛍 From products</button>
+              <button onClick={() => setShowReel(true)} className="w-full rounded-lg bg-slate-900 px-3 py-2.5 font-bold text-white hover:bg-slate-800 sm:w-auto sm:py-1.5">🎬 Create AI video</button>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm">
               <input value={urlDraft} onChange={(e) => setUrlDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addUrl()} placeholder="…or paste a media URL"
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 outline-none focus:border-brand-400" />
-              <button onClick={addUrl} className="rounded-lg bg-slate-100 px-3 py-1.5 font-medium text-slate-700">Add</button>
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-400 sm:py-1.5" />
+              <button onClick={addUrl} className="shrink-0 rounded-lg bg-slate-100 px-4 py-2.5 font-medium text-slate-700 sm:py-1.5">Add</button>
             </div>
             {showProducts ? (
-              <div className="mt-2 grid max-h-56 grid-cols-4 gap-2 overflow-y-auto rounded-xl border border-slate-200 p-2 sm:grid-cols-6">
+              <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl border border-slate-200 p-2 sm:grid-cols-6">
                 {productImages.map((p) => (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <button key={p.id} onClick={() => addMedia({ url: p.url, kind: "image", name: p.name })} title={p.name} className="overflow-hidden rounded-lg border border-slate-100 hover:ring-2 hover:ring-brand-400"><img src={p.url} alt={p.name} className="h-16 w-full object-cover" /></button>
+                  <button key={p.id} onClick={() => addMedia({ url: p.url, kind: "image", name: p.name })} title={p.name} className="overflow-hidden rounded-lg border border-slate-100 hover:ring-2 hover:ring-brand-400"><img src={p.url} alt={p.name} className="h-20 w-full object-cover sm:h-16" /></button>
                 ))}
                 {!productImages.length ? <p className="col-span-full p-2 text-xs text-slate-400">No product images yet.</p> : null}
               </div>
@@ -198,8 +209,11 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
             <div className="flex flex-wrap gap-2">
               {networks.filter((n) => !n.never).map((n) => (
                 <button key={n.key} disabled={!n.ready} onClick={() => toggle(n.key)} title={n.detail}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${sel.has(n.key) && n.ready ? "border-transparent bg-slate-900 text-white" : n.ready ? "border-slate-200 text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-100 text-slate-300"}`}>
-                  {n.icon} {n.label}{!n.ready ? " 🔒" : ""}
+                  className={`rounded-full border px-3 py-2 text-sm font-medium transition sm:py-1.5 ${sel.has(n.key) && n.ready ? "border-transparent bg-slate-900 text-white" : n.ready ? "border-slate-200 text-slate-700 hover:bg-slate-50" : "cursor-not-allowed border-slate-100 text-slate-300"}`}>
+                  <span className="flex items-center gap-1.5">
+                    <BrandIcon brand={n.brand} className="h-4 w-4 shrink-0" />
+                    {n.label}{!n.ready ? " 🔒" : ""}
+                  </span>
                 </button>
               ))}
             </div>
@@ -219,13 +233,13 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
           </div>
 
           {/* Schedule + submit */}
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-            <button onClick={() => submit("now")} disabled={pending} className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{pending ? "Working…" : "🚀 Post now"}</button>
-            <div className="flex items-center gap-2">
-              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400" />
-              <button onClick={() => submit("schedule")} disabled={pending || !when} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">🕑 Schedule</button>
+          <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:flex sm:flex-wrap sm:items-center">
+            <button onClick={() => submit("now")} disabled={pending} className="w-full rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 sm:w-auto">{pending ? "Working…" : "🚀 Post now"}</button>
+            <div className="grid gap-2 sm:flex sm:items-center">
+              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 sm:w-auto" />
+              <button onClick={() => submit("schedule")} disabled={pending || !when} className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 sm:w-auto">🕑 Schedule</button>
             </div>
-            <button onClick={() => submit("draft")} disabled={pending} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-700">Save draft</button>
+            <button onClick={() => submit("draft")} disabled={pending} className="w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-700 sm:w-auto">Save draft</button>
           </div>
           {msg ? <p className={`mt-3 text-sm ${msg.kind === "ok" ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</p> : null}
         </div>
@@ -276,13 +290,15 @@ export function SocialStudio({ locationId, networks, fbPages, queue, productImag
             <strong className="text-slate-900">Paid ads — where each platform stands.</strong> Organic posting runs from the Compose tab today. Running ads from inside the CRM needs each platform&apos;s marketing API approval; until those land, the buttons below deep-link straight into each ads manager with your accounts.
           </div>
           {ADS.map((a) => (
-            <div key={a.name} className="card flex items-center gap-3 p-4">
-              <span className="text-2xl">{a.icon}</span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900">{a.name}</div>
-                <div className="text-xs text-slate-500">{a.state}</div>
+            <div key={a.name} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <BrandIcon brand={a.brand} className="mt-0.5 h-6 w-6 shrink-0 text-slate-700" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900">{a.name}</div>
+                  <div className="text-xs text-slate-500">{a.state}</div>
+                </div>
               </div>
-              <a href={a.href} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">Open ↗</a>
+              <a href={a.href} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-center text-xs font-bold text-white sm:py-1.5">Open ↗</a>
             </div>
           ))}
         </div>
